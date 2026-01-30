@@ -110,7 +110,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: cli
-          args: --out-format=json:golangci-lint-report.json
+          args: --output.json.path=golangci-lint-report.json
       - name: Upload lint report (cli)
         if: always()
         uses: actions/upload-artifact@v6
@@ -178,7 +178,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: server
-          args: --out-format=json:golangci-lint-report.json
+          args: --output.json.path=golangci-lint-report.json
       - name: Upload lint report (server)
         if: always()
         uses: actions/upload-artifact@v6
