@@ -1,0 +1,16 @@
+# Test Case: Pipeline with duplicate stage names
+# Expected Error: Stage names must be unique
+
+pipeline:
+  name: "Duplicate Stages Pipeline"
+
+stages:
+  - name: "build"
+  - name: "test"
+  - name: "build"  # Duplicate!
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"

@@ -1,0 +1,38 @@
+# Test Case: More complex circular dependency
+# Expected Error: Cycle detected - A -> B -> C -> D -> B
+
+pipeline:
+  name: "Complex Cycle Pipeline"
+
+stages:
+  - name: "stage1"
+
+jobs:
+  - name: "A"
+    stage: "stage1"
+    needs: ["B"]
+    script:
+      - "echo A"
+  
+  - name: "B"
+    stage: "stage1"
+    needs: ["C"]
+    script:
+      - "echo B"
+  
+  - name: "C"
+    stage: "stage1"
+    needs: ["D"]
+    script:
+      - "echo C"
+  
+  - name: "D"
+    stage: "stage1"
+    needs: ["B"]  # Creates cycle back to B
+    script:
+      - "echo D"
+  
+  - name: "E"
+    stage: "stage1"
+    script:
+      - "echo E"

@@ -1,0 +1,15 @@
+# Test Case: Stage name is not a string
+# Expected Error: Wrong type for stage name
+
+pipeline:
+  name: "Wrong Type Stage"
+
+stages:
+  - name: "build"
+  - name: 123  # Should be a string!
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"

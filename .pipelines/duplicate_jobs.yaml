@@ -1,0 +1,25 @@
+# Test Case: Pipeline with duplicate job names
+# Expected Error: Job names must be unique
+
+pipeline:
+  name: "Duplicate Jobs Pipeline"
+
+stages:
+  - name: "build"
+  - name: "test"
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"
+  
+  - name: "unit-tests"
+    stage: "test"
+    script:
+      - "make test"
+  
+  - name: "compile"  # Duplicate!
+    stage: "test"
+    script:
+      - "other command"
