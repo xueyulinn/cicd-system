@@ -1,0 +1,21 @@
+# Test Case: Job needs references a job that doesn't exist
+# Expected Error: All jobs in needs must be defined
+
+pipeline:
+  name: "Undefined Needs Pipeline"
+
+stages:
+  - name: "build"
+  - name: "test"
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"
+  
+  - name: "unit-tests"
+    stage: "test"
+    needs: ["compile", "non-existent-job"]  # non-existent-job is not defined!
+    script:
+      - "make test"

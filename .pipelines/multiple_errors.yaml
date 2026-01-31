@@ -1,0 +1,29 @@
+# Test Case: Multiple errors in one file
+# Expected: Should report all errors found
+
+pipeline:
+  name: 456  # Wrong type
+
+stages:
+  - name: "build"
+  - name: "build"  # Duplicate
+  - name: "test"
+  - name: "deploy"  # Will be empty
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"
+  
+  - name: "compile"  # Duplicate job name
+    stage: "test"
+    needs: ["non-existent"]  # Undefined job
+    script:
+      - "make test"
+  
+  - name: "job3"
+    stage: "test"
+    needs: ["compile"]
+    script:
+      - "echo test"

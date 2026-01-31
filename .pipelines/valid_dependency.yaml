@@ -1,0 +1,53 @@
+# Test Case: Valid complex DAG with multiple dependencies
+# Expected: Should pass validation
+
+pipeline:
+  name: "Complex Valid DAG"
+
+stages:
+  - name: "prepare"
+  - name: "build"
+  - name: "test"
+  - name: "deploy"
+
+jobs:
+  - name: "setup"
+    stage: "prepare"
+    script:
+      - "setup env"
+  
+  - name: "build-frontend"
+    stage: "build"
+    needs: ["setup"]
+    script:
+      - "build frontend"
+  
+  - name: "build-backend"
+    stage: "build"
+    needs: ["setup"]
+    script:
+      - "build backend"
+  
+  - name: "test-frontend"
+    stage: "test"
+    needs: ["build-frontend"]
+    script:
+      - "test frontend"
+  
+  - name: "test-backend"
+    stage: "test"
+    needs: ["build-backend"]
+    script:
+      - "test backend"
+  
+  - name: "integration-test"
+    stage: "test"
+    needs: ["build-frontend", "build-backend"]
+    script:
+      - "integration tests"
+  
+  - name: "deploy-prod"
+    stage: "deploy"
+    needs: ["test-frontend", "test-backend", "integration-test"]
+    script:
+      - "deploy production"

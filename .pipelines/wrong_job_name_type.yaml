@@ -1,0 +1,14 @@
+# Test Case: Job name is not a string
+# Expected Error: Wrong type for job name
+
+pipeline:
+  name: "Wrong Type Job Name"
+
+stages:
+  - name: "build"
+
+jobs:
+  - name: true  # Should be a string!
+    stage: "build"
+    script:
+      - "make build"

@@ -1,0 +1,21 @@
+# Test Case: Pipeline with empty stage (no jobs assigned)
+# Expected Error: No empty stages allowed
+
+pipeline:
+  name: "Empty Stage Pipeline"
+
+stages:
+  - name: "build"
+  - name: "test"
+  - name: "deploy"  # This stage has no jobs
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"
+  
+  - name: "unit-tests"
+    stage: "test"
+    script:
+      - "make test"

@@ -1,0 +1,11 @@
+# Test Case: Missing pipeline key
+# Expected Error: Missing required pipeline section
+
+stages:
+  - name: "build"
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"

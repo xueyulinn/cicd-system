@@ -1,0 +1,21 @@
+# Test Case: Needs is not a list
+# Expected Error: Wrong type for needs field
+
+pipeline:
+  name: "Wrong Type Needs"
+
+stages:
+  - name: "build"
+  - name: "test"
+
+jobs:
+  - name: "compile"
+    stage: "build"
+    script:
+      - "make build"
+  
+  - name: "unit-tests"
+    stage: "test"
+    needs: "compile"  # Should be a list ["compile"]!
+    script:
+      - "make test"

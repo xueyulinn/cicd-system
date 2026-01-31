@@ -1,0 +1,32 @@
+# Test Case: Circular dependency cycle
+# Expected Error: Cycle detected - J1 -> J2 -> J4 -> J1
+
+pipeline:
+  name: "Circular Dependencies Pipeline"
+
+stages:
+  - name: "build"
+
+jobs:
+  - name: "J1"
+    stage: "build"
+    needs: ["J2"]
+    script:
+      - "echo J1"
+  
+  - name: "J2"
+    stage: "build"
+    needs: ["J4"]
+    script:
+      - "echo J2"
+  
+  - name: "J3"
+    stage: "build"
+    script:
+      - "echo J3"
+  
+  - name: "J4"
+    stage: "build"
+    needs: ["J1"]
+    script:
+      - "echo J4"
