@@ -15,8 +15,8 @@ func init() {
 	// register all subcommands
 	rootCmd.AddCommand(verifyCmd)
 	// rootCmd.AddCommand(reportCmd)
-	// rootCmd.AddCommand(runCmd)      // 未来添加
-	// rootCmd.AddCommand(dryRunCmd)   // 未来添加
+	// rootCmd.AddCommand(runCmd)      // add later
+	// rootCmd.AddCommand(dryRunCmd)   // add later
 }
 
 func Execute() {

@@ -19,19 +19,19 @@ var verifyCmd = &cobra.Command{
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
-	// 获取配置文件路径
+	// get config path
 	configPath := ".pipelines/pipeline.yaml"
 	if len(args) > 0 {
 		configPath = args[0]
 	}
 
-	// 检查 Git repo
+	// check Git repo
 	if err := checkGitRepo(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return err
 	}
 
-	// 检查文件存在
+	// check if file exists
 	absPath, err := filepath.Abs(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to resolve path: %v\n", err)
@@ -43,7 +43,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// 解析配置文件
+	// parse config files
 	p := parser.NewParser(configPath)
 	pipeline, rootNode, err := p.Parse()
 	if err != nil {
@@ -51,7 +51,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// 验证配置
+	// verify the configs
 	v := verifier.NewVerifier(configPath, pipeline, rootNode)
 	errors := v.Verify()
 
@@ -66,7 +66,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// checkGitRepo verifies that we're in a git repository
+// verifies that we're in a git repository
 func checkGitRepo() error {
 	cwd, err := os.Getwd()
 	if err != nil {
