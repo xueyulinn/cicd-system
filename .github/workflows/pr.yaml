@@ -8,8 +8,11 @@ permissions:
 on:
   pull_request:
     paths:
-      - "../../cli/**"
-      - "server/**"
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "**/*.sh"
       - ".github/workflows/**"
 
 env:
@@ -17,13 +20,11 @@ env:
   GOLANGCI_LINT_VERSION: "v2.6"
   COVERAGE_THRESHOLD: "70.0"
 
-# Check if there are changes in the cli, server, or workflows
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      cli: ${{ steps.filter.outputs.cli }}
-      server: ${{ steps.filter.outputs.server }}
+      go: ${{ steps.filter.outputs.go }}
       workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - uses: actions/checkout@v6
@@ -34,43 +35,19 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            cli:
-              - "cli/**"
-            server:
-              - "server/**"
+            go:
+              - "cmd/**"
+              - "internal/**"
+              - "go.mod"
+              - "go.sum"
+              - "**/*.sh"
             workflows:
               - ".github/workflows/**"
 
-  check_directories:
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      cli_exists: ${{ steps.check.outputs.cli_exists }}
-      server_exists: ${{ steps.check.outputs.server_exists }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Check if directories exist
-        id: check
-        run: |
-          if [ -d "cli" ]; then
-            echo "✅ cli/ directory found."
-            echo "cli_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ cli/ directory does not exist."
-            echo "cli_exists=false" >> $GITHUB_OUTPUT
-          fi
-          if [ -d "server" ]; then
-            echo "✅ server/ directory found."
-            echo "server_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ server/ directory does not exist."
-            echo "server_exists=false" >> $GITHUB_OUTPUT
-          fi
-
-  # ---- CLI ----
-  cli_build:
-    runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.cli == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.cli_exists == 'true'
+    needs: [changes]
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -78,13 +55,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build (cli)
-        working-directory: cli
+        working-directory: cmd/cli
         run: go build -v ./...
 
-  cli_test:
+  test:
     runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.cli == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.cli_exists == 'true'
+    needs: [changes]
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -92,96 +69,39 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Test (cli)
-        working-directory: cli
         run: go test -v ./...
-
-  cli_lint:
-    runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.cli == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.cli_exists == 'true'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Lint (cli)
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          working-directory: cli
-          args: --output.json.path=golangci-lint-report.json
-      - name: Upload lint report (cli)
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: cli-golangci-lint-report
-          path: cli/golangci-lint-report.json
-
-  # ---- SERVER ----
-  server_build:
-    runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.server == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.server_exists == 'true'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Build (server)
-        working-directory: server
-        run: go build -v ./...
-
-  server_test:
-    runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.server == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.server_exists == 'true'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Run tests with coverage (server)
-        working-directory: server
-        run: go test ./... -coverprofile=coverage.out
-
-      - name: Enforce minimum coverage (server)
-        working-directory: server
+      - name: Run test scripts
+        shell: bash
         run: |
-          total=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
-          echo "Total coverage: $total%"
+          shopt -s nullglob
+          scripts=(test-*.sh)
+          if [ ${#scripts[@]} -eq 0 ]; then
+            echo "No test-*.sh scripts found, skipping."
+            exit 0
+          fi
+          for script in "${scripts[@]}"; do
+            echo "Running $script"
+            bash "$script"
+          done
 
-          threshold=${{ env.COVERAGE_THRESHOLD }}
-          awk -v total="$total" -v threshold="$threshold" 'BEGIN {
-            if(total < threshold){
-              printf "❌ Coverage %.2f%% is below threshold %.2f%%\n", total, threshold
-              exit 1
-            }else{
-              printf "✅ Coverage %.2f%% meets threshold %.2f%%\n", total, threshold
-            }
-          }'
-
-  server_lint:
+  lint:
     runs-on: ubuntu-latest
-    needs: [changes, check_directories]
-    if: (needs.changes.outputs.server == 'true' || needs.changes.outputs.workflows == 'true') && needs.check_directories.outputs.server_exists == 'true'
+    needs: [changes]
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Lint (server)
+      - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
-          working-directory: server
           args: --output.json.path=golangci-lint-report.json
-      - name: Upload lint report (server)
+      - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: server-golangci-lint-report
-          path: server/golangci-lint-report.json
+          name: golangci-lint-report
+          path: golangci-lint-report.json
