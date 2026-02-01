@@ -32,15 +32,15 @@ jobs:
 	pipeline, rootNode, err := parser.Parse()
 
 	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
+		t.Fatalf("Expected no error, got: %v", err)
 	}
 
 	if pipeline == nil {
-		t.Error("Expected pipeline to be parsed, got nil")
+		t.Fatal("Expected pipeline to be parsed, got nil")
 	}
 
 	if rootNode == nil {
-		t.Error("Expected rootNode to be parsed, got nil")
+		t.Fatal("Expected rootNode to be parsed, got nil")
 	}
 
 	// Check parsed content
