@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CS7580-SEA-SP26/e-team/internals/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"gopkg.in/yaml.v3"
 )
 
