@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths:
-      - "cli/**"
+      - "../../cli/**"
       - "server/**"
       - ".github/workflows/**"
 
