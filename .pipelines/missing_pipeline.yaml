@@ -7,5 +7,6 @@ stages:
 jobs:
   - name: "compile"
     stage: "build"
+    image: "golang:1.21"
     script:
       - "make build"

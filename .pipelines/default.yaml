@@ -12,23 +12,27 @@ stages:
 jobs:
   - name: "compile"
     stage: "build"
+    image: "golang:1.21"
     script:
       - "make build"
   
   - name: "unit-tests"
     stage: "test"
     needs: ["compile"]
+    image: "golang:1.21"
     script:
       - "make test"
   
   - name: "integration-tests"
     stage: "test"
     needs: ["compile"]
+    image: "golang:1.21"
     script:
       - "make integration"
   
   - name: "deploy-staging"
     stage: "deploy"
     needs: ["unit-tests", "integration-tests"]
+    image: "alpine:latest"
     script:
       - "deploy staging"

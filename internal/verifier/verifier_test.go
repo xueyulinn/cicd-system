@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -365,5 +366,20 @@ jobs:
 	}
 	if !found {
 		t.Errorf("Expected error about missing image field, got: %v", errors)
+	}
+}
+
+func TestLegacyPipelineFormat(t *testing.T) {
+	data, err := os.ReadFile(".pipelines/prof_example.yaml")
+	if err != nil {
+		t.Fatalf("Failed to read legacy pipeline example: %v", err)
+	}
+
+	pipeline, rootNode := parseYAML(t, string(data))
+	verifier := NewVerifier(".pipelines/prof_example.yaml", pipeline, rootNode)
+
+	errors := verifier.Verify()
+	if len(errors) > 0 {
+		t.Fatalf("Expected legacy pipeline to be valid, got errors: %v", errors)
 	}
 }

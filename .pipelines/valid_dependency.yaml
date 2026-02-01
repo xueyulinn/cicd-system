@@ -19,35 +19,41 @@ jobs:
   - name: "build-frontend"
     stage: "build"
     needs: ["setup"]
+    image: "node:18"
     script:
       - "build frontend"
   
   - name: "build-backend"
     stage: "build"
     needs: ["setup"]
+    image: "golang:1.21"
     script:
       - "build backend"
   
   - name: "test-frontend"
     stage: "test"
     needs: ["build-frontend"]
+    image: "node:18"
     script:
       - "test frontend"
   
   - name: "test-backend"
     stage: "test"
     needs: ["build-backend"]
+    image: "golang:1.21"
     script:
       - "test backend"
   
   - name: "integration-test"
     stage: "test"
     needs: ["build-frontend", "build-backend"]
+    image: "node:18"
     script:
       - "integration tests"
   
   - name: "deploy-prod"
     stage: "deploy"
     needs: ["test-frontend", "test-backend", "integration-test"]
+    image: "alpine:latest"
     script:
       - "deploy production"

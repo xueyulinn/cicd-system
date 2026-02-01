@@ -13,17 +13,20 @@ stages:
 jobs:
   - name: "compile"
     stage: "build"
+    image: "golang:1.21"
     script:
       - "make build"
   
   - name: "compile"  # Duplicate job name
     stage: "test"
     needs: ["non-existent"]  # Undefined job
+    image: "golang:1.21"
     script:
       - "make test"
   
   - name: "job3"
     stage: "test"
     needs: ["compile"]
+    image: "golang:1.21"
     script:
       - "echo test"

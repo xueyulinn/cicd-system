@@ -12,10 +12,12 @@ stages:
 jobs:
   - name: "compile"
     stage: "build"
+    image: "golang:1.21"
     script:
       - "make build"
   
   - name: "unit-tests"
     stage: "test"
+    image: "golang:1.21"
     script:
       - "make test"

@@ -13,6 +13,15 @@ type Verifier struct {
 	filePath string
 	pipeline *models.Pipeline
 	rootNode *yaml.Node
+
+	legacyJobNodes  []legacyJobNode
+	legacyJobsCached bool
+}
+
+type legacyJobNode struct {
+	name  string
+	key   *yaml.Node
+	value *yaml.Node
 }
 
 // NewVerifier creates a new verifier
@@ -38,6 +47,8 @@ func (v *Verifier) Verify() []error {
 			return errors
 		}
 	}
+
+	v.populateLegacyPipelineData()
 
 	// Check 1: At least 1 stage defined
 	if err := v.checkAtLeastOneStage(); err != nil {
@@ -142,6 +153,34 @@ func (v *Verifier) checkYAMLTypes() []error {
 					"pipeline.name cannot be empty"))
 			}
 
+		case "pipeline":
+			if value.Kind != yaml.MappingNode {
+				errors = append(errors, v.formatError(
+					models.Location{Line: value.Line, Column: value.Column},
+					"wrong type for `pipeline` key. Expected mapping, got "+value.Tag))
+				continue
+			}
+			for j := 0; j < len(value.Content); j += 2 {
+				fieldKey := value.Content[j].Value
+				fieldValue := value.Content[j+1]
+				if fieldKey == "name" {
+					hasPipelineName = true
+					if fieldValue.Tag == "!!int" || fieldValue.Tag == "!!float" {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", fieldValue.Value)))
+					} else if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!str" {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", fieldValue.Value)))
+					} else if fieldValue.Value == "" {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							"pipeline.name cannot be empty"))
+					}
+				}
+			}
+
 		case "stages":
 			stagesNode = value
 			if value.Kind != yaml.SequenceNode {
@@ -151,37 +190,44 @@ func (v *Verifier) checkYAMLTypes() []error {
 			} else {
 				// Validate each stage
 				for j, stageNode := range value.Content {
-					if stageNode.Kind != yaml.MappingNode {
-						errors = append(errors, v.formatError(
-							models.Location{Line: stageNode.Line, Column: stageNode.Column},
-							fmt.Sprintf("wrong type for stage at index %d. Expected mapping, got "+stageNode.Tag, j)))
-						continue
-					}
-					// Check stage has name field and it's a string
-					hasName := false
-					for k := 0; k < len(stageNode.Content); k += 2 {
-						if stageNode.Content[k].Value == "name" {
-							hasName = true
-							nameValue := stageNode.Content[k+1]
-							if nameValue.Tag == "!!int" || nameValue.Tag == "!!float" {
-								errors = append(errors, v.formatError(
-									models.Location{Line: nameValue.Line, Column: nameValue.Column},
-									fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", nameValue.Value)))
-							} else if nameValue.Kind != yaml.ScalarNode || nameValue.Tag != "!!str" {
-								errors = append(errors, v.formatError(
-									models.Location{Line: nameValue.Line, Column: nameValue.Column},
-									fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", nameValue.Value)))
-							} else if nameValue.Value == "" {
-								errors = append(errors, v.formatError(
-									models.Location{Line: nameValue.Line, Column: nameValue.Column},
-									"stage name cannot be empty"))
+					switch stageNode.Kind {
+					case yaml.MappingNode:
+						// Check stage has name field and it's a string
+						hasName := false
+						for k := 0; k < len(stageNode.Content); k += 2 {
+							if stageNode.Content[k].Value == "name" {
+								hasName = true
+								nameValue := stageNode.Content[k+1]
+								if nameValue.Tag == "!!int" || nameValue.Tag == "!!float" {
+									errors = append(errors, v.formatError(
+										models.Location{Line: nameValue.Line, Column: nameValue.Column},
+										fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", nameValue.Value)))
+								} else if nameValue.Kind != yaml.ScalarNode || nameValue.Tag != "!!str" {
+									errors = append(errors, v.formatError(
+										models.Location{Line: nameValue.Line, Column: nameValue.Column},
+										fmt.Sprintf("wrong type of value given for `name` key. Expected value of type String, given %s", nameValue.Value)))
+								} else if nameValue.Value == "" {
+									errors = append(errors, v.formatError(
+										models.Location{Line: nameValue.Line, Column: nameValue.Column},
+										"stage name cannot be empty"))
+								}
 							}
 						}
-					}
-					if !hasName {
+						if !hasName {
+							errors = append(errors, v.formatError(
+								models.Location{Line: stageNode.Line, Column: stageNode.Column},
+								"stage must have a `name` field"))
+						}
+					case yaml.ScalarNode:
+						if stageNode.Value == "" {
+							errors = append(errors, v.formatError(
+								models.Location{Line: stageNode.Line, Column: stageNode.Column},
+								"stage name cannot be empty"))
+						}
+					default:
 						errors = append(errors, v.formatError(
 							models.Location{Line: stageNode.Line, Column: stageNode.Column},
-							"stage must have a `name` field"))
+							fmt.Sprintf("wrong type for stage at index %d. Expected mapping or string, got %s", j, stageNode.Tag)))
 					}
 				}
 			}
@@ -198,7 +244,7 @@ func (v *Verifier) checkYAMLTypes() []error {
 					if jobNode.Kind != yaml.MappingNode {
 						errors = append(errors, v.formatError(
 							models.Location{Line: jobNode.Line, Column: jobNode.Column},
-							fmt.Sprintf("wrong type for job at index %d. Expected mapping, got "+jobNode.Tag, j)))
+							fmt.Sprintf("wrong type for job at index %d. Expected mapping, got %s", j, jobNode.Tag)))
 						continue
 					}
 
@@ -326,6 +372,11 @@ func (v *Verifier) checkYAMLTypes() []error {
 		}
 	}
 
+	legacyJobs := v.getLegacyJobNodes()
+	if len(legacyJobs) > 0 {
+		errors = append(errors, v.validateLegacyJobs(legacyJobs)...)
+	}
+
 	// Check that required top-level keys exist
 	if !hasPipelineName {
 		errors = append(errors, v.formatError(
@@ -337,7 +388,7 @@ func (v *Verifier) checkYAMLTypes() []error {
 			models.Location{Line: 1, Column: 1},
 			"pipeline must have a `stages` key"))
 	}
-	if jobsNode == nil {
+	if jobsNode == nil && len(legacyJobs) == 0 {
 		errors = append(errors, v.formatError(
 			models.Location{Line: 1, Column: 1},
 			"pipeline must have a `jobs` key"))
@@ -696,4 +747,326 @@ func (v *Verifier) formatError(loc models.Location, message string) error {
 		Location: loc,
 		Message:  fmt.Sprintf("%s:%d:%d: %s", v.filePath, loc.Line, loc.Column, message),
 	}
+}
+
+func (v *Verifier) populateLegacyPipelineData() {
+	if v.pipeline == nil {
+		return
+	}
+
+	if v.pipeline.Name == "" {
+		if pipelineNode := v.getTopLevelNode("pipeline"); pipelineNode != nil {
+			if name := v.findNameInMapping(pipelineNode); name != "" {
+				v.pipeline.Name = name
+			}
+		}
+	}
+
+	if len(v.pipeline.Stages) == 0 {
+		if stagesNode := v.getTopLevelNode("stages"); stagesNode != nil {
+			if parsed := v.parseStagesFromNode(stagesNode); len(parsed) > 0 {
+				v.pipeline.Stages = parsed
+			}
+		}
+	}
+
+	if len(v.pipeline.Jobs) == 0 {
+		legacyJobs := v.getLegacyJobNodes()
+		if len(legacyJobs) == 0 {
+			return
+		}
+		jobs := make([]models.Job, 0, len(legacyJobs))
+		for _, jobNode := range legacyJobs {
+			jobs = append(jobs, v.parseLegacyJob(jobNode.name, jobNode.value))
+		}
+		v.pipeline.Jobs = jobs
+	}
+}
+
+func (v *Verifier) getTopLevelNode(key string) *yaml.Node {
+	root := v.getRootMappingNode()
+	if root == nil {
+		return nil
+	}
+	for i := 0; i < len(root.Content); i += 2 {
+		if root.Content[i].Value == key {
+			return root.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func (v *Verifier) getRootMappingNode() *yaml.Node {
+	if v.rootNode.Kind == yaml.DocumentNode && len(v.rootNode.Content) > 0 {
+		content := v.rootNode.Content[0]
+		if content.Kind == yaml.MappingNode {
+			return content
+		}
+	}
+	return nil
+}
+
+func (v *Verifier) findNameInMapping(node *yaml.Node) string {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return ""
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == "name" && node.Content[i+1].Kind == yaml.ScalarNode {
+			return node.Content[i+1].Value
+		}
+	}
+	return ""
+}
+
+func (v *Verifier) parseStagesFromNode(node *yaml.Node) []models.Stage {
+	if node == nil || node.Kind != yaml.SequenceNode {
+		return nil
+	}
+	var stages []models.Stage
+	for _, entry := range node.Content {
+		switch entry.Kind {
+		case yaml.MappingNode:
+			if name := v.findNameInMapping(entry); name != "" {
+				stages = append(stages, models.Stage{Name: name})
+			}
+		case yaml.ScalarNode:
+			if entry.Value != "" {
+				stages = append(stages, models.Stage{Name: entry.Value})
+			}
+		}
+	}
+	return stages
+}
+
+func (v *Verifier) getLegacyJobNodes() []legacyJobNode {
+	if v.legacyJobsCached {
+		return v.legacyJobNodes
+	}
+	v.legacyJobsCached = true
+	var nodes []legacyJobNode
+	root := v.getRootMappingNode()
+	if root == nil {
+		v.legacyJobNodes = nodes
+		return nodes
+	}
+	for i := 0; i < len(root.Content); i += 2 {
+		key := root.Content[i]
+		value := root.Content[i+1]
+		if v.isReservedTopLevelKey(key.Value) {
+			continue
+		}
+		if v.isLegacyJobCandidate(value) {
+			nodes = append(nodes, legacyJobNode{
+				name:  key.Value,
+				key:   key,
+				value: value,
+			})
+		}
+	}
+	v.legacyJobNodes = nodes
+	return nodes
+}
+
+func (v *Verifier) isReservedTopLevelKey(key string) bool {
+	switch key {
+	case "name", "pipeline", "stages", "jobs":
+		return true
+	default:
+		return false
+	}
+}
+
+func (v *Verifier) isLegacyJobCandidate(node *yaml.Node) bool {
+	if node.Kind != yaml.SequenceNode || len(node.Content) == 0 {
+		return false
+	}
+	for _, entry := range node.Content {
+		if entry.Kind != yaml.MappingNode {
+			return false
+		}
+		for i := 0; i < len(entry.Content); i += 2 {
+			field := entry.Content[i].Value
+			if field == "stage" || field == "image" || field == "script" || field == "needs" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (v *Verifier) validateLegacyJobs(nodes []legacyJobNode) []error {
+	var errors []error
+	for _, jobNode := range nodes {
+		errors = append(errors, v.validateLegacyJobStructure(jobNode.name, jobNode.key, jobNode.value)...)
+	}
+	return errors
+}
+
+func (v *Verifier) validateLegacyJobStructure(jobName string, keyNode, valueNode *yaml.Node) []error {
+	var errors []error
+	hasStage := false
+	hasImage := false
+	hasScript := false
+
+	for _, entry := range valueNode.Content {
+		if entry.Kind != yaml.MappingNode {
+			errors = append(errors, v.formatError(
+				models.Location{Line: entry.Line, Column: entry.Column},
+				fmt.Sprintf("wrong type for job '%s'. Expected mapping entries, got %s", jobName, entry.Tag)))
+			continue
+		}
+
+		for i := 0; i < len(entry.Content); i += 2 {
+			fieldKey := entry.Content[i].Value
+			fieldValue := entry.Content[i+1]
+
+			switch fieldKey {
+			case "stage":
+				hasStage = true
+				if fieldValue.Tag == "!!int" || fieldValue.Tag == "!!float" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						fmt.Sprintf("wrong type of value given for `stage` key. Expected value of type String, given %s", fieldValue.Value)))
+				} else if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!str" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						fmt.Sprintf("wrong type of value given for `stage` key. Expected value of type String, given %s", fieldValue.Value)))
+				} else if fieldValue.Value == "" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						"job stage cannot be empty"))
+				}
+			case "image":
+				hasImage = true
+				if fieldValue.Tag == "!!int" || fieldValue.Tag == "!!float" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						fmt.Sprintf("wrong type of value given for `image` key. Expected value of type String, given %s", fieldValue.Value)))
+				} else if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!str" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						fmt.Sprintf("wrong type of value given for `image` key. Expected value of type String, given %s", fieldValue.Value)))
+				} else if fieldValue.Value == "" {
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						"job image cannot be empty"))
+				}
+			case "script":
+				hasScript = true
+				switch fieldValue.Kind {
+				case yaml.ScalarNode:
+					if fieldValue.Tag != "!!str" {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							"script items must be strings"))
+					}
+				case yaml.SequenceNode:
+					if len(fieldValue.Content) == 0 {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							"script list cannot be empty"))
+					}
+					for _, scriptItem := range fieldValue.Content {
+						if scriptItem.Kind != yaml.ScalarNode || scriptItem.Tag != "!!str" {
+							errors = append(errors, v.formatError(
+								models.Location{Line: scriptItem.Line, Column: scriptItem.Column},
+								"script items must be strings"))
+						}
+					}
+				default:
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						"wrong type of value given for `script` key. Expected sequence (list) or scalar, got "+fieldValue.Tag))
+				}
+			case "needs":
+				switch fieldValue.Kind {
+				case yaml.SequenceNode:
+					for _, needItem := range fieldValue.Content {
+						if needItem.Kind != yaml.ScalarNode || needItem.Tag != "!!str" {
+							errors = append(errors, v.formatError(
+								models.Location{Line: needItem.Line, Column: needItem.Column},
+								"needs items must be strings"))
+						}
+					}
+				case yaml.ScalarNode:
+					if fieldValue.Tag != "!!str" {
+						errors = append(errors, v.formatError(
+							models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+							"needs items must be strings"))
+					}
+				default:
+					errors = append(errors, v.formatError(
+						models.Location{Line: fieldValue.Line, Column: fieldValue.Column},
+						"wrong type of value given for `needs` key. Expected sequence (list) or scalar, got "+fieldValue.Tag))
+				}
+			}
+		}
+	}
+
+	jobLocation := models.Location{Line: keyNode.Line, Column: keyNode.Column}
+	if !hasStage {
+		errors = append(errors, v.formatError(jobLocation,
+			"job must have a `stage` field"))
+	}
+	if !hasImage {
+		errors = append(errors, v.formatError(jobLocation,
+			"job must have an `image` field"))
+	}
+	if !hasScript {
+		errors = append(errors, v.formatError(jobLocation,
+			"job must have a `script` field"))
+	}
+
+	return errors
+}
+
+func (v *Verifier) parseLegacyJob(jobName string, jobNode *yaml.Node) models.Job {
+	job := models.Job{Name: jobName}
+	var scriptLines []string
+
+	for _, entry := range jobNode.Content {
+		if entry.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i < len(entry.Content); i += 2 {
+			fieldKey := entry.Content[i].Value
+			fieldValue := entry.Content[i+1]
+
+			switch fieldKey {
+			case "stage":
+				if fieldValue.Kind == yaml.ScalarNode {
+					job.Stage = fieldValue.Value
+				}
+			case "image":
+				if fieldValue.Kind == yaml.ScalarNode {
+					job.Image = fieldValue.Value
+				}
+			case "script":
+				switch fieldValue.Kind {
+				case yaml.ScalarNode:
+					scriptLines = append(scriptLines, fieldValue.Value)
+				case yaml.SequenceNode:
+					for _, scriptItem := range fieldValue.Content {
+						if scriptItem.Kind == yaml.ScalarNode {
+							scriptLines = append(scriptLines, scriptItem.Value)
+						}
+					}
+				}
+			case "needs":
+				switch fieldValue.Kind {
+				case yaml.SequenceNode:
+					for _, needItem := range fieldValue.Content {
+						if needItem.Kind == yaml.ScalarNode {
+							job.Needs = append(job.Needs, needItem.Value)
+						}
+					}
+				case yaml.ScalarNode:
+					job.Needs = append(job.Needs, fieldValue.Value)
+				}
+			}
+		}
+	}
+
+	job.Script = scriptLines
+	return job
 }

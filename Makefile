@@ -1,6 +1,11 @@
 .PHONY: build test test-coverage clean install run
 
 BINARY_NAME=cicd
+BUILD_DIR := bin
+
+# Install location (override with PREFIX=...)
+PREFIX ?= $(HOME)
+BINDIR := $(PREFIX)/bin
 
 build:
 	mkdir -p bin
@@ -20,7 +25,9 @@ clean:
 	rm -f coverage.out coverage.html
 
 install: build
-	cp bin/$(BINARY_NAME) $(GOPATH)/bin/
+# 	cp bin/$(BINARY_NAME) $(GOPATH)/bin/
+	mkdir -p $(BINDIR)
+	install -m 755 $(BUILD_DIR)/$(BINARY_NAME) $(BINDIR)/$(BINARY_NAME)
 
 run:
 	go run ./cmd/cli verify
