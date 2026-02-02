@@ -3,19 +3,19 @@
 
 # Completed tasks
 
-| Task                                                                                                                                             | Weight | Assignee  | 
-|--------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
-| [[Docs] Create initial high-level architecture design (CLI / REST Service / Data Store)](https://github.com/CS7580-SEA-SP26/e-team/issues/8<br/>) | Small  | Eugenia-Z | 
-| [[Docs] Define project tech stack and CI/CD strategy            ](https://github.com/CS7580-SEA-SP26/e-team/issues/10)                           | Small  | Eugenia-Z | 
-| [[CLI] Implement verify subcommand to validate pipeline YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/13)                               | Medium | Eugenia-Z|
-| [[Data Model] Add Pipeline data structure ](https://github.com/CS7580-SEA-SP26/e-team/issues/33)                                                 | Medium | Eugenia-Z|
-| [[Validator] Validate pipeline structure and references](https://github.com/CS7580-SEA-SP26/e-team/issues/21)                                    | Medium | Eugenia-Z|
-| [[Validator] Detect dependency cycles in needs (DAG validation)](https://github.com/CS7580-SEA-SP26/e-team/issues/19)                            | Medium | Eugenia-Z|
-| [[Validator] Validate needs references](https://github.com/CS7580-SEA-SP26/e-team/issues/18)                                                     | Medium | Eugenia-Z|
-| [[Error Reporting] Detect and report incorrect types for YAML keys.](https://github.com/CS7580-SEA-SP26/e-team/issues/9)                         | Small  |Eugenia-Z|
-| [[Error Reporting] Report Cycles in YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/7)                                                    | Small  |Eugenia-Z|
-| [[Error Reporting] Standardize error format](https://github.com/CS7580-SEA-SP26/e-team/issues/6)                                                 | Small  | Eugenia-Z|
-| [[Test] Unit tests for validator rules using fixtures](https://github.com/CS7580-SEA-SP26/e-team/issues/22)                                      | Small  |Eugenia-Z|
+| Task                                                                                                                    | Weight | Assignee  | 
+|-------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
+| [ [[Docs] Create initial high-level architecture design (CLI / REST Service / Data Store)] ]( https://github.com/CS7580-SEA-SP26/e-team/issues/8)                         | Small  | Eugenia-Z | 
+| [[Docs] Define project tech stack and CI/CD strategy            ](https://github.com/CS7580-SEA-SP26/e-team/issues/10)  | Small  | Eugenia-Z | 
+| [[CLI] Implement verify subcommand to validate pipeline YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/13)      | Medium | Eugenia-Z|
+| [[Data Model] Add Pipeline data structure ](https://github.com/CS7580-SEA-SP26/e-team/issues/33)                        | Medium | Eugenia-Z|
+| [[Validator] Validate pipeline structure and references](https://github.com/CS7580-SEA-SP26/e-team/issues/21)           | Medium | Eugenia-Z|
+| [[Validator] Detect dependency cycles in needs (DAG validation)](https://github.com/CS7580-SEA-SP26/e-team/issues/19)   | Medium | Eugenia-Z|
+| [[Validator] Validate needs references](https://github.com/CS7580-SEA-SP26/e-team/issues/18)                            | Medium | Eugenia-Z|
+| [[Error Reporting] Detect and report incorrect types for YAML keys.](https://github.com/CS7580-SEA-SP26/e-team/issues/9) | Small  |Eugenia-Z|
+| [[Error Reporting] Report Cycles in YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/7)                           | Small  |Eugenia-Z|
+| [[Error Reporting] Standardize error format](https://github.com/CS7580-SEA-SP26/e-team/issues/6)                        | Small  | Eugenia-Z|
+| [[Test] Unit tests for validator rules using fixtures](https://github.com/CS7580-SEA-SP26/e-team/issues/22)             | Small  |Eugenia-Z|
 
 # Carry over tasks
 
