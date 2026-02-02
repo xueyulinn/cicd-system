@@ -173,7 +173,7 @@ func TestValidationErrorError(t *testing.T) {
 	err := &ValidationError{
 		FilePath: "test.yaml",
 		Location: Location{Line: 5, Column: 10},
-		Message:  "test.yaml:5:10: some error",
+		Message:  "some error",
 	}
 
 	expected := "test.yaml:5:10: some error"
@@ -247,5 +247,159 @@ func TestPipelineMarshal(t *testing.T) {
 
 	if len(unmarshaled.Jobs) != len(pipeline.Jobs) {
 		t.Errorf("Jobs count mismatch after marshal/unmarshal")
+	}
+}
+
+func TestStageUnmarshalString(t *testing.T) {
+	yamlContent := `"build"`
+
+	var stage Stage
+	err := yaml.Unmarshal([]byte(yamlContent), &stage)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal stage string: %v", err)
+	}
+
+	if stage.Name != "build" {
+		t.Errorf("Expected stage name 'build', got '%s'", stage.Name)
+	}
+}
+
+func TestStageUnmarshalObject(t *testing.T) {
+	yamlContent := `
+name: "build"
+description: "Build stage"
+`
+
+	var stage Stage
+	err := yaml.Unmarshal([]byte(yamlContent), &stage)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal stage object: %v", err)
+	}
+
+	if stage.Name != "build" {
+		t.Errorf("Expected stage name 'build', got '%s'", stage.Name)
+	}
+}
+
+func TestJobUnmarshalMinimal(t *testing.T) {
+	yamlContent := `
+name: "simple-job"
+stage: "build"
+image: "alpine"
+script:
+  - "echo hello"
+`
+
+	var job Job
+	err := yaml.Unmarshal([]byte(yamlContent), &job)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal job: %v", err)
+	}
+
+	if job.Name != "simple-job" {
+		t.Errorf("Expected job name 'simple-job', got '%s'", job.Name)
+	}
+
+	if len(job.Script) != 1 {
+		t.Errorf("Expected 1 script command, got %d", len(job.Script))
+	}
+
+	if job.Script[0] != "echo hello" {
+		t.Errorf("Expected script 'echo hello', got '%s'", job.Script[0])
+	}
+}
+
+func TestJobUnmarshalStringScript(t *testing.T) {
+	yamlContent := `
+name: "job-with-string-script"
+stage: "build"
+image: "alpine"
+script: "echo hello"
+`
+
+	var job Job
+	err := yaml.Unmarshal([]byte(yamlContent), &job)
+	// This should fail because Job.Script is []string, not string
+	if err == nil {
+		t.Error("Expected error for string script field, got none")
+	}
+}
+
+func TestValidationErrorWithEmptyMessage(t *testing.T) {
+	err := &ValidationError{
+		FilePath: "test.yaml",
+		Location: Location{Line: 1, Column: 1},
+		Message:  "",
+	}
+
+	expected := "test.yaml:1:1: "
+	if err.Error() != expected {
+		t.Errorf("Expected error message '%s', got '%s'", expected, err.Error())
+	}
+}
+
+func TestValidationErrorWithEmptyFilePath(t *testing.T) {
+	err := &ValidationError{
+		FilePath: "",
+		Location: Location{Line: 1, Column: 1},
+		Message:  "test error",
+	}
+
+	expected := ":1:1: test error"
+	if err.Error() != expected {
+		t.Errorf("Expected error message '%s', got '%s'", expected, err.Error())
+	}
+}
+
+func TestPipelineWithComplexNeeds(t *testing.T) {
+	yamlContent := `
+name: "Complex Pipeline"
+stages:
+  - name: "build"
+  - name: "test"
+jobs:
+  - name: "compile"
+    stage: "build"
+    image: "golang:1.21"
+    script:
+      - "go build"
+  - name: "unit-test"
+    stage: "test"
+    image: "golang:1.21"
+    needs: ["compile", "lint"]
+    script:
+      - "go test"
+  - name: "integration-test"
+    stage: "test"
+    image: "golang:1.21"
+    needs: ["unit-test"]
+    script:
+      - "go test -integration"
+`
+
+	var pipeline Pipeline
+	err := yaml.Unmarshal([]byte(yamlContent), &pipeline)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal pipeline: %v", err)
+	}
+
+	// Test job with multiple needs
+	unitTest := pipeline.Jobs[1]
+	if len(unitTest.Needs) != 2 {
+		t.Errorf("Expected 2 needs for unit-test, got %d", len(unitTest.Needs))
+	}
+
+	if unitTest.Needs[0] != "compile" || unitTest.Needs[1] != "lint" {
+		t.Errorf("Expected needs [compile, lint], got %v", unitTest.Needs)
+	}
+
+	// Test job with single need
+	integrationTest := pipeline.Jobs[2]
+	if len(integrationTest.Needs) != 1 {
+		t.Errorf("Expected 1 need for integration-test, got %d", len(integrationTest.Needs))
+	}
+
+	if integrationTest.Needs[0] != "unit-test" {
+		t.Errorf("Expected need [unit-test], got %v", integrationTest.Needs)
 	}
 }

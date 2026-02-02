@@ -192,3 +192,51 @@ func (v *PipelineVerifier) formatError(loc models.Location, message string) erro
 		Message:  message,
 	}
 }
+
+// Helper functions for YAML node navigation (needed for validation)
+
+func (v *PipelineVerifier) getTopLevelNode(key string) *yaml.Node {
+	root := v.getRootMappingNode()
+	if root == nil {
+		return nil
+	}
+
+	for i := 0; i < len(root.Content); i += 2 {
+		if root.Content[i].Value == key {
+			return root.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func (v *PipelineVerifier) getRootMappingNode() *yaml.Node {
+	if v.rootNode.Kind == yaml.DocumentNode && len(v.rootNode.Content) > 0 {
+		content := v.rootNode.Content[0]
+		if content.Kind == yaml.MappingNode {
+			return content
+		}
+	}
+	return nil
+}
+
+func (v *PipelineVerifier) findNameInMapping(node *yaml.Node) string {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return ""
+	}
+
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == "name" && node.Content[i+1].Kind == yaml.ScalarNode {
+			return node.Content[i+1].Value
+		}
+	}
+	return ""
+}
+
+func (v *PipelineVerifier) isReservedTopLevelKey(key string) bool {
+	switch key {
+	case "name", "pipeline", "stages", "jobs":
+		return true
+	default:
+		return false
+	}
+}

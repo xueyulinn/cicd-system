@@ -18,42 +18,39 @@ setup:
 
 build-frontend:
   - stage: build
-  - needs: [setup]
   - image: node:18
   - script:
     - build frontend
 
 build-backend:
   - stage: build
-  - needs: [setup]
+  - needs: [build-frontend]
   - image: golang:1.21
   - script:
     - build backend
 
 test-frontend:
   - stage: test
-  - needs: [build-frontend]
   - image: node:18
   - script:
     - test frontend
 
 test-backend:
   - stage: test
-  - needs: [build-backend]
+  - needs: [test-frontend]
   - image: golang:1.21
   - script:
     - test backend
 
 integration-test:
   - stage: test
-  - needs: [build-frontend, build-backend]
+  - needs: [test-backend]
   - image: node:18
   - script:
     - integration tests
 
 deploy-prod:
   - stage: deploy
-  - needs: [test-frontend, test-backend, integration-test]
   - image: alpine:latest
   - script:
     - deploy production

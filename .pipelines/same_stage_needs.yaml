@@ -1,0 +1,27 @@
+# Test Case: Jobs in needs belong to same stage (valid)
+# Expected: No errors
+
+pipeline:
+  name: "Same Stage Dependency Test"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+
+lint:
+  - stage: build
+  - image: "golangci/golangci-lint"
+  - script:
+    - "golangci-lint run"
+
+format-check:
+  - stage: build
+  - image: "golang:1.21"
+  - needs: [compile, lint]
+  - script:
+    - "go fmt ./..."

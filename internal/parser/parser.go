@@ -66,6 +66,10 @@ func (p *Parser) buildPipeline(root *yaml.Node) (*models.Pipeline, error) {
 	}
 
 	pipeline.Stages = parseStages(findSequenceNode(content, "stages"))
+	if len(pipeline.Stages) == 0 {
+		// Set default stages if no stages are defined
+		pipeline.Stages = getDefaultStages()
+	}
 	pipeline.Jobs = parseJobs(content)
 
 	return pipeline, nil
@@ -206,4 +210,49 @@ func appendNeeds(existing []string, node *yaml.Node) []string {
 // GetFilePath returns the file path being parsed
 func (p *Parser) GetFilePath() string {
 	return p.filePath
+}
+
+// getDefaultStages returns the default stages when none are defined
+func getDefaultStages() []models.Stage {
+	return []models.Stage{
+		{Name: "build"},
+		{Name: "test"},
+		{Name: "docs"},
+	}
+}
+
+// JobNode represents a job defined in format
+type JobNode struct {
+	Name  string
+	Key   *yaml.Node
+	Value *yaml.Node
+}
+
+// GetJobNodes extracts job nodes from the YAML structure
+func (p *Parser) GetJobNodes(rootNode *yaml.Node) []JobNode {
+	var jobNodes []JobNode
+
+	if rootNode.Kind == yaml.DocumentNode && len(rootNode.Content) > 0 {
+		content := rootNode.Content[0]
+		if content.Kind == yaml.MappingNode {
+			for i := 0; i < len(content.Content); i += 2 {
+				key := content.Content[i]
+				value := content.Content[i+1]
+
+				// Skip reserved top-level keys
+				if isReservedTopLevelKey(key.Value) {
+					continue
+				}
+
+				// This is a job node
+				jobNodes = append(jobNodes, JobNode{
+					Name:  key.Value,
+					Key:   key,
+					Value: value,
+				})
+			}
+		}
+	}
+
+	return jobNodes
 }

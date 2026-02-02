@@ -17,21 +17,19 @@ compile:
 
 unit-tests:
   - stage: test
-  - needs: [compile]
   - image: golang:1.21
   - script:
     - "make test"
 
 integration-tests:
   - stage: test
-  - needs: [compile]
+  - needs: [unit-tests]
   - image: golang:1.21
   - script:
     - "make integration"
 
 deploy-staging:
   - stage: deploy
-  - needs: [unit-tests, integration-tests]
   - image: alpine:latest
   - script:
     - "deploy staging"

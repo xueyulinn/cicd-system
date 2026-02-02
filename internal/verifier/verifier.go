@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -11,14 +12,7 @@ type PipelineVerifier struct {
 	pipeline   *models.Pipeline
 	rootNode   *yaml.Node
 	JobsCached bool
-	JobNodes   []JobNode
-}
-
-// JobNode represents a job defined in format
-type JobNode struct {
-	name  string
-	key   *yaml.Node
-	value *yaml.Node
+	JobNodes   []parser.JobNode
 }
 
 // NewPipelineVerifier creates a new verifier
@@ -34,9 +28,6 @@ func NewPipelineVerifier(filePath string, pipeline *models.Pipeline, rootNode *y
 func (v *PipelineVerifier) Verify() []error {
 	var errors []error
 
-	// Populate pipeline data from format if needed
-	v.populatePipelineData()
-
 	// Check 0: Validate YAML types and structure
 	typeErrors := v.checkYAMLTypes()
 	if len(typeErrors) > 0 {
@@ -47,6 +38,12 @@ func (v *PipelineVerifier) Verify() []error {
 			return errors
 		}
 	}
+
+	// Check 0.5: Validate format-specific types and structure
+	p := parser.NewParser(v.filePath)
+	jobNodes := p.GetJobNodes(v.rootNode)
+	formatErrors := v.validateJobs(jobNodes)
+	errors = append(errors, formatErrors...)
 
 	// Check 1: At least one stage defined
 	if err := v.checkAtLeastOneStage(); err != nil {
@@ -72,6 +69,9 @@ func (v *PipelineVerifier) Verify() []error {
 
 	// Check 7: All needs references are valid
 	errors = append(errors, v.checkNeedsReferences()...)
+
+	// Check 7.5: All jobs in needs belong to the same stage
+	errors = append(errors, v.checkNeedsStageConsistency()...)
 
 	// Check 8: No cycles in dependencies
 	if err := v.checkNoCycles(); err != nil {

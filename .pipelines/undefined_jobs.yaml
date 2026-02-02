@@ -16,7 +16,7 @@ compile:
 
 unit-tests:
   - stage: test
-  - needs: [compile, non-existent-job]
+  - needs: [non-existent-job]
   - image: "golang:1.21"
   - script:
     - "make test"

@@ -1,5 +1,6 @@
-# Test Case: Valid pipeline configuration
-# Expected: Should pass validation
+# Test Case: Missing stage in pipeline configuration
+# Expected: Error: stage 'docs' has no jobs assigned to it
+
 
 pipeline:
   name: "Valid Pipeline"
@@ -12,21 +13,18 @@ compile:
 
 unit-tests:
   - stage: test
-  - needs: [compile]
   - image: golang:1.21
   - script:
     - "make test"
 
 integration-tests:
   - stage: test
-  - needs: [compile]
   - image: golang:1.21
   - script:
     - "make integration"
 
 deploy-staging:
   - stage: invalid
-  - needs: [unit-tests, integration-tests]
   - image: alpine:latest
   - script:
     - "deploy staging"
