@@ -36,6 +36,7 @@
 
 1. Proactive discussion of design decisions and tradeoffs early in the sprint helped the team align on architecture designs before implementation began
 2. Extensive testing and bug-fixes through collective team efforts ensured validation logic was robust and edge cases were properly handled
+3. Regular team meetings and communication helped maintain alignment
 
 # What did not work this week?
 
