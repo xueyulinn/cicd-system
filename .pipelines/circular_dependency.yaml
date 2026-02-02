@@ -5,32 +5,31 @@ pipeline:
   name: "Circular Dependencies Pipeline"
 
 stages:
-  - name: "build"
+  - build
 
-jobs:
-  - name: "J1"
-    stage: "build"
-    needs: ["J2"]
-    image: "golang:1.21"
-    script:
-      - "echo J1"
-  
-  - name: "J2"
-    stage: "build"
-    needs: ["J4"]
-    image: "golang:1.21"
-    script:
-      - "echo J2"
-  
-  - name: "J3"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "echo J3"
-  
-  - name: "J4"
-    stage: "build"
-    needs: ["J1"]
-    image: "golang:1.21"
-    script:
-      - "echo J4"
+J1:
+  - stage: build
+  - needs: [J2]
+  - image: golang:1.21
+  - script:
+    - echo J1
+
+J2:
+  - stage: build
+  - needs: [J4]
+  - image: golang:1.21
+  - script:
+    - echo J2
+
+J3:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - echo J3
+
+J4:
+  - stage: build
+  - needs: [J1]
+  - image: golang:1.21
+  - script:
+    - echo J4

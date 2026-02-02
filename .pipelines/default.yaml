@@ -3,36 +3,30 @@
 
 pipeline:
   name: "Valid Pipeline"
-  
-stages:
-  - name: "build"
-  - name: "test"
-  - name: "deploy"
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "make build"
-  
-  - name: "unit-tests"
-    stage: "test"
-    needs: ["compile"]
-    image: "golang:1.21"
-    script:
-      - "make test"
-  
-  - name: "integration-tests"
-    stage: "test"
-    needs: ["compile"]
-    image: "golang:1.21"
-    script:
-      - "make integration"
-  
-  - name: "deploy-staging"
-    stage: "deploy"
-    needs: ["unit-tests", "integration-tests"]
-    image: "alpine:latest"
-    script:
-      - "deploy staging"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - "make test"
+
+integration-tests:
+  - stage: test
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - "make integration"
+
+deploy-staging:
+  - stage: invalid
+  - needs: [unit-tests, integration-tests]
+  - image: alpine:latest
+  - script:
+    - "deploy staging"

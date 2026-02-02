@@ -5,19 +5,18 @@ pipeline:
   name: "Empty Stage Pipeline"
 
 stages:
-  - name: "build"
-  - name: "test"
-  - name: "deploy"  # This stage has no jobs
+  - build
+  - test
+  - deploy
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "make build"
-  
-  - name: "unit-tests"
-    stage: "test"
-    image: "golang:1.21"
-    script:
-      - "make test"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - make test

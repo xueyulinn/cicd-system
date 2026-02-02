@@ -60,5 +60,5 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string {
-	return e.Message
+	return fmt.Sprintf("%s:%d:%d: %s", e.FilePath, e.Location.Line, e.Location.Column, e.Message)
 }

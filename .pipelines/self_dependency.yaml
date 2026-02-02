@@ -5,12 +5,11 @@ pipeline:
   name: "Self Dependency Pipeline"
 
 stages:
-  - name: "build"
+  - build
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    needs: ["compile"]  # Needs itself!
-    image: "golang:1.21"
-    script:
-      - "make build"
+compile:
+  - stage: build
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - make build

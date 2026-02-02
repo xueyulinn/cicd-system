@@ -5,39 +5,38 @@ pipeline:
   name: "Complex Cycle Pipeline"
 
 stages:
-  - name: "stage1"
+  - stage1
 
-jobs:
-  - name: "A"
-    stage: "stage1"
-    needs: ["B"]
-    image: "golang:1.21"
-    script:
-      - "echo A"
-  
-  - name: "B"
-    stage: "stage1"
-    needs: ["C"]
-    image: "golang:1.21"
-    script:
-      - "echo B"
-  
-  - name: "C"
-    stage: "stage1"
-    needs: ["D"]
-    image: "golang:1.21"
-    script:
-      - "echo C"
-  
-  - name: "D"
-    stage: "stage1"
-    needs: ["B"]  # Creates cycle back to B
-    image: "golang:1.21"
-    script:
-      - "echo D"
-  
-  - name: "E"
-    stage: "stage1"
-    image: "golang:1.21"
-    script:
-      - "echo E"
+A:
+  - stage: stage1
+  - needs: [B]
+  - image: golang:1.21
+  - script:
+    - echo A
+
+B:
+  - stage: stage1
+  - needs: [C]
+  - image: golang:1.21
+  - script:
+    - echo B
+
+C:
+  - stage: stage1
+  - needs: [D]
+  - image: golang:1.21
+  - script:
+    - echo C
+
+D:
+  - stage: stage1
+  - needs: [B]
+  - image: golang:1.21
+  - script:
+    - echo D
+
+E:
+  - stage: stage1
+  - image: golang:1.21
+  - script:
+    - echo E

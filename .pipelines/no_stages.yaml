@@ -4,7 +4,6 @@
 pipeline:
   name: "No Stages Pipeline"
 
-jobs:
-  - name: "compile"
-    script:
-      - "make build"
+compile:
+  - script:
+    - make build

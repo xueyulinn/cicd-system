@@ -41,7 +41,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) > 0 {
@@ -62,7 +62,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -97,7 +97,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -136,7 +136,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -170,7 +170,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -204,7 +204,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -238,7 +238,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -285,7 +285,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -318,7 +318,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -350,7 +350,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -376,7 +376,7 @@ func TestLegacyPipelineFormat(t *testing.T) {
 	}
 
 	pipeline, rootNode := parseYAML(t, string(data))
-	verifier := NewVerifier(".pipelines/prof_example.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier(".pipelines/prof_example.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) > 0 {

@@ -2,31 +2,30 @@
 # Expected: Should report all errors found
 
 pipeline:
-  name: 456  # Wrong type
+  name: 456
 
 stages:
-  - name: "build"
-  - name: "build"  # Duplicate
-  - name: "test"
-  - name: "deploy"  # Will be empty
+  - build
+  - build
+  - test
+  - deploy
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "make build"
-  
-  - name: "compile"  # Duplicate job name
-    stage: "test"
-    needs: ["non-existent"]  # Undefined job
-    image: "golang:1.21"
-    script:
-      - "make test"
-  
-  - name: "job3"
-    stage: "test"
-    needs: ["compile"]
-    image: "golang:1.21"
-    script:
-      - "echo test"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+compile2:
+  - stage: test
+  - needs: [non-existent]
+  - image: golang:1.21
+  - script:
+    - make test
+
+job3:
+  - stage: test
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - echo test

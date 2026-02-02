@@ -5,24 +5,23 @@ pipeline:
   name: "Duplicate Jobs Pipeline"
 
 stages:
-  - name: "build"
-  - name: "test"
+  - build
+  - test
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "make build"
-  
-  - name: "unit-tests"
-    stage: "test"
-    image: "golang:1.21"
-    script:
-      - "make test"
-  
-  - name: "compile"  # Duplicate!
-    stage: "test"
-    image: "golang:1.21"
-    script:
-      - "other command"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - make test
+
+compile:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - other command

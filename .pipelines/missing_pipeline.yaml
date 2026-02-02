@@ -2,11 +2,10 @@
 # Expected Error: Missing required pipeline section
 
 stages:
-  - name: "build"
+  - build
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "make build"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"

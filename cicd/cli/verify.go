@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -67,12 +67,12 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		p := parser.NewParser(target)
 		pipeline, rootNode, parseErr := p.Parse()
 		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to parse configuration %s: %v\n", target, parseErr)
+			fmt.Fprintf(os.Stderr, "Error: failed to parse configuration:\n%s: %v\n", target, parseErr)
 			totalErrors++
 			continue
 		}
 
-		v := verifier.NewVerifier(target, pipeline, rootNode)
+		v := verifier.NewPipelineVerifier(target, pipeline, rootNode)
 		errors := v.Verify()
 		if len(errors) > 0 {
 			for _, err := range errors {
