@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -40,7 +41,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) > 0 {
@@ -61,7 +62,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -96,7 +97,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -135,7 +136,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -169,7 +170,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -203,7 +204,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -237,7 +238,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -284,7 +285,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -317,7 +318,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -349,7 +350,7 @@ jobs:
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
@@ -365,5 +366,20 @@ jobs:
 	}
 	if !found {
 		t.Errorf("Expected error about missing image field, got: %v", errors)
+	}
+}
+
+func TestLegacyPipelineFormat(t *testing.T) {
+	data, err := os.ReadFile(".pipelines/prof_example.yaml")
+	if err != nil {
+		t.Fatalf("Failed to read legacy pipeline example: %v", err)
+	}
+
+	pipeline, rootNode := parseYAML(t, string(data))
+	verifier := NewPipelineVerifier(".pipelines/prof_example.yaml", pipeline, rootNode)
+
+	errors := verifier.Verify()
+	if len(errors) > 0 {
+		t.Fatalf("Expected legacy pipeline to be valid, got errors: %v", errors)
 	}
 }

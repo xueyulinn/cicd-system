@@ -1,5 +1,11 @@
 package models
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
 // Pipeline represents the entire CI/CD pipeline configuration (parallel structure)
 type Pipeline struct {
 	Name   string  `yaml:"name,omitempty"`
@@ -10,6 +16,25 @@ type Pipeline struct {
 // Stage represents a stage definition (name only)
 type Stage struct {
 	Name string `yaml:"name"`
+}
+
+// UnmarshalYAML allows stage entries to be defined as scalars or mappings.
+func (s *Stage) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		s.Name = value.Value
+		return nil
+	case yaml.MappingNode:
+		type stageAlias Stage
+		var alias stageAlias
+		if err := value.Decode(&alias); err != nil {
+			return err
+		}
+		*s = Stage(alias)
+		return nil
+	default:
+		return fmt.Errorf("stage must be a string or mapping, got %s", value.Tag)
+	}
 }
 
 // Job represents a job with stage reference
@@ -35,5 +60,5 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string {
-	return e.Message
+	return fmt.Sprintf("%s:%d:%d: %s", e.FilePath, e.Location.Line, e.Location.Column, e.Message)
 }

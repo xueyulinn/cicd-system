@@ -5,10 +5,11 @@ pipeline:
   name: "Wrong Type Job Name"
 
 stages:
-  - name: "build"
+  - build
 
-jobs:
-  - name: true  # Should be a string!
-    stage: "build"
-    script:
-      - "make build"
+123:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+

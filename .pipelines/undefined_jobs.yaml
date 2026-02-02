@@ -5,17 +5,18 @@ pipeline:
   name: "Undefined Needs Pipeline"
 
 stages:
-  - name: "build"
-  - name: "test"
+  - build
+  - test
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    script:
-      - "make build"
-  
-  - name: "unit-tests"
-    stage: "test"
-    needs: ["compile", "non-existent-job"]  # non-existent-job is not defined!
-    script:
-      - "make test"
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - needs: [compile, non-existent-job]
+  - image: "golang:1.21"
+  - script:
+    - "make test"

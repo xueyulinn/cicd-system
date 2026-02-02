@@ -1,0 +1,43 @@
+pipeline:
+  name: default
+  description: Default build for nightly builds
+
+stages:
+  - build
+  - test
+  - doc
+  - deploy
+
+# Build
+compile:
+  - stage: build
+  - image: gradle:jdk21-corretto
+  - script: 'gradle build'
+
+# Checkstyle & Static Analysis reports
+statics:
+  - stage: test
+  - image: gradle:jdk21-corretto
+  - script:
+    - gradle checkstyleMain
+    - gradle checkstyleTest
+    - gradle spotbugsMain
+
+# Test
+tests:
+  - stage: test
+  - image: gradle:jdk21-corretto
+  - needs: [statics]
+  - script: 'gradle test jacocoTestReport'
+
+# Javadoc
+docs:
+  - stage: doc
+  - image: gradle:jdk21-corretto
+  - script: 'gradle javadoc'
+
+# Packaging
+package:
+  - stage: deploy
+  - image: gradle:jdk21-corretto
+  - script: 'gradle assembleDist'
