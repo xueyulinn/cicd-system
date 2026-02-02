@@ -82,7 +82,7 @@ func (v *PipelineVerifier) getJobNameLocation(jobIdx int) models.Location {
 		content := v.rootNode.Content[0]
 		if content.Kind == yaml.MappingNode {
 			// For format, jobs are top-level keys (excluding reserved keys)
-			legacyJobCount := 0
+			JobCount := 0
 			for i := 0; i < len(content.Content); i += 2 {
 				key := content.Content[i]
 
@@ -90,13 +90,13 @@ func (v *PipelineVerifier) getJobNameLocation(jobIdx int) models.Location {
 					continue
 				}
 
-				if legacyJobCount == jobIdx {
+				if JobCount == jobIdx {
 					return models.Location{
 						Line:   key.Line,
 						Column: key.Column,
 					}
 				}
-				legacyJobCount++
+				JobCount++
 			}
 		}
 	}
@@ -108,7 +108,7 @@ func (v *PipelineVerifier) getJobStageLocation(jobIdx int) models.Location {
 		content := v.rootNode.Content[0]
 		if content.Kind == yaml.MappingNode {
 			// For format, jobs are top-level keys
-			legacyJobCount := 0
+			JobCount := 0
 			for i := 0; i < len(content.Content); i += 2 {
 				key := content.Content[i]
 				value := content.Content[i+1]
@@ -117,7 +117,7 @@ func (v *PipelineVerifier) getJobStageLocation(jobIdx int) models.Location {
 					continue
 				}
 
-				if legacyJobCount == jobIdx {
+				if JobCount == jobIdx {
 					// Find the stage field in the job's sequence
 					if value.Kind == yaml.SequenceNode {
 						for _, step := range value.Content {
@@ -137,7 +137,7 @@ func (v *PipelineVerifier) getJobStageLocation(jobIdx int) models.Location {
 						Column: key.Column,
 					}
 				}
-				legacyJobCount++
+				JobCount++
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func (v *PipelineVerifier) getJobNeedsLocation(jobIdx int) models.Location {
 		content := v.rootNode.Content[0]
 		if content.Kind == yaml.MappingNode {
 			// For format, jobs are top-level keys
-			legacyJobCount := 0
+			JobCount := 0
 			for i := 0; i < len(content.Content); i += 2 {
 				key := content.Content[i]
 				value := content.Content[i+1]
@@ -158,7 +158,7 @@ func (v *PipelineVerifier) getJobNeedsLocation(jobIdx int) models.Location {
 					continue
 				}
 
-				if legacyJobCount == jobIdx {
+				if JobCount == jobIdx {
 					// Find the needs field in the job's sequence
 					if value.Kind == yaml.SequenceNode {
 						for _, step := range value.Content {
@@ -178,7 +178,7 @@ func (v *PipelineVerifier) getJobNeedsLocation(jobIdx int) models.Location {
 						Column: key.Column,
 					}
 				}
-				legacyJobCount++
+				JobCount++
 			}
 		}
 	}

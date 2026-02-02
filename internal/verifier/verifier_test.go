@@ -369,10 +369,10 @@ jobs:
 	}
 }
 
-func TestLegacyPipelineFormat(t *testing.T) {
+func TestPipelineFormat(t *testing.T) {
 	data, err := os.ReadFile(".pipelines/prof_example.yaml")
 	if err != nil {
-		t.Fatalf("Failed to read legacy pipeline example: %v", err)
+		t.Fatalf("Failed to read pipeline example: %v", err)
 	}
 
 	pipeline, rootNode := parseYAML(t, string(data))
@@ -380,6 +380,6 @@ func TestLegacyPipelineFormat(t *testing.T) {
 
 	errors := verifier.Verify()
 	if len(errors) > 0 {
-		t.Fatalf("Expected legacy pipeline to be valid, got errors: %v", errors)
+		t.Fatalf("Expected pipeline to be valid, got errors: %v", errors)
 	}
 }

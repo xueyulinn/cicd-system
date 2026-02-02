@@ -7,15 +7,15 @@ import (
 
 // PipelineVerifier validates pipeline configurations
 type PipelineVerifier struct {
-	filePath         string
-	pipeline         *models.Pipeline
-	rootNode         *yaml.Node
-	legacyJobsCached bool
-	legacyJobNodes   []legacyJobNode
+	filePath   string
+	pipeline   *models.Pipeline
+	rootNode   *yaml.Node
+	JobsCached bool
+	JobNodes   []JobNode
 }
 
-// legacyJobNode represents a job defined in format
-type legacyJobNode struct {
+// JobNode represents a job defined in format
+type JobNode struct {
 	name  string
 	key   *yaml.Node
 	value *yaml.Node
@@ -34,8 +34,8 @@ func NewPipelineVerifier(filePath string, pipeline *models.Pipeline, rootNode *y
 func (v *PipelineVerifier) Verify() []error {
 	var errors []error
 
-	// Populate pipeline data from legacy format if needed
-	v.populateLegacyPipelineData()
+	// Populate pipeline data from format if needed
+	v.populatePipelineData()
 
 	// Check 0: Validate YAML types and structure
 	typeErrors := v.checkYAMLTypes()

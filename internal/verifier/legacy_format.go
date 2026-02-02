@@ -7,12 +7,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func (v *PipelineVerifier) populateLegacyPipelineData() {
+func (v *PipelineVerifier) populatePipelineData() {
 	if v.pipeline == nil {
 		return
 	}
 
-	// Only populate from legacy format if jobs are not already populated
+	// Only populate from format if jobs are not already populated
 	if len(v.pipeline.Jobs) > 0 {
 		// Jobs already populated, check if stages need to be extracted
 		if len(v.pipeline.Stages) == 0 {
@@ -21,10 +21,10 @@ func (v *PipelineVerifier) populateLegacyPipelineData() {
 		return
 	}
 
-	// Parse jobs from legacy format
-	legacyJobs := v.getLegacyJobNodes()
-	for _, legacyJob := range legacyJobs {
-		job := v.parseLegacyJob(legacyJob.name, legacyJob.value)
+	// Parse jobs from format
+	Jobs := v.getJobNodes()
+	for _, Job := range Jobs {
+		job := v.parseJob(Job.name, Job.value)
 		v.pipeline.Jobs = append(v.pipeline.Jobs, job)
 	}
 
@@ -106,12 +106,12 @@ func (v *PipelineVerifier) parseStagesFromNode(node *yaml.Node) []models.Stage {
 	return stages
 }
 
-func (v *PipelineVerifier) getLegacyJobNodes() []legacyJobNode {
-	if v.legacyJobsCached {
-		return v.legacyJobNodes
+func (v *PipelineVerifier) getJobNodes() []JobNode {
+	if v.JobsCached {
+		return v.JobNodes
 	}
 
-	var nodes []legacyJobNode
+	var nodes []JobNode
 	root := v.getRootMappingNode()
 	if root == nil {
 		return nodes
@@ -121,8 +121,8 @@ func (v *PipelineVerifier) getLegacyJobNodes() []legacyJobNode {
 		key := root.Content[i]
 		value := root.Content[i+1]
 
-		if !v.isReservedTopLevelKey(key.Value) && v.isLegacyJobCandidate(value) {
-			nodes = append(nodes, legacyJobNode{
+		if !v.isReservedTopLevelKey(key.Value) && v.isJobCandidate(value) {
+			nodes = append(nodes, JobNode{
 				name:  key.Value,
 				key:   key,
 				value: value,
@@ -130,8 +130,8 @@ func (v *PipelineVerifier) getLegacyJobNodes() []legacyJobNode {
 		}
 	}
 
-	v.legacyJobNodes = nodes
-	v.legacyJobsCached = true
+	v.JobNodes = nodes
+	v.JobsCached = true
 	return nodes
 }
 
@@ -144,12 +144,12 @@ func (v *PipelineVerifier) isReservedTopLevelKey(key string) bool {
 	}
 }
 
-func (v *PipelineVerifier) isLegacyJobCandidate(node *yaml.Node) bool {
+func (v *PipelineVerifier) isJobCandidate(node *yaml.Node) bool {
 	if node.Kind != yaml.SequenceNode || len(node.Content) == 0 {
 		return false
 	}
 
-	// Check if this looks like a legacy job (sequence of mappings)
+	// Check if this looks like a job (sequence of mappings)
 	for _, item := range node.Content {
 		if item.Kind != yaml.MappingNode || len(item.Content) != 2 {
 			return false
@@ -159,15 +159,15 @@ func (v *PipelineVerifier) isLegacyJobCandidate(node *yaml.Node) bool {
 	return true
 }
 
-func (v *PipelineVerifier) validateLegacyJobs(nodes []legacyJobNode) []error {
+func (v *PipelineVerifier) validateJobs(nodes []JobNode) []error {
 	var errors []error
 	for _, jobNode := range nodes {
-		errors = append(errors, v.validateLegacyJobStructure(jobNode.name, jobNode.key, jobNode.value)...)
+		errors = append(errors, v.validateJobStructure(jobNode.name, jobNode.key, jobNode.value)...)
 	}
 	return errors
 }
 
-func (v *PipelineVerifier) validateLegacyJobStructure(jobName string, keyNode, valueNode *yaml.Node) []error {
+func (v *PipelineVerifier) validateJobStructure(jobName string, keyNode, valueNode *yaml.Node) []error {
 	var errors []error
 	hasStage := false
 	hasImage := false
@@ -259,7 +259,7 @@ func (v *PipelineVerifier) validateLegacyJobStructure(jobName string, keyNode, v
 	return errors
 }
 
-func (v *PipelineVerifier) parseLegacyJob(jobName string, jobNode *yaml.Node) models.Job {
+func (v *PipelineVerifier) parseJob(jobName string, jobNode *yaml.Node) models.Job {
 	job := models.Job{Name: jobName}
 	var scriptLines []string
 
@@ -318,8 +318,8 @@ func (v *PipelineVerifier) validateStringScalar(node *yaml.Node, fieldName strin
 	return ""
 }
 
-// validateLegacyJob validates a job definition
-func (v *PipelineVerifier) validateLegacyJob(keyNode, valueNode *yaml.Node, errors *[]error) {
+// validateJob validates a job definition
+func (v *PipelineVerifier) validateJob(keyNode, valueNode *yaml.Node, errors *[]error) {
 	if valueNode.Kind != yaml.SequenceNode || len(valueNode.Content) == 0 {
 		*errors = append(*errors, v.formatError(
 			models.Location{Line: keyNode.Line, Column: keyNode.Column},

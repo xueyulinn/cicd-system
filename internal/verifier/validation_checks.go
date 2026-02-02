@@ -274,9 +274,9 @@ func (v *PipelineVerifier) checkYAMLTypes() []error {
 		}
 	}
 
-	// Check for jobs in legacy format
-	legacyJobs := v.getLegacyJobNodes()
-	if len(legacyJobs) == 0 {
+	// Check for jobs in format
+	Jobs := v.getJobNodes()
+	if len(Jobs) == 0 {
 		// Check for structured jobs format
 		jobsNode := v.getTopLevelNode("jobs")
 		if jobsNode != nil {
@@ -286,8 +286,8 @@ func (v *PipelineVerifier) checkYAMLTypes() []error {
 			}
 		}
 	} else {
-		// Validate legacy jobs
-		errors = append(errors, v.validateLegacyJobs(legacyJobs)...)
+		// Validate jobs
+		errors = append(errors, v.validateJobs(Jobs)...)
 	}
 
 	return errors

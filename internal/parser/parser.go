@@ -32,7 +32,7 @@ func (p *Parser) Parse() (*models.Pipeline, *yaml.Node, error) {
 		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	pipeline, err := p.buildLegacyPipeline(&rootNode)
+	pipeline, err := p.buildPipeline(&rootNode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -40,7 +40,7 @@ func (p *Parser) Parse() (*models.Pipeline, *yaml.Node, error) {
 	return pipeline, &rootNode, nil
 }
 
-func (p *Parser) buildLegacyPipeline(root *yaml.Node) (*models.Pipeline, error) {
+func (p *Parser) buildPipeline(root *yaml.Node) (*models.Pipeline, error) {
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
 		return nil, fmt.Errorf("invalid YAML document")
 	}
@@ -53,7 +53,7 @@ func (p *Parser) buildLegacyPipeline(root *yaml.Node) (*models.Pipeline, error) 
 	for i := 0; i < len(content.Content); i += 2 {
 		key := content.Content[i]
 		if key.Value == "name" || key.Value == "jobs" {
-			return nil, fmt.Errorf("legacy pipeline format does not allow top-level `%s` key (line %d)", key.Value, key.Line)
+			return nil, fmt.Errorf("pipeline format does not allow top-level `%s` key (line %d)", key.Value, key.Line)
 		}
 	}
 
@@ -65,8 +65,8 @@ func (p *Parser) buildLegacyPipeline(root *yaml.Node) (*models.Pipeline, error) 
 		}
 	}
 
-	pipeline.Stages = parseLegacyStages(findSequenceNode(content, "stages"))
-	pipeline.Jobs = parseLegacyJobs(content)
+	pipeline.Stages = parseStages(findSequenceNode(content, "stages"))
+	pipeline.Jobs = parseJobs(content)
 
 	return pipeline, nil
 }
@@ -99,7 +99,7 @@ func findNameNode(node *yaml.Node) *yaml.Node {
 	return nil
 }
 
-func parseLegacyStages(node *yaml.Node) []models.Stage {
+func parseStages(node *yaml.Node) []models.Stage {
 	if node == nil || node.Kind != yaml.SequenceNode {
 		return nil
 	}
@@ -117,7 +117,7 @@ func parseLegacyStages(node *yaml.Node) []models.Stage {
 	return stages
 }
 
-func parseLegacyJobs(root *yaml.Node) []models.Job {
+func parseJobs(root *yaml.Node) []models.Job {
 	var jobs []models.Job
 	if root == nil || root.Kind != yaml.MappingNode {
 		return jobs
@@ -128,7 +128,7 @@ func parseLegacyJobs(root *yaml.Node) []models.Job {
 		if isReservedTopLevelKey(keyNode.Value) {
 			continue
 		}
-		jobs = append(jobs, parseLegacyJob(keyNode.Value, valueNode))
+		jobs = append(jobs, parseJob(keyNode.Value, valueNode))
 	}
 	return jobs
 }
@@ -142,7 +142,7 @@ func isReservedTopLevelKey(key string) bool {
 	}
 }
 
-func parseLegacyJob(jobName string, node *yaml.Node) models.Job {
+func parseJob(jobName string, node *yaml.Node) models.Job {
 	job := models.Job{Name: jobName}
 	var scriptLines []string
 	if node == nil || node.Kind != yaml.SequenceNode {
