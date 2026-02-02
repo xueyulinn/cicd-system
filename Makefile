@@ -9,7 +9,7 @@ BINDIR := $(PREFIX)/bin
 
 build:
 	mkdir -p bin
-	go build -o bin/$(BINARY_NAME) ./cmd/cli
+	go build -o bin/$(BINARY_NAME) ./cicd
 	chmod +x bin/$(BINARY_NAME)
 
 test:
@@ -30,7 +30,7 @@ install: build
 	install -m 755 $(BUILD_DIR)/$(BINARY_NAME) $(BINDIR)/$(BINARY_NAME)
 
 run:
-	go run ./cmd/cli verify
+	go run ./cicd verify
 
 deps:
 	go mod download
