@@ -52,7 +52,8 @@ func (v *PipelineVerifier) getStageNameLocation(stageIdx int) models.Location {
 					stagesNode := content.Content[i+1]
 					if stagesNode.Kind == yaml.SequenceNode && stageIdx < len(stagesNode.Content) {
 						stageNode := stagesNode.Content[stageIdx]
-						if stageNode.Kind == yaml.MappingNode {
+						switch stageNode.Kind {
+						case yaml.MappingNode:
 							// format with name field
 							for j := 0; j < len(stageNode.Content); j += 2 {
 								if stageNode.Content[j].Value == "name" {
@@ -62,7 +63,7 @@ func (v *PipelineVerifier) getStageNameLocation(stageIdx int) models.Location {
 									}
 								}
 							}
-						} else if stageNode.Kind == yaml.ScalarNode {
+						case yaml.ScalarNode:
 							// format with simple string
 							return models.Location{
 								Line:   stageNode.Line,
