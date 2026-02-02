@@ -20,10 +20,10 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           echo "Tag: $tag"
           if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid tag: '$tag'. Expected semantic tag like '1.2.3'."
+            echo "Invalid tag: '$tag'. Expected semantic tag like '1.2.3'."
             exit 1
           fi
-          echo "✅ Tag format looks good."
+          echo "Tag format looks good."
 
   build:
     runs-on: ubuntu-latest
@@ -36,8 +36,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build
-        working-directory: cmd/cli
-        run: go build -v ./...
+        run: |
+          mkdir -p dist
+          go build -v -o dist/e-team-cli ./cicd
 
   test:
     runs-on: ubuntu-latest
@@ -98,7 +99,7 @@ jobs:
 #       - name: Validate Docker image name configured
 #         run: |
 #           if [[ "${{ env.IMAGE_NAME }}" == "yourdockerhubuser/gocli" ]]; then
-#             echo "❌ Please set env.IMAGE_NAME to <dockerhub_user_or_org>/<repo>."
+#             echo "Please set env.IMAGE_NAME to <dockerhub_user_or_org>/<repo>."
 #             exit 1
 #           fi
 
