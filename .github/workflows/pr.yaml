@@ -55,7 +55,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build (cli)
-        run: go build -v ./cicd
+        run: |
+          mkdir -p dist
+          go build -v -o dist/e-team-cli ./cicd
 
   test:
     runs-on: ubuntu-latest
