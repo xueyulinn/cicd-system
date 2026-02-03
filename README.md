@@ -47,9 +47,6 @@ go install ./cicd
 echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc
 source ~/.zshrc
 
-# Alternatively, use Makefile (all platforms):
-make build
-```
 
 The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by default.
 
@@ -196,7 +193,6 @@ job-b:
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
 - **Testing**: Go standard testing package
-- **Build Tool**: Make
 
 ## Contributing
 
