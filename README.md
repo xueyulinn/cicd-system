@@ -109,8 +109,8 @@ another-job:
 - **stages**: Array of stage names (must be defined before use)
 - **jobs**: Job definitions with the following properties:
   - `stage`: Which stage the job belongs to (required)
-  - `image`: Docker image to use (optional)
-  - `script`: Commands to execute (optional)
+  - `image`: Docker image to use (required)
+  - `script`: Commands to execute (required)
   - `needs`: List of job dependencies (optional)
 
 ## Development
