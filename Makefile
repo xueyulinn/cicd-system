@@ -3,6 +3,21 @@
 BINARY_NAME=cicd
 BUILD_DIR := bin
 
+# Detect OS
+ifeq ($(OS),Windows_NT)
+    BINARY_EXT=.exe
+    RM=del /Q
+    RMDIR=rmdir /S /Q
+    MKDIR=if not exist $(BUILD_DIR) mkdir
+    COPY=copy
+else
+    BINARY_EXT=
+    RM=rm -f
+    RMDIR=rm -rf
+    MKDIR=mkdir -p
+    COPY=cp
+endif
+
 # Install location (override with PREFIX=...)
 PREFIX ?= $(HOME)
 BINDIR := $(PREFIX)/bin
