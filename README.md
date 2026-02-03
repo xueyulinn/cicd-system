@@ -151,7 +151,7 @@ The tool enforces the following validation rules:
 
 1. **Git Repository**: Must be run within a Git repository
 2. **Stage Definitions**: All stages must be defined before use
-3. **Job References**: Jobs in `needs` must exist
+3. **Job References**: Jobs in `needs` must exist and are from the same stage
 4. **Circular Dependencies**: No circular dependencies allowed
 5. **Stage Assignment**: Every job must be assigned to a valid stage
 6. **YAML Syntax**: Files must be valid YAML
