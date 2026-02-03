@@ -1,46 +1,51 @@
 package verifier
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
 	"gopkg.in/yaml.v3"
 )
 
-// Helper function to parse YAML string
+// Helper function to parse YAML string using the parser
 func parseYAML(t *testing.T, yamlContent string) (*models.Pipeline, *yaml.Node) {
-	var pipeline models.Pipeline
-	var rootNode yaml.Node
+	// Create a temporary file for parsing
+	tmpFile := t.TempDir() + "/test.yaml"
+	err := os.WriteFile(tmpFile, []byte(yamlContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
 
-	err := yaml.Unmarshal([]byte(yamlContent), &pipeline)
+	// Use the parser to parse the file
+	p := parser.NewParser(tmpFile)
+	pipeline, rootNode, err := p.Parse()
 	if err != nil {
 		t.Fatalf("Failed to parse YAML: %v", err)
 	}
 
-	err = yaml.Unmarshal([]byte(yamlContent), &rootNode)
-	if err != nil {
-		t.Fatalf("Failed to parse YAML node: %v", err)
-	}
-
-	return &pipeline, &rootNode
+	return pipeline, rootNode
 }
 
 func TestValidPipeline(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) > 0 {
@@ -50,57 +55,59 @@ jobs:
 
 func TestNoStages(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
-stages: []
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
+pipeline:
+  name: "Test Pipeline"
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for no stages, got none")
+		t.Error("Expected errors, got none")
 	}
 
-	// Check error message contains expected text
+	// Should have errors about default stages having no jobs
 	found := false
 	for _, err := range errors {
-		if strings.Contains(err.Error(), "at least one stage") {
+		if strings.Contains(err.Error(), "has no jobs assigned") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Expected error about 'at least one stage', got: %v", errors)
+		t.Errorf("Expected error about empty stages, got: %v", errors)
 	}
 }
 
 func TestDuplicateStageNames(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
+  - build
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for duplicate stage names, got none")
+		t.Error("Expected error about 'duplicate stage name', got none")
 	}
 
 	found := false
@@ -117,29 +124,31 @@ jobs:
 
 func TestDuplicateJobNames(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-  - name: "test"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
-  - name: "compile"
-    stage: "test"
-    image: "golang:1.21"
-    script:
-      - "go test"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go test"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for duplicate job names, got none")
+		t.Error("Expected error about 'duplicate job name', got none")
 	}
 
 	found := false
@@ -156,29 +165,31 @@ jobs:
 
 func TestEmptyStage(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-  - name: "test"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for empty stage, got none")
+		t.Error("Expected error about 'no jobs assigned', got none")
 	}
 
 	found := false
 	for _, err := range errors {
-		if strings.Contains(err.Error(), "no jobs assigned") {
+		if strings.Contains(err.Error(), "has no jobs assigned") {
 			found = true
 			break
 		}
@@ -190,24 +201,32 @@ jobs:
 
 func TestUndefinedJobInNeeds(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    needs: ["nonexistent"]
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+
+test:
+  - stage: build
+  - image: "golang:1.21"
+  - needs: [non-existent-job]
+  - script:
+    - "go test"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for undefined job in needs, got none")
+		t.Error("Expected error about 'undefined job', got none")
 	}
 
 	found := false
@@ -224,71 +243,69 @@ jobs:
 
 func TestSelfDependency(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    needs: ["compile"]
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - needs: [compile]
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for self dependency, got none")
+		t.Error("Expected error about self-dependency or cycle, got none")
 	}
 
 	found := false
 	for _, err := range errors {
-		msg := err.Error()
-		if strings.Contains(msg, "cannot depend on itself") || strings.Contains(msg, "cycle") {
+		if strings.Contains(err.Error(), "cycle detected") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Expected error about self-dependency or cycle, got: %v", errors)
+		t.Errorf("Expected error about 'cycle detected', got: %v", errors)
 	}
 }
 
 func TestCircularDependency(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "J1"
-    stage: "build"
-    image: "golang:1.21"
-    needs: ["J2"]
-    script:
-      - "echo J1"
-  - name: "J2"
-    stage: "build"
-    image: "golang:1.21"
-    needs: ["J3"]
-    script:
-      - "echo J2"
-  - name: "J3"
-    stage: "build"
-    image: "golang:1.21"
-    needs: ["J1"]
-    script:
-      - "echo J3"
+  - build
+
+job1:
+  - stage: build
+  - image: "golang:1.21"
+  - needs: [job2]
+  - script:
+    - "go build"
+
+job2:
+  - stage: build
+  - image: "golang:1.21"
+  - needs: [job1]
+  - script:
+    - "go test"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for circular dependency, got none")
+		t.Error("Expected error about 'cycle detected', got none")
 	}
 
 	found := false
@@ -305,23 +322,25 @@ jobs:
 
 func TestJobReferencesUndefinedStage(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "nonexistent"
-    image: "golang:1.21"
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: nonexistent-stage
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
 	if len(errors) == 0 {
-		t.Error("Expected error for undefined stage reference, got none")
+		t.Error("Expected error about 'undefined stage', got none")
 	}
 
 	found := false
@@ -336,34 +355,60 @@ jobs:
 	}
 }
 
-func TestMissingRequiredFields(t *testing.T) {
+func TestValidStringScript(t *testing.T) {
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script: "go build"
 `
 
 	pipeline, rootNode := parseYAML(t, yamlContent)
-	verifier := NewVerifier("test.yaml", pipeline, rootNode)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
 
 	errors := verifier.Verify()
-	if len(errors) == 0 {
-		t.Error("Expected error for missing image field, got none")
+	if len(errors) > 0 {
+		t.Errorf("Expected no errors for string script, got %d: %v", len(errors), errors)
+	}
+}
+
+func TestNewPipelineVerifier(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Test Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+`
+
+	pipeline, rootNode := parseYAML(t, yamlContent)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
+
+	if verifier == nil {
+		t.Fatal("Expected verifier to be created, got nil")
 	}
 
-	found := false
-	for _, err := range errors {
-		if strings.Contains(err.Error(), "must have an `image` field") {
-			found = true
-			break
-		}
+	if verifier.filePath != "test.yaml" {
+		t.Errorf("Expected filePath 'test.yaml', got '%s'", verifier.filePath)
 	}
-	if !found {
-		t.Errorf("Expected error about missing image field, got: %v", errors)
+
+	if verifier.pipeline != pipeline {
+		t.Error("Expected pipeline to be set")
+	}
+
+	if verifier.rootNode != rootNode {
+		t.Error("Expected rootNode to be set")
 	}
 }

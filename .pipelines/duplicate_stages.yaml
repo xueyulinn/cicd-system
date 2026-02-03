@@ -5,12 +5,18 @@ pipeline:
   name: "Duplicate Stages Pipeline"
 
 stages:
-  - name: "build"
-  - name: "test"
-  - name: "build"  # Duplicate!
+  - build
+  - test
+  - build
 
-jobs:
-  - name: "compile"
-    stage: "build"
-    script:
-      - "make build"
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+check:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - make build

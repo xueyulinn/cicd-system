@@ -12,15 +12,17 @@ func TestParseValidFile(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.yaml")
 
 	yamlContent := `
-name: "Test Pipeline"
+pipeline:
+  name: "Test Pipeline"
+
 stages:
-  - name: "build"
-jobs:
-  - name: "compile"
-    stage: "build"
-    image: "golang:1.21"
-    script:
-      - "go build"
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
 `
 
 	err := os.WriteFile(testFile, []byte(yamlContent), 0644)
@@ -54,6 +56,15 @@ jobs:
 
 	if len(pipeline.Jobs) != 1 {
 		t.Errorf("Expected 1 job, got %d", len(pipeline.Jobs))
+	}
+
+	// Test GetJobNodes method
+	jobNodes := parser.GetJobNodes(rootNode)
+	if len(jobNodes) != 1 {
+		t.Errorf("Expected 1 job node, got %d", len(jobNodes))
+	}
+	if jobNodes[0].Name != "compile" {
+		t.Errorf("Expected job node name 'compile', got '%s'", jobNodes[0].Name)
 	}
 }
 
@@ -91,5 +102,111 @@ func TestGetFilePath(t *testing.T) {
 
 	if parser.GetFilePath() != testPath {
 		t.Errorf("Expected file path '%s', got '%s'", testPath, parser.GetFilePath())
+	}
+}
+
+func TestParseWithDefaultStages(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.yaml")
+
+	yamlContent := `
+pipeline:
+  name: "Test Pipeline"
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+`
+
+	err := os.WriteFile(testFile, []byte(yamlContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	parser := NewParser(testFile)
+	pipeline, _, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should have default stages
+	if len(pipeline.Stages) != 3 {
+		t.Errorf("Expected 3 default stages, got %d", len(pipeline.Stages))
+	}
+
+	stageNames := []string{pipeline.Stages[0].Name, pipeline.Stages[1].Name, pipeline.Stages[2].Name}
+	expectedStages := []string{"build", "test", "docs"}
+
+	for i, expected := range expectedStages {
+		if stageNames[i] != expected {
+			t.Errorf("Expected stage %d to be '%s', got '%s'", i, expected, stageNames[i])
+		}
+	}
+}
+
+func TestParseMultipleJobs(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.yaml")
+
+	yamlContent := `
+pipeline:
+  name: "Multi Job Pipeline"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+
+test:
+  - stage: test
+  - image: "golang:1.21"
+  - needs: [compile]
+  - script:
+    - "go test"
+`
+
+	err := os.WriteFile(testFile, []byte(yamlContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	parser := NewParser(testFile)
+	pipeline, rootNode, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(pipeline.Jobs) != 2 {
+		t.Errorf("Expected 2 jobs, got %d", len(pipeline.Jobs))
+	}
+
+	// Test GetJobNodes with multiple jobs
+	jobNodes := parser.GetJobNodes(rootNode)
+	if len(jobNodes) != 2 {
+		t.Errorf("Expected 2 job nodes, got %d", len(jobNodes))
+	}
+}
+
+func TestParseEmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "empty.yaml")
+
+	err := os.WriteFile(testFile, []byte(""), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	parser := NewParser(testFile)
+	_, _, err = parser.Parse()
+
+	if err == nil {
+		t.Error("Expected error for empty file, got none")
 	}
 }

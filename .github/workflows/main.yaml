@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths:
-      - "cmd/**"
+      - "cicd/**"
       - "internal/**"
       - "go.mod"
       - "go.sum"
@@ -37,7 +37,7 @@ jobs:
         with:
           filters: |
             go:
-              - "cmd/**"
+              - "cicd/**"
               - "internal/**"
               - "go.mod"
               - "go.sum"
@@ -56,16 +56,15 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Build
-        working-directory: cmd/cli
         run: |
           mkdir -p dist
-          go build -o dist/e-team-cli .
+          go build -o dist/e-team-cli ./cicd
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6
         with:
           name: e-team-cli
-          path: cmd/cli/dist/e-team-cli
+          path: dist/e-team-cli
 
   test:
     runs-on: ubuntu-latest
