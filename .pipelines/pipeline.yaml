@@ -1,0 +1,35 @@
+# Test Case: Valid pipeline with dependencies
+# Expected Error: None (valid pipeline)
+
+pipeline:
+  name: "Default Pipeline"
+
+stages:
+  - build
+  - test
+  - deploy
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - "make test"
+
+integration-tests:
+  - stage: test
+  - needs: [unit-tests]
+  - image: golang:1.21
+  - script:
+    - "make integration"
+
+deploy-staging:
+  - stage: deploy
+  - image: alpine:latest
+  - script:
+    - "deploy staging"

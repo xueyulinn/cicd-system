@@ -1,0 +1,11 @@
+# Test Case: Missing pipeline key
+# Expected Error: Missing required pipeline section
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"

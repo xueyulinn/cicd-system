@@ -1,0 +1,9 @@
+# Test Case: Pipeline with no stages defined
+# Expected Error: At least 1 stage must be defined
+
+pipeline:
+  name: "No Stages Pipeline"
+
+compile:
+  - script:
+    - make build

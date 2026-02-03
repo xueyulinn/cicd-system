@@ -1,0 +1,28 @@
+# Test Case: Jobs in needs belong to different stages
+# Expected Error: Jobs in needs must belong to the same stage
+
+pipeline:
+  name: "Cross Stage Dependency Test"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build"
+
+unit-tests:
+  - stage: test
+  - image: "golang:1.21"
+  - script:
+    - "go test"
+
+integration-tests:
+  - stage: test
+  - image: "golang:1.21"
+  - needs: [compile, unit-tests]
+  - script:
+    - "go test -integration"

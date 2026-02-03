@@ -1,0 +1,42 @@
+# Test Case: More complex circular dependency
+# Expected Error: Cycle detected - A -> B -> C -> D -> B
+
+pipeline:
+  name: "Complex Cycle Pipeline"
+
+stages:
+  - stage1
+
+A:
+  - stage: stage1
+  - needs: [B]
+  - image: golang:1.21
+  - script:
+    - echo A
+
+B:
+  - stage: stage1
+  - needs: [C]
+  - image: golang:1.21
+  - script:
+    - echo B
+
+C:
+  - stage: stage1
+  - needs: [D]
+  - image: golang:1.21
+  - script:
+    - echo C
+
+D:
+  - stage: stage1
+  - needs: [B]
+  - image: golang:1.21
+  - script:
+    - echo D
+
+E:
+  - stage: stage1
+  - image: golang:1.21
+  - script:
+    - echo E

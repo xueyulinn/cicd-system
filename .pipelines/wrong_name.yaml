@@ -1,0 +1,14 @@
+# Test Case: Wrong type given for name field
+# Expected Error: .pipelines/wrong-type-name.yaml:4:13: wrong type of value given for `name` key. Expected value of type String, given 3
+
+pipeline:
+  name: 3
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build

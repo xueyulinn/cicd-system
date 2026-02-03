@@ -1,0 +1,31 @@
+# Test Case: Multiple errors in one file
+# Expected: Should report all errors found
+
+pipeline:
+  name: 456
+
+stages:
+  - build
+  - build
+  - test
+  - deploy
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+compile2:
+  - stage: test
+  - needs: [non-existent]
+  - image: golang:1.21
+  - script:
+    - make test
+
+job3:
+  - stage: test
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - echo test

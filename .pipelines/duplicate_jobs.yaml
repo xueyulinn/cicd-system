@@ -1,0 +1,27 @@
+# Test Case: Pipeline with duplicate job names
+# Expected Error: Job names must be unique
+
+pipeline:
+  name: "Duplicate Jobs Pipeline"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - make test
+
+compile:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - other command

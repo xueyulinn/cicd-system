@@ -1,0 +1,15 @@
+# Test Case: Job needs itself (self-loop)
+# Expected Error: Cycle detected - compile -> compile
+
+pipeline:
+  name: "Self Dependency Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - needs: [compile]
+  - image: golang:1.21
+  - script:
+    - make build

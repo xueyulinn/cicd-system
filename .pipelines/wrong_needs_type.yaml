@@ -1,0 +1,22 @@
+# Test Case: Needs is not a list
+# Expected Error: Wrong type for needs field
+
+pipeline:
+  name: "Wrong Type Needs"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - needs: compile
+  - image: "golang:1.21"
+  - script:
+    - "make test"

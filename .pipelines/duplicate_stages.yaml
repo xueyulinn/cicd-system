@@ -1,0 +1,22 @@
+# Test Case: Pipeline with duplicate stage names
+# Expected Error: Stage names must be unique
+
+pipeline:
+  name: "Duplicate Stages Pipeline"
+
+stages:
+  - build
+  - test
+  - build
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build
+
+check:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - make build

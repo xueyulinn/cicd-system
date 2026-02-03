@@ -1,0 +1,15 @@
+# Test Case: Stage name is not a string
+# Expected Error: Wrong type for stage name
+
+pipeline:
+  name: "Wrong Type Stage"
+
+stages:
+  - build
+  - 123
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - make build

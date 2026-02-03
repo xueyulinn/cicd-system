@@ -1,0 +1,30 @@
+# Test Case: Missing stage in pipeline configuration
+# Expected: Error: stage 'docs' has no jobs assigned to it
+
+
+pipeline:
+  name: "Valid Pipeline"
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - "make test"
+
+integration-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - "make integration"
+
+deploy-staging:
+  - stage: invalid
+  - image: alpine:latest
+  - script:
+    - "deploy staging"

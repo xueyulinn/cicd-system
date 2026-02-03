@@ -1,0 +1,22 @@
+# Test Case: Job needs references a job that doesn't exist
+# Expected Error: All jobs in needs must be defined
+
+pipeline:
+  name: "Undefined Needs Pipeline"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - needs: [non-existent-job]
+  - image: "golang:1.21"
+  - script:
+    - "make test"
