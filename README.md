@@ -38,6 +38,14 @@ cd e-team
 #Windows: 
 go build -o bin/cicd ./cicd
 go install ./cicd
+
+# macOS/Linux:
+go build -o bin/cicd ./cicd
+go install ./cicd
+
+# If "cicd: command not found" on macOS, add Go bin to PATH:
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by default.
