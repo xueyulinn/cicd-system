@@ -16,15 +16,20 @@
 | [[Error Reporting] Report Cycles in YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/7)                           | Small  |Eugenia-Z|
 | [[Error Reporting] Standardize error format](https://github.com/CS7580-SEA-SP26/e-team/issues/6)                        | Small  | Eugenia-Z|
 | [[Test] Unit tests for validator rules using fixtures](https://github.com/CS7580-SEA-SP26/e-team/issues/22)             | Small  |Eugenia-Z|
-| [[Validator] Validate unique job names](https://github.com/CS7580-SEA-SP26/e-team/issues/17)             | Small  |Eugenia-Z|
-| [[CLI] Enforce execution only at Git repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/11) | Small | xueyulinn
-| [[CLI] Enforce .pipelines directory at repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/12) | Small | xueyulinn
-| [[CLI] Support default pipeline file path for verify](https://github.com/CS7580-SEA-SP26/e-team/issues/14) | Small | xueyulinn
-| [[CLI] Validate file path is relative to repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/15) | Small | xueyulinn
-| [[CLI] Add help and usage text for verify subcommand](https://github.com/CS7580-SEA-SP26/e-team/issues/16) | Small | xueyulinn
-| [[Github Config] Create Pipelines for this repo](https://github.com/CS7580-SEA-SP26/e-team/issues/23) | Small | xueyulinn
-| [[Github Config] Fix bugs for repo pipelines](https://github.com/CS7580-SEA-SP26/e-team/issues/27) | Small | xueyulinn
-
+| [[Validator] Validate unique job names](https://github.com/CS7580-SEA-SP26/e-team/issues/17)                            | Small  |Eugenia-Z|
+| [[CLI] Enforce execution only at Git repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/11)              | Small  | xueyulinn
+| [[CLI] Enforce .pipelines directory at repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/12)            | Small  | xueyulinn
+| [[CLI] Support default pipeline file path for verify](https://github.com/CS7580-SEA-SP26/e-team/issues/14)              | Small  | xueyulinn
+| [[CLI] Validate file path is relative to repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/15)          | Small  | xueyulinn
+| [[CLI] Add help and usage text for verify subcommand](https://github.com/CS7580-SEA-SP26/e-team/issues/16)              | Small  | xueyulinn
+| [[Github Config] Create Pipelines for this repo](https://github.com/CS7580-SEA-SP26/e-team/issues/23)                   | Small  | xueyulinn
+| [[Github Config] Fix bugs for repo pipelines](https://github.com/CS7580-SEA-SP26/e-team/issues/27)                      | Small  | xueyulinn
+| [[Test] Add pipeline YAML fixtures for validation scenarios](https://github.com/CS7580-SEA-SP26/e-team/issues/20)       | Small  | Asurkatha
+| [[CLI] Accept folder PATH as input](https://github.com/CS7580-SEA-SP26/e-team/issues/38)                                | Small  | Asurkatha
+| [[Testing] Balance tests to match the adjsuted format](https://github.com/CS7580-SEA-SP26/e-team/issues/46)             | Medium | Asurkatha
+| [[CLI] Adjust "cicd" as the head command](https://github.com/CS7580-SEA-SP26/e-team/issues/39)                          | Small  | Asurkatha
+| [[Refactor] Refactor code (parser.go, check_format.go)](https://github.com/CS7580-SEA-SP26/e-team/issues/42)            | Medium | Asurkatha
+| [[Error Reporting] Report error on needs with jobs from different jobs](https://github.com/CS7580-SEA-SP26/e-team/issues/43) | Small  | Asurkatha
 # Carry over tasks
 
 > List all issues that were planned for this week but did not get DONE
@@ -35,7 +40,7 @@
 
 | Task | Weight | Assignee |
 | ---- | ------ | -------- |
-|      |        |          |
+|  -   |    -   |    -     |
 
 
 
@@ -48,7 +53,7 @@
 
 # What did not work this week?
 
-1. PRs were merged too quickly without detailed review, creating refactoring debt for future work. We should establish a minimum review time or require multiple approvers for architectural changes
+1. PRs were merged too quickly without detailed review, creating refactoring debt for future work. We should establish a minimum review time or require multiple approvers for architectural changes.
 2. Unclear repository structure discussion: Initial structure decisions were not fully discussed, leading to multiple refactorings and workflow updates. This caused confusion among team members and CI/CD failures
 
 # Design updates
