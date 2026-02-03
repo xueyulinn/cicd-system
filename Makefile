@@ -5,17 +5,29 @@ BUILD_DIR := bin
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
-    BINARY_EXT=.exe
-    RM=del /Q
-    RMDIR=rmdir /S /Q
-    MKDIR=if not exist $(BUILD_DIR) mkdir
-    COPY=copy
+	BINARY_EXT=.exe
+	COPY=copy /Y
+	define MKDIR_P
+if not exist "$(1)" mkdir "$(1)"
+endef
+	define RM_FILE
+if exist "$(1)" del /Q "$(1)"
+endef
+	define RMDIR_R
+if exist "$(1)" rmdir /S /Q "$(1)"
+endef
 else
-    BINARY_EXT=
-    RM=rm -f
-    RMDIR=rm -rf
-    MKDIR=mkdir -p
-    COPY=cp
+	BINARY_EXT=
+	COPY=cp
+	define MKDIR_P
+mkdir -p "$(1)"
+endef
+	define RM_FILE
+rm -f "$(1)"
+endef
+	define RMDIR_R
+rm -rf "$(1)"
+endef
 endif
 
 # Install location (override with PREFIX=...)
@@ -23,9 +35,8 @@ PREFIX ?= $(HOME)
 BINDIR := $(PREFIX)/bin
 
 build:
-	mkdir -p bin
-	go build -o bin/$(BINARY_NAME) ./cicd
-	chmod +x bin/$(BINARY_NAME)
+	$(call MKDIR_P,$(BUILD_DIR))
+	go build -o $(BUILD_DIR)/$(BINARY_NAME)$(BINARY_EXT) ./cicd
 
 test:
 	go test -v ./internal/...
@@ -36,12 +47,13 @@ test-coverage:
 	@echo "Coverage report: coverage.html"
 
 clean:
-	rm -rf bin/
-	rm -f coverage.out coverage.html
+	$(call RMDIR_R,$(BUILD_DIR))
+	$(call RM_FILE,coverage.out)
+	$(call RM_FILE,coverage.html)
 
 install: build
-	mkdir -p $(BINDIR)
-	install -m 755 $(BUILD_DIR)/$(BINARY_NAME) $(BINDIR)/$(BINARY_NAME)
+	$(call MKDIR_P,$(BINDIR))
+	$(COPY) "$(BUILD_DIR)/$(BINARY_NAME)$(BINARY_EXT)" "$(BINDIR)/"
 
 run:
 	go run ./cicd verify
