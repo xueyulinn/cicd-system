@@ -1,0 +1,33 @@
+graph TB
+    subgraph DevMachine["Developer Machine"]
+        CLI["CLI"]
+        
+        Controller["Controller Service<br/>- Validation<br/>- Orchestration<br/>- Job Publisher"]
+        
+        Queue["Redis Queue<br/>(Job Queue)"]
+        
+        subgraph WorkerPool["Worker Pool Manager"]
+            W1["Worker 1"]
+            W2["Worker 2"]
+            WN["Worker N"]
+        end
+        
+        Docker["Docker Engine"]
+        DB["PostgreSQL Database"]
+    end
+    
+    CLI -->|Commands| Controller
+    Controller -->|Publish Jobs| Queue
+    Queue -->|Pull Jobs| WorkerPool
+    WorkerPool -->|Job Status Updates| Queue
+    Queue -->|Status Updates| Controller
+    WorkerPool -->|Docker API| Docker
+    Controller <-->|Store/Query| DB
+    WorkerPool -->|Log Results| DB
+    
+    style CLI fill:#e1f5ff
+    style Controller fill:#fff4e1
+    style Queue fill:#ffebee
+    style WorkerPool fill:#e8f5e9
+    style Docker fill:#f3e5f5
+    style DB fill:#ffe0e0

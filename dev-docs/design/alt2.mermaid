@@ -1,0 +1,36 @@
+graph TB
+    subgraph DevMachine["Developer Machine"]
+        CLI["CLI Client"]
+        
+        Gateway["API Gateway<br/>(REST/gRPC)"]
+        
+        ValService["Validation Service<br/>(Port 8001)"]
+        ExecService["Execution Service<br/>(Port 8002)"]
+        WorkerService["Worker Service<br/>(Port 8003)"]
+        ReportService["Reporting Service<br/>(Port 8004)"]
+        Redis["Redis Cache<br/>(Port 6379)"]
+        DB["PostgreSQL Database<br/>(Port 5432)"]
+        Docker["Docker Engine"]
+    end
+    
+    CLI -->|HTTP/gRPC| Gateway
+    Gateway <-->|HTTP| ValService
+    Gateway <-->|HTTP| ExecService
+    Gateway <-->|HTTP| ReportService
+    
+    ExecService <-->|HTTP| WorkerService
+    WorkerService -->|Docker API| Docker
+    ExecService <-->|HTTP|ValService
+    ValService <-->|Val-Key|Redis
+    ExecService -->|SQL| DB
+    WorkerService -->|SQL| DB
+    ReportService <-->|SQL| DB
+    
+    style CLI fill:#e1f5ff
+    style Gateway fill:#fff4e1
+    style ValService fill:#e8f5e9
+    style ExecService fill:#fff9c4
+    style WorkerService fill:#f3e5f5
+    style ReportService fill:#ffccbc
+    style DB fill:#ffe0e0
+    style Docker fill:#e1bee7

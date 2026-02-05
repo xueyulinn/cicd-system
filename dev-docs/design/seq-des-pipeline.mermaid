@@ -1,0 +1,108 @@
+sequenceDiagram
+    actor Dev as Developer
+    participant CLI as CLI Client
+    participant Git as Git Repository
+    participant Ctrl as API  Service
+    participant Val as Validation Engine
+    participant Orch as Executor
+    participant Redis as Redis Cache
+    participant Sched as Job Scheduler
+    participant Exec as Job Executor
+    participant Docker as Docker Engine
+    participant DB as PostgreSQL Database
+
+    Dev->>CLI: cicd run --file .pipelines/default.yaml
+    
+    CLI->>Git: Read YAML file
+    Git-->>CLI: YAML content
+    
+    CLI->>Ctrl: Execute pipeline (YAML content)
+    
+    Ctrl->>Val: Validate YAML
+    Val->>Val: Check stages defined
+    Val->>Val: Check jobs assigned to stages
+    Val->>Val: Check needs references
+    Val->>Val: Detect dependency cycles
+    Val-->>Ctrl: Validation successful
+    
+    Ctrl->>DB: INSERT pipeline_run (start_time, status='running')
+    DB-->>Ctrl: run_id = 1
+    
+    Ctrl->>Orch: Start pipeline execution (run_id, stages, jobs)
+    Orch->>Orch: Determine stage execution order
+    
+    loop For each stage (build, test, deploy)
+        Orch->>DB: INSERT stage (run_id, name, start_time, status='running')
+        DB-->>Orch: stage_id
+        
+        Orch->>Sched: Schedule jobs for stage
+        Sched->>Sched: Build job dependency graph (needs)
+        Sched->>Sched: Topologically sort jobs
+        
+        loop For each job (respecting dependencies)
+            Sched->>Exec: Acquire runner from pool
+            Exec-->>Sched: runner acquired
+            
+            Sched->>DB: INSERT job (stage_id, name, start_time, status='running')
+            DB-->>Sched: job_id
+            
+            Sched->>Exec: Execute job (job_id, image, script)
+            
+            Exec->>Docker: Pull image (if not cached)
+            Docker-->>Exec: Image ready
+            
+            Exec->>Docker: Create container (image, script)
+            Docker-->>Exec: Container created
+            
+            Exec->>Docker: Start container
+            Docker-->>Exec: Container running
+            
+            Exec->>Docker: Stream logs
+            Docker-->>Exec: Log output
+            
+            Exec->>DB: INSERT execution_logs (job_id, log_output)
+            
+            Docker-->>Exec: Container exited (exit_code)
+            
+            Exec->>Docker: Remove container
+            Docker-->>Exec: Container removed
+            
+            alt exit_code == 0
+                Exec->>DB: UPDATE job (end_time, status='success')
+                DB-->>Exec: Updated
+                Exec->>Sched: Job completed successfully
+                Sched->>Sched: Mark complete, unblock dependents
+            else exit_code != 0
+                Exec->>DB: UPDATE job (end_time, status='failed')
+                DB-->>Exec: Updated
+                Exec->>Sched: Job failed
+                Sched->>Sched: Mark stage as failed
+                Note over Sched,Orch: Break stage loop
+            end
+            
+            Exec->>Sched: Release executor to pool
+        end
+        
+        alt All jobs successful
+            Orch->>DB: UPDATE stage (end_time, status='success')
+            DB-->>Orch: Updated
+        else Any job failed
+            Orch->>DB: UPDATE stage (end_time, status='failed')
+            DB-->>Orch: Updated
+            Note over Orch: Cancel remaining stages<br/>Break stage loop
+        end
+    end
+    
+    alt All stages successful
+        Orch->>DB: UPDATE pipeline_run (end_time, status='success')
+        DB-->>Orch: Updated
+        Orch->>Ctrl: Pipeline completed successfully
+        Ctrl->>CLI: Success
+        CLI->>Dev: Pipeline run #1 completed successfully
+    else Any stage failed
+        Orch->>DB: UPDATE pipeline_run (end_time, status='failed')
+        DB-->>Orch: Updated
+        Orch->>Ctrl: Pipeline failed
+        Ctrl->>CLI: Failure (stage, job)
+        CLI->>Dev: Pipeline run #1 failed at stage 'test', job 'unit-tests'
+    end
