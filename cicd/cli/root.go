@@ -16,7 +16,7 @@ func init() {
 	rootCmd.AddCommand(verifyCmd)
 	// rootCmd.AddCommand(reportCmd)
 	// rootCmd.AddCommand(runCmd)      // add later
-	// rootCmd.AddCommand(dryRunCmd)   // add later
+	rootCmd.AddCommand(dryRunCmd)
 }
 
 func Execute() {
