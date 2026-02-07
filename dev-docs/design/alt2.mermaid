@@ -12,7 +12,7 @@ graph TB
         subgraph Controller["Controller Service (Core Orchestration)"]
             ValService["Validation Service<br/>(Port 8001)<br/>- YAML Parsing<br/>- Schema Validation<br/>- Cycle Detection"]
             ExecService["Execution Service<br/>(Port 8002)<br/>- Pipeline Orchestrator<br/>- Job Scheduler<br/>- State Management"]
-            ReportService["Reporting Service<br/>(Port 8004)<br/>- Query Aggregation<br/>- YAML Formatting"]
+            ReportService["Reporting Service<br/>(Port 8004)<br/>- Query Aggregation<br/>"]
         end
         
         subgraph WorkerLayer["Worker Layer"]
