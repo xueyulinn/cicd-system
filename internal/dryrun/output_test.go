@@ -24,10 +24,10 @@ func TestBuildDryRunOutput_SingleStageSingleJob(t *testing.T) {
 	if _, ok := output["build"]; !ok {
 		t.Fatal("Expected 'build' stage in output")
 	}
-	if _, ok := output["build"]["compile"]; !ok {
+	jobOut, ok := getJobOutput(output["build"], "compile")
+	if !ok {
 		t.Fatal("Expected 'compile' job in build stage")
 	}
-	jobOut := output["build"]["compile"]
 	if jobOut.Image != "golang:1.21" {
 		t.Errorf("Expected image 'golang:1.21', got %q", jobOut.Image)
 	}
@@ -59,7 +59,7 @@ func TestBuildDryRunOutput_MultipleStagesMultipleJobs(t *testing.T) {
 	if len(output["build"]) != 1 {
 		t.Errorf("Expected 1 job in build, got %d", len(output["build"]))
 	}
-	if out := output["build"]["compile"]; out.Image != "golang:1.21" {
+	if out, _ := getJobOutput(output["build"], "compile"); out.Image != "golang:1.21" {
 		t.Errorf("Expected compile image 'golang:1.21', got %q", out.Image)
 	}
 
@@ -70,12 +70,21 @@ func TestBuildDryRunOutput_MultipleStagesMultipleJobs(t *testing.T) {
 	if len(output["test"]) != 2 {
 		t.Errorf("Expected 2 jobs in test, got %d", len(output["test"]))
 	}
-	if out := output["test"]["unit-tests"]; out.Image != "golang:1.21" {
+	if out, _ := getJobOutput(output["test"], "unit-tests"); out.Image != "golang:1.21" {
 		t.Errorf("Expected unit-tests image 'golang:1.21', got %q", out.Image)
 	}
-	if out := output["test"]["integration-tests"]; out.Script[0] != "go test ./..." {
+	if out, _ := getJobOutput(output["test"], "integration-tests"); out.Script[0] != "go test ./..." {
 		t.Errorf("Expected integration-tests script, got %v", out.Script)
 	}
+}
+
+func getJobOutput(jobs []NamedJobOutput, name string) (JobOutput, bool) {
+	for _, nj := range jobs {
+		if nj.Name == name {
+			return nj.JobOutput, true
+		}
+	}
+	return JobOutput{}, false
 }
 
 func TestBuildDryRunOutput_EmptyStages(t *testing.T) {
@@ -130,7 +139,7 @@ func TestBuildDryRunOutput_JobWithMultipleScriptLines(t *testing.T) {
 
 	output := BuildDryRunOutput(pipeline)
 
-	jobOut := output["build"]["build"]
+	jobOut, _ := getJobOutput(output["build"], "build")
 	expected := []string{"./gradlew classes", "./gradlew jar"}
 	if !reflect.DeepEqual(jobOut.Script, expected) {
 		t.Errorf("Expected script %v, got %v", expected, jobOut.Script)
