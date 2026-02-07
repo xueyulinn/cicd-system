@@ -166,7 +166,7 @@ func TestBuildDryRunOutput_StageOrderPreservedInYAML(t *testing.T) {
 	if buildIdx == -1 || testIdx == -1 || docIdx == -1 || deployIdx == -1 {
 		t.Fatalf("Expected all stages in output, got: %s", yamlStr)
 	}
-	if !(buildIdx < testIdx && testIdx < docIdx && docIdx < deployIdx) {
+	if buildIdx >= testIdx || testIdx >= docIdx || docIdx >= deployIdx {
 		t.Errorf("Stages should be in order build, test, doc, deploy. YAML:\n%s", yamlStr)
 	}
 }
