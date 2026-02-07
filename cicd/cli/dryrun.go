@@ -48,7 +48,7 @@ func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// close the file descriptor
-	defer devNull.Close()
+	defer func() { _ = devNull.Close() }()
 	// save the original stdout
 	stdout := os.Stdout
 	// redirect stdout to /dev/null
