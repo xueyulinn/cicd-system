@@ -20,7 +20,7 @@ graph TB
         end
         
         subgraph DataLayer["Data Layer"]
-            Redis["Redis Cache<br/>(Port 6379)<br/>- Validation Results<br/>- Session Data"]
+           %% Redis["Redis Cache<br/>(Port 6379)<br/>- Validation Results<br/>- Session Data"]
             DB["PostgreSQL Database<br/>(Port 5432)<br/>- pipeline_runs<br/>- stages<br/>- jobs<br/>- execution_logs"]
         end
         
@@ -40,8 +40,8 @@ graph TB
     Gateway -.->|Response| CLI
     
     %% Validation Service
-    ValService -->|4a. Cache Validation| Redis
-    Redis -.->|Cached Result| ValService
+    %% ValService -->|4a. Cache Validation| Redis
+    %% Redis -.->|Cached Result| ValService
     ValService -->|4b. Validation Response| Gateway
     
     %% Execution Service Workflow
@@ -73,7 +73,7 @@ graph TB
     style ExecService fill:#f1a4f4,stroke:#f9a825,stroke-width:2px
     style WorkerService fill:#c2a5f5,stroke:#6a1b9a,stroke-width:2px
     style ReportService fill:#ff55bc,stroke:#d84315,stroke-width:2px
-    style Redis fill:#a3a5e9,stroke:#c62828,stroke-width:2px
+ %%  style Redis fill:#a3a5e9,stroke:#c62828,stroke-width:2px
     style DB fill:#a3a5e9,stroke:#b71c1c,stroke-width:2px
     style Docker fill:#a1b6a2,stroke:#4a148c,stroke-width:2px
     style Git fill:#e327fa,stroke:#006064,stroke-width:2px
