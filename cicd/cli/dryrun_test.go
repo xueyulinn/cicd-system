@@ -91,7 +91,7 @@ compile:
 	}
 }
 
-func TestDryRunCmd_PrintsValidationMessage(t *testing.T) {
+func TestDryRunCmd_ValidatesQuietlyAndPrintsDryRunOutput(t *testing.T) {
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -118,9 +118,11 @@ unit-tests:
 	if err != nil {
 		t.Fatalf("dryrun command returned error: %v", err)
 	}
-	if !strings.Contains(output, "Configuration is valid") {
-		t.Fatalf("Expected validation output, got:\n%s", output)
+	// Validation output should be suppressed (quiet)
+	if strings.Contains(output, "Configuration is valid") {
+		t.Fatalf("Expected validation output to be suppressed, got:\n%s", output)
 	}
+	// But dryrun output should still be present
 	if !strings.Contains(output, "build:") {
 		t.Fatalf("Expected dryrun output, got:\n%s", output)
 	}
