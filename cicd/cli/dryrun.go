@@ -15,7 +15,7 @@ var dryRunCmd = &cobra.Command{
 	Long:  "Validate a pipeline configuration file and print the execution order for stages and jobs",
 	Args:  cobra.MaximumNArgs(1),
 	// validate the configuration file first
-	PreRunE: runVerifyQuiet,
+	PreRunE: runVerifyQuietForDryRun,
 	RunE: runDryRun,
 }
 
@@ -39,6 +39,15 @@ func runDryRun (cmd *cobra.Command, args []string) error{
 	}
 	fmt.Println(string(bytes))
 	return nil
+}
+
+// runVerifyQuietForDryRun silences usage only when pre-run fails.
+func runVerifyQuietForDryRun(cmd *cobra.Command, args []string) error {
+	err := runVerifyQuiet(cmd, args)
+	if err != nil {
+		cmd.SilenceUsage = true
+	}
+	return err
 }
 
 // runVerifyQuiet is a helper function to run the verify command but redirect stdout to /dev/null
