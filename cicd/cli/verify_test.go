@@ -112,8 +112,11 @@ func TestRunVerify_MissingFile_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for missing file, got nil")
 	}
-	// runVerify returns the error from os.Stat (e.g. "no such file or directory")
-	if !strings.Contains(err.Error(), "stat") && !strings.Contains(err.Error(), "no such file") {
+	// runVerify returns the error from os.Stat (platform-specific message)
+	if !strings.Contains(err.Error(), "stat") &&
+		!strings.Contains(err.Error(), "no such file") &&
+		!strings.Contains(err.Error(), "GetFileAttributesEx") &&
+		!strings.Contains(err.Error(), "cannot find the file") {
 		t.Errorf("Expected stat/no such file error, got: %v", err)
 	}
 }

@@ -1,7 +1,6 @@
-package dryrun
+package scheduler
 
 import (
-
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 

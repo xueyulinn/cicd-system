@@ -78,13 +78,13 @@ func TestBuildDryRunOutput_MultipleStagesMultipleJobs(t *testing.T) {
 	}
 }
 
-func getJobOutput(jobs []NamedJobOutput, name string) (JobOutput, bool) {
+func getJobOutput(jobs []models.NamedJobOutput, name string) (models.JobOutput, bool) {
 	for _, nj := range jobs {
 		if nj.Name == name {
 			return nj.JobOutput, true
 		}
 	}
-	return JobOutput{}, false
+	return models.JobOutput{}, false
 }
 
 func TestBuildDryRunOutput_EmptyStages(t *testing.T) {

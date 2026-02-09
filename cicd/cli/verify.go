@@ -19,7 +19,6 @@ var verifyCmd = &cobra.Command{
 	Long:         "Verify that a pipeline configuration file is valid and well-formed",
 	Args:         cobra.MaximumNArgs(1),
 	RunE:         runVerify,
-	SilenceUsage: true,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
