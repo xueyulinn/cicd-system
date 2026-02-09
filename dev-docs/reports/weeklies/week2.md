@@ -9,7 +9,12 @@
 |[[Design Docs] Wrap sequence diagrams and high level design in markdown file with detailed documentation](https://github.com/CS7580-SEA-SP26/e-team/issues/74)| S      | Eugenia-Z |
 |[[Bug fix] Remove CLI Usage on Invalid YAML files](https://github.com/CS7580-SEA-SP26/e-team/issues/63)| S      | Eugenia-Z|
 |[[Test]Add unit tests for verify command](https://github.com/CS7580-SEA-SP26/e-team/issues/76) | S      |Eugenia-Z|
-||        | 
+|[[DryRun] Design Model for dryrun output](https://github.com/CS7580-SEA-SP26/e-team/issues/51)|S        |xueyulinn| 
+|[[DryRun] Create dryrun command that extracts the valid YAML data](https://github.com/CS7580-SEA-SP26/e-team/issues/52)|S        |xueyulinn| 
+|[[DryRun] Adjust dryrun implementation for invalid files](https://github.com/CS7580-SEA-SP26/e-team/issues/53)|S        |xueyulinn| 
+|[[Bug Fix] Refactor dryrun and scheduler into internal packages](https://github.com/CS7580-SEA-SP26/e-team/issues/69)|S        |xueyulinn| 
+|[[Bug Fix] Restore Usage Info for Incorrect Subcommands](https://github.com/CS7580-SEA-SP26/e-team/issues/80)|S        |xueyulinn| 
+
 
 # Carry over tasks
 
@@ -24,7 +29,8 @@
 
 1. Extensive discussions (and even debates) helped us dive deeper into each part of the tech stack and better understand its benefits and limitations.
 2. The team showed strong grit and commitment by being willing to join late-night calls to resolve even small design decisions, while consistently keeping the user perspective in mind during our discussions.
-
+3. The clear division of labor we established on the first day (designing, diagraming, docs, and coding) made our work run smoothly throughout the week.
+4. Fast feedback loops—through PR comments, bug-fixes helped us iterate quickly.
 
 # What did not work this week?
 
