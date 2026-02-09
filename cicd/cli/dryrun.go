@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/dryrun"
 	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
@@ -14,7 +15,7 @@ var dryRunCmd = &cobra.Command{
 	Long:  "Validate a pipeline configuration file and print the execution order for stages and jobs",
 	Args:  cobra.MaximumNArgs(1),
 	// validate the configuration file first
-	PreRunE: runVerify,
+	PreRunE: runVerifyQuiet,
 	RunE: runDryRun,
 }
 
@@ -38,4 +39,20 @@ func runDryRun (cmd *cobra.Command, args []string) error{
 	}
 	fmt.Println(string(bytes))
 	return nil
+}
+
+// runVerifyQuiet is a helper function to run the verify command but redirect stdout to /dev/null
+func runVerifyQuiet(cmd *cobra.Command, args []string) error {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		return err
+	}
+	// close the file descriptor
+	defer func() { _ = devNull.Close() }()
+	// save the original stdout
+	stdout := os.Stdout
+	// redirect stdout to /dev/null
+	os.Stdout = devNull
+	defer func() { os.Stdout = stdout }()
+	return runVerify(cmd, args)
 }
