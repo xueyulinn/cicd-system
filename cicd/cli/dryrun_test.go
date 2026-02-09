@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,6 +91,76 @@ compile:
 	}
 }
 
+func TestDryRunCmd_PrintsValidationMessage(t *testing.T) {
+	configPath, cleanup := writeTempPipelineInGitRepo(t, `
+pipeline:
+  name: "Test Pipeline"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"
+
+unit-tests:
+  - stage: test
+  - image: golang:1.21
+  - script:
+    - "make test"
+`)
+	defer cleanup()
+
+	output, err := runDryRunCommand(t, configPath)
+	if err != nil {
+		t.Fatalf("dryrun command returned error: %v", err)
+	}
+	if !strings.Contains(output, "Configuration is valid") {
+		t.Fatalf("Expected validation output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "build:") {
+		t.Fatalf("Expected dryrun output, got:\n%s", output)
+	}
+}
+
+func TestDryRunCmd_FailsOnInvalidConfig(t *testing.T) {
+	configPath, cleanup := writeTempPipelineInGitRepo(t, `
+pipeline:
+  name: "Test Pipeline"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "make build"
+`)
+	defer cleanup()
+
+	output, err := runDryRunCommand(t, configPath)
+	if err == nil {
+		t.Fatal("Expected error for invalid config, got nil")
+	}
+	if strings.Contains(output, "build:") {
+		t.Fatalf("Did not expect dryrun output, got:\n%s", output)
+	}
+}
+
+func runDryRunCommand(t *testing.T, configPath string) (string, error) {
+	t.Helper()
+	cmd := *rootCmd
+	cmd.SetArgs([]string{"dryrun", configPath})
+	return captureStdout(t, func() error {
+		return cmd.Execute()
+	})
+}
+
 func writeTempPipeline(t *testing.T, content string) string {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -100,23 +169,4 @@ func writeTempPipeline(t *testing.T, content string) string {
 		t.Fatalf("Failed to write pipeline file: %v", err)
 	}
 	return path
-}
-
-func captureStdout(t *testing.T, fn func() error) (string, error) {
-	t.Helper()
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	original := os.Stdout
-	os.Stdout = writer
-	errRun := fn()
-	_ = writer.Close()
-	os.Stdout = original
-	bytes, err := io.ReadAll(reader)
-	_ = reader.Close()
-	if err != nil {
-		t.Fatalf("Failed to read stdout: %v", err)
-	}
-	return string(bytes), errRun
 }
