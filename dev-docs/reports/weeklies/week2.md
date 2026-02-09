@@ -14,13 +14,14 @@
 |[[DryRun] Adjust dryrun implementation for invalid files](https://github.com/CS7580-SEA-SP26/e-team/issues/53)|S        |xueyulinn| 
 |[[Bug Fix] Refactor dryrun and scheduler into internal packages](https://github.com/CS7580-SEA-SP26/e-team/issues/69)|S        |xueyulinn| 
 |[[Bug Fix] Restore Usage Info for Incorrect Subcommands](https://github.com/CS7580-SEA-SP26/e-team/issues/80)|S        |xueyulinn| 
-
+|[[System Diagram]Review and refine high-level system diagram for Sprint 2](https://github.com/CS7580-SEA-SP26/e-team/issues/61)|M        |Asurkatha| 
+|[[Sequence Diagram] Sequence Digration Integration & Finalization](https://github.com/CS7580-SEA-SP26/e-team/issues/56)|M        |Asurkatha| 
 
 # Carry over tasks
 
 | Task | Weight | Assignee |
 | ---- | ------ | -------- |
-|      |        |          |
+|   -  |    -   |    -     |
 
 
 
@@ -33,11 +34,12 @@
 4. Fast feedback loops—through PR comments, bug-fixes helped us iterate quickly.
 
 # What did not work this week?
-
+(*Due to positive integration of last week's review, everything worked smoothly this week*)
 
 # Design updates
 
-We have largely revamped our system design. Please see the details [here](https://github.com/CS7580-SEA-SP26/e-team/blob/8f77443566e770bcf0ad28132a889a5468c49275/dev-docs/design/high-level-design.md).
+1. We have largely revamped our system design. Please see the details [High Level Design](https://github.com/CS7580-SEA-SP26/e-team/blob/8f77443566e770bcf0ad28132a889a5468c49275/dev-docs/design/high-level-design.md).
+2. Added Sequence Diagrams to the Markdown files with proper design documentation [pipeline sequence diagram](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/Seq-des-pipeline.md) and [report sequence diagram](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/Seq-des-report.md)
 
 
 > | Task | Points|
