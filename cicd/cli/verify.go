@@ -14,11 +14,11 @@ import (
 )
 
 var verifyCmd = &cobra.Command{
-	Use:   "verify [config-file]",
-	Short: "Verify a pipeline configuration file",
-	Long:  "Verify that a pipeline configuration file is valid and well-formed",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runVerify,
+	Use:          "verify [config-file]",
+	Short:        "Verify a pipeline configuration file",
+	Long:         "Verify that a pipeline configuration file is valid and well-formed",
+	Args:         cobra.MaximumNArgs(1),
+	RunE:         runVerify,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
