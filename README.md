@@ -20,6 +20,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 - Detailed error reporting with file locations
 - Batch validation of multiple pipeline files
 - Git repository validation
+- Dryrun functionality
 
 ## Installation
 
@@ -46,15 +47,16 @@ go install ./cicd
 # If "cicd: command not found" on macOS, add Go bin to PATH:
 echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc
 source ~/.zshrc
-
+```
 
 The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by default.
 
 ## Usage
 
 ### Basic Commands
-
 ```bash
+# Verify
+
 # Verify default pipeline file (.pipelines/pipeline.yaml)
 cicd verify
 
@@ -64,10 +66,20 @@ cicd verify path/to/pipeline.yaml
 # Verify all YAML files in a directory
 cicd verify .pipelines/
 ```
+```bash
+#Dryrun
 
-### Available Commands
+cicd dryrun
+
+#Dryrun specific pipeline file
+cicd dryrun path/to/pipeline.yaml
+
+```
+
+### Available Sub-commands
 
 - `verify [config-file]` - Validate pipeline configuration files
+- `dryrun [config-file]` - Dryrun pipeline configuration files
 - `help` - Show help information
 
 ## Pipeline Configuration Format
@@ -110,6 +122,30 @@ another-job:
   - `script`: Commands to execute (required)
   - `needs`: List of job dependencies (optional)
 
+## Dryrun Output
+
+``` yaml
+build:
+    compile:
+        image: golang:1.21
+        script:
+            - make build
+test:
+    unit-tests:
+        image: golang:1.21
+        script:
+            - make test
+    integration-tests:
+        image: golang:1.21
+        script:
+            - make integration
+deploy:
+    deploy-staging:
+        image: alpine:latest
+        script:
+            - deploy staging
+```
+
 ## Development
 
 ### Project Structure
@@ -120,11 +156,14 @@ e-team/
 │   ├── cli/              # Command-line interface
 │   │   ├── root.go       # Root command setup
 │   │   └── verify.go     # Verify command implementation
+│   │   └── dryrun.go     # Dryrun command implementation
 │   └── main.go           # Application entry point
 ├── internal/             # Internal packages
 │   ├── models/           # Data models and types
 │   ├── parser/           # YAML parsing logic
 │   └── verifier/         # Validation logic
+│   └── scheduler/        # Scheduler logic
+│   └── dryrun/           # Dryrun logic
 ├── .pipelines/           # Test pipeline configurations
 ├── dev-docs/             # Development documentation
 └── Makefile             # Build automation
