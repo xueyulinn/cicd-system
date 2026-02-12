@@ -16,7 +16,7 @@ func ScheduleJobs(jobs []models.Job) []models.Job {
 	for _, job := range jobs {
 		jobMap[job.Name] = job
 	}
-	
+
 	// Build the dependents map
 	dependents := make(map[string][]models.Job)
 	for _, job := range jobs {
