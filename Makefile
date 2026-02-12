@@ -38,16 +38,16 @@ BINDIR := $(PREFIX)$(PATHSEP)bin
 
 build:
 	$(call MKDIR_P,$(BUILD_DIR))
-	go build -o $(BUILD_DIR)$(PATHSEP)$(BINARY_NAME)$(BINARY_EXT) ./cicd
+	go build -o $(BUILD_DIR)$(PATHSEP)$(BINARY_NAME)$(BINARY_EXT) ./cmd/cicd
 ifneq ($(OS),Windows_NT)
 	chmod +x $(BUILD_DIR)/$(BINARY_NAME)
 endif
 
 test:
-	go test -v ./internal/...
+	go test -v ./internal/... ./cmd/...
 
 test-coverage:
-	go test -coverprofile=coverage.out ./internal/...
+	go test -coverprofile=coverage.out ./internal/... ./cmd/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo Coverage report: coverage.html
 
@@ -61,7 +61,7 @@ install: build
 	$(COPY) $(BUILD_DIR)$(PATHSEP)$(BINARY_NAME)$(BINARY_EXT) $(BINDIR)$(PATHSEP)
 
 run:
-	go run ./cicd verify
+	go run ./cmd/cicd verify
 
 deps:
 	go mod download
