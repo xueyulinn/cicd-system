@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -11,23 +13,31 @@ import (
 	"github.com/moby/moby/client"
 )
 
-const defaultAddr = ":8003"
+const (
+	defaultAddr      = ":8003"
+	defaultJobTimeout = 5 * time.Minute
+)
 
 // Server is the Worker Service HTTP server.
 type Server struct {
-	addr   string
-	docker *client.Client
-	server *http.Server
+	addr       string
+	docker     *client.Client
+	server     *http.Server
+	jobTimeout time.Duration // max duration for each ExecuteJob; 0 means defaultJobTimeout
 }
 
 // NewServer creates a new Worker Service server listening on addr (e.g. ":8003").
 // If addr is empty, defaultAddr (":8003") is used.
+// jobTimeout is the max duration for a single job execution; if 0, defaultJobTimeout (5m) is used.
 // docker may be nil (e.g. in tests); job execution will fail until a client is set.
-func NewServer(addr string, docker *client.Client) *Server {
+func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Server {
 	if addr == "" {
 		addr = defaultAddr
 	}
-	s := &Server{addr: addr, docker: docker}
+	if jobTimeout == 0 {
+		jobTimeout = defaultJobTimeout
+	}
+	s := &Server{addr: addr, docker: docker, jobTimeout: jobTimeout}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/execute", s.handleExecute)
@@ -41,6 +51,11 @@ func NewServer(addr string, docker *client.Client) *Server {
 // Start starts the HTTP server. It blocks until the server is stopped.
 func (s *Server) Start() error {
 	return s.server.ListenAndServe()
+}
+
+// ServeListener runs the server on the given listener. Used for tests (e.g. E2E with a random port).
+func (s *Server) ServeListener(l net.Listener) error {
+	return s.server.Serve(l)
 }
 
 // Shutdown gracefully shuts down the server with the given context.
@@ -76,15 +91,30 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 
 	var job models.JobExecutionPlan
 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+		log.Printf("[execute] invalid JSON: %v", err)
 		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	logs, err := ExecuteJob(r.Context(), s.docker, &job)
+	jobName := job.Name
+	if jobName == "" {
+		jobName = "unnamed"
+	}
+
+	timeout := s.jobTimeout
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	start := time.Now()
+	logs, err := ExecuteJob(ctx, s.docker, &job)
+	duration := time.Since(start)
+
 	if err != nil {
+		log.Printf("[execute] job=%s duration=%v error=%v", jobName, duration, err)
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	log.Printf("[execute] job=%s duration=%v ok", jobName, duration)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -107,7 +137,7 @@ func Run(ctx context.Context, addr string) error {
 	}
 	defer func() { _ = dockerCli.Close() }()
 
-	srv := NewServer(addr, dockerCli)
+	srv := NewServer(addr, dockerCli, 0)
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

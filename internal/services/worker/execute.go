@@ -78,7 +78,6 @@ func runContainer(ctx context.Context, cli *client.Client, image string, script 
 	}
 	createResp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: cfg,
-		Image:  image,
 	})
 	if err != nil {
 		return "", err
