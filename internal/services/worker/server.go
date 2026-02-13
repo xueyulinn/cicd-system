@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/moby/moby/client"
 )
 
@@ -28,6 +30,7 @@ func NewServer(addr string, docker *client.Client) *Server {
 	s := &Server{addr: addr, docker: docker}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/execute", s.handleExecute)
 	s.server = &http.Server{
 		Addr:    addr,
 		Handler: mux,
@@ -58,6 +61,40 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, `{"status":"ok"}`)
+}
+
+// handleExecute runs a single job from a JSON body (JobExecutionPlan) and returns logs or error.
+func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if s.docker == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "docker client not available")
+		return
+	}
+
+	var job models.JobExecutionPlan
+	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	logs, err := ExecuteJob(r.Context(), s.docker, &job)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"logs": logs})
+}
+
+func writeJSONError(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // Run runs the Worker Service until ctx is cancelled or the server errors.
