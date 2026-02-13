@@ -192,3 +192,98 @@ func TestGenerateExecutionPlan_StageOrderPreserved(t *testing.T) {
 		}
 	}
 }
+
+// Test job ordering within a stage (Needs dependency): unit-tests before integration-tests
+func TestGenerateExecutionPlan_JobOrderWithDependencies(t *testing.T) {
+	pipeline := &models.Pipeline{
+		Stages: []models.Stage{{Name: "test"}},
+		Jobs: []models.Job{
+			{Name: "integration-tests", Stage: "test", Needs: []string{"unit-tests"}},
+			{Name: "unit-tests", Stage: "test", Needs: nil},
+		},
+	}
+	plan, err := GenerateExecutionPlan(pipeline)
+	if err != nil {
+		t.Fatalf("GenerateExecutionPlan: %v", err)
+	}
+	stage, _ := getStagePlan(plan, "test")
+	if len(stage.Jobs) != 2 {
+		t.Fatalf("Expected 2 jobs, got %d", len(stage.Jobs))
+	}
+	if stage.Jobs[0].Name != "unit-tests" {
+		t.Errorf("Expected unit-tests first (no deps), got %q", stage.Jobs[0].Name)
+	}
+	if stage.Jobs[1].Name != "integration-tests" {
+		t.Errorf("Expected integration-tests second, got %q", stage.Jobs[1].Name)
+	}
+}
+
+// Test job ordering chain: a -> b -> c
+func TestGenerateExecutionPlan_JobOrderChain(t *testing.T) {
+	pipeline := &models.Pipeline{
+		Stages: []models.Stage{{Name: "test"}},
+		Jobs: []models.Job{
+			{Name: "c", Stage: "test", Needs: []string{"b"}},
+			{Name: "a", Stage: "test", Needs: nil},
+			{Name: "b", Stage: "test", Needs: []string{"a"}},
+		},
+	}
+	plan, err := GenerateExecutionPlan(pipeline)
+	if err != nil {
+		t.Fatalf("GenerateExecutionPlan: %v", err)
+	}
+	stage, _ := getStagePlan(plan, "test")
+	names := make([]string, len(stage.Jobs))
+	for i, j := range stage.Jobs {
+		names[i] = j.Name
+	}
+	expected := []string{"a", "b", "c"}
+	if !reflect.DeepEqual(names, expected) {
+		t.Errorf("Expected job order %v, got %v", expected, names)
+	}
+}
+
+// Test parallel then join: a,b no deps; c needs both a and b
+func TestGenerateExecutionPlan_JobOrderParallelThenJoin(t *testing.T) {
+	pipeline := &models.Pipeline{
+		Stages: []models.Stage{{Name: "test"}},
+		Jobs: []models.Job{
+			{Name: "c", Stage: "test", Needs: []string{"a", "b"}},
+			{Name: "a", Stage: "test", Needs: nil},
+			{Name: "b", Stage: "test", Needs: nil},
+		},
+	}
+	plan, err := GenerateExecutionPlan(pipeline)
+	if err != nil {
+		t.Fatalf("GenerateExecutionPlan: %v", err)
+	}
+	stage, _ := getStagePlan(plan, "test")
+	if len(stage.Jobs) != 3 {
+		t.Fatalf("Expected 3 jobs, got %d", len(stage.Jobs))
+	}
+	cIdx := -1
+	for i, j := range stage.Jobs {
+		if j.Name == "c" {
+			cIdx = i
+			break
+		}
+	}
+	if cIdx < 0 {
+		t.Fatal("Expected job 'c' in plan")
+	}
+	var aBeforeC, bBeforeC bool
+	for i := 0; i < cIdx; i++ {
+		if stage.Jobs[i].Name == "a" {
+			aBeforeC = true
+		}
+		if stage.Jobs[i].Name == "b" {
+			bBeforeC = true
+		}
+	}
+	if !aBeforeC {
+		t.Error("Expected 'a' before 'c'")
+	}
+	if !bBeforeC {
+		t.Error("Expected 'b' before 'c'")
+	}
+}
