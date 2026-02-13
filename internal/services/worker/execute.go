@@ -12,20 +12,31 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// ExecuteJob runs a single job: pull image, run container, wait for exit, collect logs, remove container.
+// DefaultImage is used when the job does not specify an image (no pull, run script only).
+const DefaultImage = "alpine:latest"
+
+// ExecuteJob runs a single job: optionally pull image (if provided), run container, wait for exit, collect logs, remove container.
+// If job.Image is set, the image is pulled first; if not, DefaultImage is used and no pull is performed.
 // Returns the container stdout/stderr and any error. Container is always removed on return (best effort).
 func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan) (logs string, err error) {
 	if cli == nil || job == nil {
 		return "", fmt.Errorf("client and job are required")
 	}
 
-	// 1. Pull image
-	if err := pullImage(ctx, cli, job.Image); err != nil {
-		return "", fmt.Errorf("pull image %q: %w", job.Image, err)
+	image := job.Image
+	if image == "" {
+		image = DefaultImage
+	}
+
+	// 1. Pull image only when user provided one
+	if job.Image != "" {
+		if err := pullImage(ctx, cli, image); err != nil {
+			return "", fmt.Errorf("pull image %q: %w", image, err)
+		}
 	}
 
 	// 2. Create and start container
-	containerID, err := runContainer(ctx, cli, job.Image, job.Script)
+	containerID, err := runContainer(ctx, cli, image, job.Script)
 	if err != nil {
 		return "", fmt.Errorf("run container: %w", err)
 	}
@@ -67,7 +78,6 @@ func runContainer(ctx context.Context, cli *client.Client, image string, script 
 	}
 	createResp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: cfg,
-		Image:  image,
 	})
 	if err != nil {
 		return "", err

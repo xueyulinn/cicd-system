@@ -7,7 +7,7 @@ import (
 )
 
 func TestHandleHealth_GET_returnsOK(t *testing.T) {
-	srv := NewServer("", nil)
+	srv := NewServer("", nil, 0)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
@@ -26,7 +26,7 @@ func TestHandleHealth_GET_returnsOK(t *testing.T) {
 }
 
 func TestHandleHealth_nonGET_returnsMethodNotAllowed(t *testing.T) {
-	srv := NewServer("", nil)
+	srv := NewServer("", nil, 0)
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
 
 	for _, method := range methods {
@@ -40,8 +40,8 @@ func TestHandleHealth_nonGET_returnsMethodNotAllowed(t *testing.T) {
 }
 
 func TestNewServer_emptyAddr_usesDefault(t *testing.T) {
-	srv := NewServer("", nil)
+	srv := NewServer("", nil, 0)
 	if srv.addr != defaultAddr {
-		t.Errorf("NewServer(``, nil): addr = %q, want %q", srv.addr, defaultAddr)
+		t.Errorf("NewServer(``, nil, 0): addr = %q, want %q", srv.addr, defaultAddr)
 	}
 }
