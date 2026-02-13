@@ -1,0 +1,23 @@
+package worker
+
+import (
+	"context"
+
+	"github.com/moby/moby/client"
+)
+
+// NewDockerClient creates a Docker API client configured from environment variables
+// (DOCKER_HOST, DOCKER_API_VERSION, etc.). Use Close() when done.
+// WithAPIVersionNegotiation allows the client to negotiate API version with the daemon.
+func NewDockerClient(ctx context.Context) (*client.Client, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+	// Verify connection to the daemon
+	if _, err := cli.Ping(ctx, client.PingOptions{}); err != nil {
+		_ = cli.Close()
+		return nil, err
+	}
+	return cli, nil
+}
