@@ -8,7 +8,7 @@ permissions:
 on:
   pull_request:
     paths:
-      - "cicd/**"
+      - "cmd/**"
       - "internal/**"
       - "go.mod"
       - "go.sum"
@@ -36,7 +36,7 @@ jobs:
         with:
           filters: |
             go:
-              - "cicd/**"
+              - "cmd/**"
               - "internal/**"
               - "go.mod"
               - "go.sum"
@@ -57,7 +57,7 @@ jobs:
       - name: Build (cli)
         run: |
           mkdir -p dist
-          go build -v -o dist/e-team-cli ./cicd
+          go build -v -o dist/e-team-cli ./cmd/cicd
 
   test:
     runs-on: ubuntu-latest

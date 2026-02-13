@@ -1,8 +1,8 @@
 package verifier
 
 import (
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
 	"gopkg.in/yaml.v3"
 )
 

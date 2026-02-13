@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/dryrun"
-	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/dryrun"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +16,10 @@ var dryRunCmd = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	// validate the configuration file first
 	PreRunE: runVerifyQuiet,
-	RunE: runDryRun,
+	RunE:    runDryRun,
 }
 
-func runDryRun (cmd *cobra.Command, args []string) error{
+func runDryRun(cmd *cobra.Command, args []string) error {
 	// Get config path
 	configPath := ".pipelines/pipeline.yaml"
 	if len(args) > 0 {
@@ -41,17 +41,14 @@ func runDryRun (cmd *cobra.Command, args []string) error{
 	return nil
 }
 
-// runVerifyQuiet is a helper function to run the verify command but redirect stdout to /dev/null
+// runVerifyQuiet runs the verify command but redirects stdout to /dev/null
 func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		return err
 	}
-	// close the file descriptor
 	defer func() { _ = devNull.Close() }()
-	// save the original stdout
 	stdout := os.Stdout
-	// redirect stdout to /dev/null
 	os.Stdout = devNull
 	defer func() { os.Stdout = stdout }()
 	return runVerify(cmd, args)

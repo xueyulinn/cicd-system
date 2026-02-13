@@ -38,7 +38,7 @@ jobs:
       - name: Build
         run: |
           mkdir -p dist
-          go build -v -o dist/e-team-cli ./cicd
+          go build -v -o dist/e-team-cli ./cmd/cicd
 
   test:
     runs-on: ubuntu-latest

@@ -19,10 +19,11 @@ func init() {
 	// register all subcommands
 	rootCmd.AddCommand(verifyCmd)
 	// rootCmd.AddCommand(reportCmd)
-	// rootCmd.AddCommand(runCmd)      // add later
+	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(dryRunCmd)
 }
 
+// Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		// display suggested command help and usage when available

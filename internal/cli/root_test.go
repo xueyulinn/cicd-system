@@ -58,4 +58,3 @@ func TestFindCommandByName(t *testing.T) {
 		t.Fatalf("expected nil for missing command, got: %#v", got)
 	}
 }
-

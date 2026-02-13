@@ -8,17 +8,17 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/verifier"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
 	"github.com/spf13/cobra"
 )
 
 var verifyCmd = &cobra.Command{
-	Use:          "verify [config-file]",
-	Short:        "Verify a pipeline configuration file",
-	Long:         "Verify that a pipeline configuration file is valid and well-formed",
-	Args:         cobra.MaximumNArgs(1),
-	RunE:         runVerify,
+	Use:   "verify [config-file]",
+	Short: "Verify a pipeline configuration file",
+	Long:  "Verify that a pipeline configuration file is valid and well-formed",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runVerify,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
@@ -122,7 +122,7 @@ func collectYAMLFiles(dir string) ([]string, error) {
 	return files, err
 }
 
-// verifies that we're in a git repository
+// checkGitRepo verifies that we're in a git repository
 func checkGitRepo() error {
 	cwd, err := os.Getwd()
 	if err != nil {
