@@ -45,6 +45,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }
 
+// Handler returns the HTTP handler for use in tests (e.g. httptest with ServeHTTP).
+func (s *Server) Handler() http.Handler {
+	return s.server.Handler
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
