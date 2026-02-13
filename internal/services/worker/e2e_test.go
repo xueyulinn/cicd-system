@@ -25,7 +25,7 @@ func TestE2E_Health(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	srv := NewServer("", dockerCli, 0)
@@ -38,7 +38,7 @@ func TestE2E_Health(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET /health: status = %d, want 200", resp.StatusCode)
@@ -61,7 +61,7 @@ func TestE2E_Execute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	srv := NewServer("", dockerCli, 0)
@@ -76,7 +76,7 @@ func TestE2E_Execute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /execute: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -107,7 +107,7 @@ func TestE2E_Execute_invalidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	srv := NewServer("", dockerCli, 0)
@@ -120,7 +120,7 @@ func TestE2E_Execute_invalidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /execute: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("POST /execute invalid JSON: status = %d, want 400", resp.StatusCode)
