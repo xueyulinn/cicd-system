@@ -3,10 +3,16 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/dryrun"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/spf13/cobra"
+)
+
+const (
+	formatYAML = "yaml"
+	formatJSON = "json"
 )
 
 var dryRunCmd = &cobra.Command{
@@ -17,6 +23,10 @@ var dryRunCmd = &cobra.Command{
 	// validate the configuration file first
 	PreRunE: runVerifyQuiet,
 	RunE:    runDryRun,
+}
+
+func init() {
+	dryRunCmd.Flags().StringP("format", "f", formatYAML, "Output format: yaml or json")
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
@@ -30,12 +40,36 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	p := parser.NewParser(configPath)
 	pipeline, _, _ := p.Parse()
 
-	// Build the dry run output
-	dryRunOutput := dryrun.BuildDryRunOutput(pipeline)
-	// Marshal the dry run output
-	bytes, err := dryrun.MarshalOutputStruct(dryRunOutput, pipeline.Stages)
+	// Generate execution plan (business logic)
+	plan, err := planner.GenerateExecutionPlan(pipeline)
 	if err != nil {
-		return fmt.Errorf("failed to marshal dry run output: %w", err)
+		return fmt.Errorf("failed to generate execution plan: %w", err)
+	}
+
+	// Require every stage to have at least one job (same as previous dryrun behaviour)
+	for _, stage := range plan.Stages {
+		if len(stage.Jobs) == 0 {
+			return fmt.Errorf("stage '%s' has no jobs assigned to it", stage.Name)
+		}
+	}
+
+	// Format output (presentation layer)
+	format, _ := cmd.Flags().GetString("format")
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = formatYAML
+	}
+	var bytes []byte
+	switch format {
+	case formatYAML:
+		bytes, err = FormatExecutionPlanYAML(plan)
+	case formatJSON:
+		bytes, err = FormatExecutionPlanJSON(plan)
+	default:
+		return fmt.Errorf("unsupported format %q (use yaml or json)", format)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to format output: %w", err)
 	}
 	fmt.Println(string(bytes))
 	return nil
