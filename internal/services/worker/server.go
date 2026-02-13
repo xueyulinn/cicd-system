@@ -63,7 +63,7 @@ func Run(ctx context.Context, addr string) error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer dockerCli.Close()
+	defer func() { _ = dockerCli.Close() }()
 
 	srv := NewServer(addr, dockerCli)
 	go func() {

@@ -10,7 +10,7 @@ import (
 // (DOCKER_HOST, DOCKER_API_VERSION, etc.). Use Close() when done.
 // WithAPIVersionNegotiation allows the client to negotiate API version with the daemon.
 func NewDockerClient(ctx context.Context) (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, err
 	}

@@ -53,7 +53,7 @@ func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Close()
+	defer func() { _ = resp.Close() }()
 	return resp.Wait(ctx)
 }
 
@@ -104,7 +104,7 @@ func getLogs(ctx context.Context, cli *client.Client, containerID string) (strin
 	if err != nil {
 		return "", err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	var out, errOut bytes.Buffer
 	_, err = stdcopy.StdCopy(&out, &errOut, rc)
 	if err != nil && err != io.EOF {
