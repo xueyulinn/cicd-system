@@ -78,7 +78,7 @@ compile:
 	}
 }
 
-func TestGetLatestCommitByBranch_ReturnsLocalTip(t *testing.T) {
+func TestGetCurrentCommit_ReturnsHeadCommit(t *testing.T) {
 	repoDir, cleanup := initTempGitRepo(t)
 	defer cleanup()
 
@@ -93,25 +93,12 @@ func TestGetLatestCommitByBranch_ReturnsLocalTip(t *testing.T) {
 	}
 	expected := strings.TrimSpace(string(out))
 
-	got, err := getLatestCommitByBranch("main")
+	got, err := getCurrentCommit()
 	if err != nil {
-		t.Fatalf("getLatestCommitByBranch returned error: %v", err)
+		t.Fatalf("getCurrentCommit returned error: %v", err)
 	}
 	if got != expected {
 		t.Fatalf("unexpected commit hash: got %q want %q", got, expected)
-	}
-}
-
-func TestGetLatestCommitByBranch_MissingBranch(t *testing.T) {
-	_, cleanup := initTempGitRepo(t)
-	defer cleanup()
-
-	_, err := getLatestCommitByBranch("does-not-exist")
-	if err == nil {
-		t.Fatal("expected error for missing branch, got nil")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("expected not found error, got %v", err)
 	}
 }
 

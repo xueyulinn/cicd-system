@@ -60,7 +60,7 @@ func runPreRunE(cmd *cobra.Command, args []string) error {
 	// --file must be a valid file path
 	if runFile != "" {
 		if _, err := os.Stat(runFile); err != nil {
-			return fmt.Errorf("invalid --file: %w", err)
+			return fmt.Errorf("invalid --file: %s", runFile)
 		}
 	}
 
