@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/spf13/cobra"
 )
 
@@ -36,42 +34,46 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 		configPath = args[0]
 	}
 
-	// Parse the configuration file
-	p := parser.NewParser(configPath)
-	pipeline, _, _ := p.Parse()
-
-	// Generate execution plan (business logic)
-	plan, err := planner.GenerateExecutionPlan(pipeline)
+	// Read file content
+	fileContent, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to generate execution plan: %w", err)
+		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Require every stage to have at least one job (same as previous dryrun behaviour)
-	for _, stage := range plan.Stages {
-		if len(stage.Jobs) == 0 {
-			return fmt.Errorf("stage '%s' has no jobs assigned to it", stage.Name)
+	// Create gateway client
+	client := NewGatewayClient()
+
+	// Call gateway for dry run
+	response, err := client.DryRun(string(fileContent))
+	if err != nil {
+		// Extract just the validation error message without file path
+		errorMsg := err.Error()
+		if strings.Contains(errorMsg, "gateway returned status") {
+			// Look for the actual validation error message
+			start := strings.Index(errorMsg, "content:")
+			if start != -1 {
+				errorMsg = errorMsg[start+8:] // Skip "content:" prefix
+				// Remove any trailing JSON artifacts more thoroughly
+				errorMsg = strings.TrimSuffix(errorMsg, "\"}")
+				errorMsg = strings.TrimSuffix(errorMsg, "\"")
+				errorMsg = strings.TrimSuffix(errorMsg, "}")
+			}
 		}
+		// Fix Unicode escaping
+		errorMsg = strings.ReplaceAll(errorMsg, "\\u003e", ">")
+		fmt.Fprintf(os.Stderr, "%s: %s\n", configPath, errorMsg)
+		return fmt.Errorf("dry run failed with %d error(s)", 1)
 	}
 
-	// Format output (presentation layer)
-	format, _ := cmd.Flags().GetString("format")
-	format = strings.ToLower(strings.TrimSpace(format))
-	if format == "" {
-		format = formatYAML
+	if !response.Valid {
+		for _, errMsg := range response.Errors {
+			fmt.Fprintln(os.Stderr, errMsg)
+		}
+		return fmt.Errorf("dry run failed with %d error(s)", len(response.Errors))
 	}
-	var bytes []byte
-	switch format {
-	case formatYAML:
-		bytes, err = FormatExecutionPlanYAML(plan)
-	case formatJSON:
-		bytes, err = FormatExecutionPlanJSON(plan)
-	default:
-		return fmt.Errorf("unsupported format %q (use yaml or json)", format)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to format output: %w", err)
-	}
-	fmt.Println(string(bytes))
+
+	// Print dry run output
+	fmt.Println(response.Output)
 	return nil
 }
 

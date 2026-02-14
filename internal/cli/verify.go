@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
 	"github.com/spf13/cobra"
 )
 
@@ -60,25 +58,56 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Create gateway client
+	client := NewGatewayClient()
+
 	sort.Strings(targets)
 
 	var totalErrors int
 	for _, target := range targets {
-		p := parser.NewParser(target)
-		pipeline, rootNode, parseErr := p.Parse()
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to parse configuration:\n%s: %v\n", target, parseErr)
+		// Read file content for each target
+		fileContent, err := os.ReadFile(target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to read file: %v\n", err)
+			return err
+		}
+
+		// Call gateway for validation
+		response, err := client.Validate(string(fileContent))
+		if err != nil {
+			// Extract just the validation error message without file path
+			errorMsg := err.Error()
+			
+			if strings.Contains(errorMsg, "gateway returned status") {
+				// Look for the actual validation error message
+				start := strings.Index(errorMsg, "content:")
+				if start != -1 {
+					errorMsg = errorMsg[start+8:] // Skip "content:" prefix
+					
+					// Remove any trailing JSON artifacts more thoroughly
+					// Trim any whitespace first
+					errorMsg = strings.TrimSpace(errorMsg)
+					
+					// Remove trailing quotes and braces
+					for strings.HasSuffix(errorMsg, "\"") || strings.HasSuffix(errorMsg, "}") {
+						errorMsg = strings.TrimSuffix(errorMsg, "\"")
+						errorMsg = strings.TrimSuffix(errorMsg, "}")
+						errorMsg = strings.TrimSpace(errorMsg)
+					}
+				}
+			}
+			// Fix Unicode escaping
+			errorMsg = strings.ReplaceAll(errorMsg, "\\u003e", ">")
+			fmt.Fprintf(os.Stderr, "%s: %s\n", target, errorMsg)
 			totalErrors++
 			continue
 		}
 
-		v := verifier.NewPipelineVerifier(target, pipeline, rootNode)
-		errors := v.Verify()
-		if len(errors) > 0 {
-			for _, err := range errors {
-				fmt.Fprintln(os.Stderr, err.Error())
+		if !response.Valid {
+			for _, errMsg := range response.Errors {
+				fmt.Fprintln(os.Stderr, errMsg)
 			}
-			totalErrors += len(errors)
+			totalErrors += len(response.Errors)
 			continue
 		}
 
