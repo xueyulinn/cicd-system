@@ -40,7 +40,9 @@ func (c *Client) ValidateRequest(yamlContent string) (*ValidationResponse, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -80,7 +82,9 @@ func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

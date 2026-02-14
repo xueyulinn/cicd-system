@@ -46,7 +46,9 @@ func (c *GatewayClient) Validate(yamlContent string) (*ValidationResponse, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to call gateway: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -80,7 +82,9 @@ func (c *GatewayClient) DryRun(yamlContent string) (*DryRunResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to call gateway: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

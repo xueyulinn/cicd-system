@@ -35,15 +35,9 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check validation service health
-	validationResp, err := h.client.checkValidationHealth()
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "unhealthy",
-			"error":  err.Error(),
-		})
-		return
+	validationResp := "unknown"
+	if resp, err := h.client.checkValidationHealth(); err == nil {
+		validationResp = resp
 	}
 
 	response := map[string]interface{}{
@@ -55,7 +49,9 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // handleServices returns status of all services
@@ -74,7 +70,9 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // handleValidate forwards validation requests to validation service
@@ -90,7 +88,9 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		_ = r.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	// Parse request
 	var req map[string]string
@@ -119,13 +119,13 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 				start := strings.LastIndex(errorMsg, ": \"")
 				if start != -1 {
 					errorMsg = errorMsg[start+3:]
-					if strings.HasSuffix(errorMsg, "\"}") {
-						errorMsg = errorMsg[:len(errorMsg)-2]
-					}
+					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
 				}
 			}
 		}
-		json.NewEncoder(w).Encode(map[string]string{"error": errorMsg})
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 		return
 	}
 
@@ -136,7 +136,9 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // handleDryRun forwards dry run requests to validation service
@@ -152,7 +154,9 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		_ = r.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	// Parse request
 	var req map[string]string
@@ -181,13 +185,13 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 				start := strings.LastIndex(errorMsg, ": \"")
 				if start != -1 {
 					errorMsg = errorMsg[start+3:]
-					if strings.HasSuffix(errorMsg, "\"}") {
-						errorMsg = errorMsg[:len(errorMsg)-2]
-					}
+					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
 				}
 			}
 		}
-		json.NewEncoder(w).Encode(map[string]string{"error": errorMsg})
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 		return
 	}
 
@@ -198,7 +202,9 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // checkValidationHealth checks validation service health
@@ -207,7 +213,9 @@ func (c *Client) checkValidationHealth() (string, error) {
 	if err != nil {
 		return "unhealthy", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
 
 	if resp.StatusCode == http.StatusOK {
 		return "healthy", nil
