@@ -59,7 +59,7 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	}
 	
 	if testMode {
-		return runDirect(configPath, string(fileContent))
+		return runDryrunDirect(configPath, string(fileContent))
 	}
 
 	// Call gateway for dry run
@@ -110,7 +110,7 @@ func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 }
 
 // runDryRunDirect performs dry run without gateway (for testing)
-func runDirect(configPath, yamlContent string) error {
+func runDryrunDirect(configPath, yamlContent string) error {
 	// Create a temporary file for parsing
 	tmpFile, err := os.CreateTemp("", "test-*.yaml")
 	if err != nil {
