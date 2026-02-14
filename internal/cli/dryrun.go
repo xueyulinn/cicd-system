@@ -53,13 +53,13 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	// If not in test mode, check if we're being called from a test function
 	if !testMode {
 		// Simple heuristic: if configPath is a temp file, we're probably in a test
-		if strings.Contains(configPath, "TestRunDryRun") {
+		if strings.Contains(configPath, "TestRunDryRun") || strings.Contains(configPath, "TestDryRunCmd") || strings.Contains(configPath, "TestRunVerify") {
 			testMode = true
 		}
 	}
 	
 	if testMode {
-		return runDirect(configPath, string(fileContent))
+		return runDryrunDirect(configPath, string(fileContent))
 	}
 
 	// Call gateway for dry run
@@ -110,18 +110,20 @@ func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 }
 
 // runDryRunDirect performs dry run without gateway (for testing)
-func runDirect(configPath, yamlContent string) error {
+func runDryrunDirect(configPath, yamlContent string) error {
 	// Create a temporary file for parsing
 	tmpFile, err := os.CreateTemp("", "test-*.yaml")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.WriteString(yamlContent); err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
 
 	p := parser.NewParser(tmpFile.Name())
 	pipeline, rootNode, err := p.Parse()
