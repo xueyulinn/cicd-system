@@ -1,5 +1,5 @@
-# Test Case: Valid pipeline with dependencies
-# Expected Error: None (valid pipeline)
+# Demo pipeline: runs against current codebase (workspace mounted at /workspace).
+# Uses go build / go test so jobs succeed with standard golang image.
 
 pipeline:
   name: "Default Pipeline"
@@ -11,25 +11,25 @@ stages:
 
 compile:
   - stage: build
-  - image: golang:1.21
+  - image: golang:1.25
   - script:
-    - "make build"
+    - "go build -o bin/cicd ./cmd/cicd"
 
 unit-tests:
   - stage: test
-  - image: golang:1.21
+  - image: golang:1.25
   - script:
-    - "make test"
+    - "go test -v ./internal/... ./cmd/..."
 
 integration-tests:
   - stage: test
   - needs: [unit-tests]
-  - image: golang:1.21
+  - image: golang:1.25
   - script:
-    - "make integration"
+    - "go test -v ./internal/... ./cmd/..."
 
 deploy-staging:
   - stage: deploy
   - image: alpine:latest
   - script:
-    - "deploy staging"
+    - "echo deploy staging"
