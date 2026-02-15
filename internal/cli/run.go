@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/go-git/go-git/v6"
@@ -29,8 +34,85 @@ var runCmd = &cobra.Command{
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
-	// TODO: implement cicd run (--name, --file, --branch, --commit)
-	return fmt.Errorf("run: not implemented yet")
+	fileContent, err := os.ReadFile(runFile)
+	if err != nil {
+		return fmt.Errorf("failed to read pipeline file: %w", err)
+	}
+
+	reqBody := runRequest{
+		YAMLContent: string(fileContent),
+		Branch:      runBranch,
+		Commit:      runCommit,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal run request: %w", err)
+	}
+
+	executionURL := strings.TrimSpace(os.Getenv("EXECUTION_URL"))
+	if executionURL == "" {
+		executionURL = "http://localhost:8002"
+	}
+	executionURL = strings.TrimRight(executionURL, "/")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Post(executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to call execution service: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read execution response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if len(respBody) > 0 {
+			return fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		}
+		return fmt.Errorf("execution service returned status %d", resp.StatusCode)
+	}
+
+	var runResp runResponse
+	if len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, &runResp); err == nil {
+			if !runResp.Success {
+				if len(runResp.Errors) > 0 {
+					return fmt.Errorf("run failed: %s", strings.Join(runResp.Errors, "; "))
+				}
+				return fmt.Errorf("run failed")
+			}
+			if strings.TrimSpace(runResp.Message) != "" {
+				fmt.Println(runResp.Message)
+			} else {
+				fmt.Println("Run completed successfully.")
+			}
+			return nil
+		}
+
+		// Fallback for non-JSON success responses.
+		fmt.Println(string(respBody))
+		return nil
+	}
+
+	fmt.Println("Run request submitted successfully.")
+	return nil
+}
+
+type runRequest struct {
+	YAMLContent string `json:"yaml_content"`
+	Branch      string `json:"branch"`
+	Commit      string `json:"commit"`
+}
+
+type runResponse struct {
+	Success bool     `json:"success"`
+	Errors  []string `json:"errors,omitempty"`
+	Message string   `json:"message,omitempty"`
 }
 
 func init() {
