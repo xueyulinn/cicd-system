@@ -21,12 +21,13 @@ type Client struct {
 	httpClient    *http.Client
 }
 
-func NewClient() *Client{
+func NewClient() *Client {
 	return &Client{
-		workerURL: "http://localhost:8003",
+		workerURL:      "http://localhost:8003",
 		validationURL: "http://localhost:8001",
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
+			Timeout: 10 * time.Minute,
 		},
 	}
 }
@@ -76,7 +77,7 @@ func (c *Client) Run(req RunRequest) (*RunResponse, error) {
 	var logsByJob []string
 	for _, stage := range executionPlan.Stages {
 		for _, job := range stage.Jobs {
-			logs, err := c.executeJob(job)
+			logs, err := c.executeJob(job, req.WorkspacePath)
 			if err != nil {
 				return &RunResponse{
 					Success: false,
@@ -95,10 +96,16 @@ func (c *Client) Run(req RunRequest) (*RunResponse, error) {
 	}, nil
 }
 
-func (c *Client) executeJob(job models.JobExecutionPlan) (string, error){
-	body, err := json.Marshal(job)
+// workerExecuteBody is the request body for worker /execute (job + optional workspace).
+type workerExecuteBody struct {
+	models.JobExecutionPlan
+	WorkspacePath string `json:"workspace_path,omitempty"`
+}
+
+func (c *Client) executeJob(job models.JobExecutionPlan, workspacePath string) (string, error) {
+	body, err := json.Marshal(workerExecuteBody{JobExecutionPlan: job, WorkspacePath: workspacePath})
 	if err != nil {
-		 return "", fmt.Errorf("marshal worker request: %w", err)
+		return "", fmt.Errorf("marshal worker request: %w", err)
 	}
 
 	resp, err := c.httpClient.Post(c.workerURL+"/execute", "application/json", bytes.NewBuffer(body))

@@ -78,6 +78,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprint(w, `{"status":"ok"}`)
 }
 
+// executeRequest is the JSON body for /execute (job fields + optional workspace_path).
+type executeRequest struct {
+	models.JobExecutionPlan
+	WorkspacePath string `json:"workspace_path,omitempty"`
+}
+
 // handleExecute runs a single job from a JSON body (JobExecutionPlan) and returns logs or error.
 func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -89,12 +95,13 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var job models.JobExecutionPlan
-	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+	var req executeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("[execute] invalid JSON: %v", err)
 		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
+	job := &models.JobExecutionPlan{Name: req.Name, Image: req.Image, Script: req.Script}
 
 	jobName := job.Name
 	if jobName == "" {
@@ -106,7 +113,7 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	start := time.Now()
-	logs, err := ExecuteJob(ctx, s.docker, &job)
+	logs, err := ExecuteJob(ctx, s.docker, job, req.WorkspacePath)
 	duration := time.Since(start)
 
 	if err != nil {

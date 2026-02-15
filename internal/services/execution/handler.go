@@ -84,8 +84,9 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 
 // RunRequest is the input for running a pipeline.
 type RunRequest struct {
-    YAMLContent string `json:"yaml_content"`
-    Branch      string `json:"branch"`       
-    Commit      string `json:"commit"`       
+	YAMLContent   string `json:"yaml_content"`
+	Branch        string `json:"branch"`
+	Commit        string `json:"commit"`
+	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 

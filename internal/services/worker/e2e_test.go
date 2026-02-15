@@ -70,8 +70,8 @@ func TestE2E_Execute(t *testing.T) {
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
 
-	// POST /execute with valid job
-	body := []byte(`{"name":"e2e","image":"alpine:latest","script":["echo","hello"]}`)
+	// POST /execute with valid job (script runs via sh -c, so one line = one shell command)
+	body := []byte(`{"name":"e2e","image":"alpine:latest","script":["echo hello"]}`)
 	resp, err := http.Post(baseURL+"/execute", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /execute: %v", err)
