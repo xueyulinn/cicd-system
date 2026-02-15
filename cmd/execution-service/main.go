@@ -36,8 +36,8 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown
-	quit := make(chan os.Signal, 1)
+// Wait for interrupt signal to gracefully shutdown
+	quit := make(chan os.Signal, 1)	
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
