@@ -210,3 +210,44 @@ func TestParseEmptyFile(t *testing.T) {
 		t.Error("Expected error for empty file, got none")
 	}
 }
+
+func TestParserContentValid(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Content Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - script:
+    - "go build ./..."
+`
+
+	parser := NewParserFromContent(yamlContent)
+	pipeline, rootNode, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if pipeline == nil {
+		t.Fatal("Expected pipeline to be parsed, got nil")
+	}
+	if rootNode == nil {
+		t.Fatal("Expected root node to be parsed, got nil")
+	}
+	if pipeline.Name != "Content Pipeline" {
+		t.Fatalf("Expected pipeline name Content Pipeline, got %q", pipeline.Name)
+	}
+	if len(pipeline.Jobs) != 1 {
+		t.Fatalf("Expected 1 job, got %d", len(pipeline.Jobs))
+	}
+}
+
+func TestParserContentInvalidYAML(t *testing.T) {
+	parser := NewParserFromContent("\tinvalid yaml")
+	_, _, err := parser.Parse()
+	if err == nil {
+		t.Fatal("Expected parse error, got nil")
+	}
+}

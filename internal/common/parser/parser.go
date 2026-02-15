@@ -11,6 +11,7 @@ import (
 // Parser handles parsing of YAML pipeline configuration files
 type Parser struct {
 	filePath string
+	content  string
 }
 
 // NewParser creates a new parser for the given file path
@@ -20,18 +21,34 @@ func NewParser(filePath string) *Parser {
 	}
 }
 
+// NewParserFromContent creates a parser from raw YAML content.
+func NewParserFromContent(content string) *Parser {
+	return &Parser{
+		content: content,
+	}
+}
+
 // Parse reads and parses the YAML file
 func (p *Parser) Parse() (*models.Pipeline, *yaml.Node, error) {
+	if p.content != "" {
+		return parseYAMLData([]byte(p.content))
+	}
+
 	data, err := os.ReadFile(p.filePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
+	return parseYAMLData(data)
+}
+
+func parseYAMLData(data []byte) (*models.Pipeline, *yaml.Node, error) {
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(data, &rootNode); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
+	p := &Parser{}
 	pipeline, err := p.buildPipeline(&rootNode)
 	if err != nil {
 		return nil, nil, err
