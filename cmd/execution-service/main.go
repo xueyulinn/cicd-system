@@ -22,9 +22,9 @@ func main() {
 	
 	server := &http.Server{
 		Addr:         ":8002",
-		Handler:       mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 20 * time.Minute, // pipeline run can take many minutes
 		IdleTimeout:  60 * time.Second,
 	}
 
