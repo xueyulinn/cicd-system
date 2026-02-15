@@ -8,16 +8,22 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
 // Client handles communication with other services
 type Client struct {
+	workerURL string
 	validationURL string
 	httpClient    *http.Client
 }
 
 func NewClient() *Client{
 	return &Client{
+		workerURL: "http://localhost:8003",
 		validationURL: "http://localhost:8001",
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -47,11 +53,81 @@ func (c *Client) Run(req RunRequest) (*RunResponse, error) {
 		}, nil
 	}
 
-	// Placeholder response until execution logic is implemented.
+	// Parse pipeline from YAML content
+	p := parser.NewParserFromContent(req.YAMLContent)
+	pipeline, _, err := p.Parse()
+	if err != nil {
+		return &RunResponse{
+			Success: false,
+			Errors:  []string{fmt.Sprintf("pipeline parse failed: %v", err)},
+		}, nil
+	}
+
+	// Generate execution plan for the pipeline
+	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
+	if err != nil {
+		return &RunResponse{
+			Success: false,
+			Errors:  []string{fmt.Sprintf("generate execution plan failed: %v", err)},
+		}, nil
+	}
+
+	// Forward jobs in execution order to worker service.
+	var logsByJob []string
+	for _, stage := range executionPlan.Stages {
+		for _, job := range stage.Jobs {
+			logs, err := c.executeJob(job)
+			if err != nil {
+				return &RunResponse{
+					Success: false,
+					Errors:  []string{fmt.Sprintf("job %q in stage %q failed: %v", job.Name, stage.Name, err)},
+				}, nil
+			}
+
+			logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\n%s", stage.Name, job.Name, logs))
+		}
+	}
+
+	// Execution finished for all jobs.
 	return &RunResponse{
 		Success: true,
-		Message: "validation passed",
+		Message: strings.Join(logsByJob, "\n\n"),
 	}, nil
+}
+
+func (c *Client) executeJob(job models.JobExecutionPlan) (string, error){
+	body, err := json.Marshal(job)
+	if err != nil {
+		 return "", fmt.Errorf("marshal worker request: %w", err)
+	}
+
+	resp, err := c.httpClient.Post(c.workerURL+"/execute", "application/json", bytes.NewBuffer(body))
+	
+	if err != nil {
+		return "", fmt.Errorf("call worker service: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+
+	if err != nil {
+        return "", fmt.Errorf("read worker response: %w", err)
+    }
+
+	if resp.StatusCode != http.StatusOK {
+		var e workerErrorResponse
+        if json.Unmarshal(respBody, &e) == nil && e.Error != "" {
+            return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, e.Error)
+        }
+        return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var ok workerExecuteResponse
+    if err := json.Unmarshal(respBody, &ok); err != nil {
+        return "", fmt.Errorf("unmarshal worker response: %w", err)
+    }
+    return ok.Logs, nil
 }
 
 // validatePipeline calls validation service and returns validation result.
@@ -105,4 +181,12 @@ type RunResponse struct {
 	Success bool     `json:"success"`
 	Errors  []string `json:"errors,omitempty"`
 	Message string   `json:"message,omitempty"`
+}
+
+type workerExecuteResponse struct {
+    Logs string `json:"logs"`
+}
+
+type workerErrorResponse struct {
+    Error string `json:"error"`
 }
