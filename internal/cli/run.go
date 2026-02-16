@@ -39,10 +39,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read pipeline file: %w", err)
 	}
 
+	workspacePath, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get workspace: %w", err)
+	}
 	reqBody := runRequest{
-		YAMLContent: string(fileContent),
-		Branch:      runBranch,
-		Commit:      runCommit,
+		YAMLContent:   string(fileContent),
+		Branch:        runBranch,
+		Commit:        runCommit,
+		WorkspacePath: workspacePath,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -56,7 +61,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	executionURL = strings.TrimRight(executionURL, "/")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	// Pipeline can take several minutes (pull image, build, multiple test jobs).
+	client := &http.Client{Timeout: 15 * time.Minute}
 	resp, err := client.Post(executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to call execution service: %w", err)
@@ -104,9 +110,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 type runRequest struct {
-	YAMLContent string `json:"yaml_content"`
-	Branch      string `json:"branch"`
-	Commit      string `json:"commit"`
+	YAMLContent   string `json:"yaml_content"`
+	Branch        string `json:"branch"`
+	Commit        string `json:"commit"`
+	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
 type runResponse struct {

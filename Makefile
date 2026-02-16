@@ -46,6 +46,9 @@ endif
 test:
 	set CICD_TEST_MODE=1 && go test -v ./internal/... ./cmd/...
 
+integration:
+	go test -v ./internal/... ./cmd/...
+
 test-coverage:
 	go test -coverprofile=coverage.out ./internal/... ./cmd/...
 	go tool cover -html=coverage.out -o coverage.html

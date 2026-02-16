@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -16,9 +17,8 @@ import (
 const DefaultImage = "alpine:latest"
 
 // ExecuteJob runs a single job: optionally pull image (if provided), run container, wait for exit, collect logs, remove container.
-// If job.Image is set, the image is pulled first; if not, DefaultImage is used and no pull is performed.
-// Returns the container stdout/stderr and any error. Container is always removed on return (best effort).
-func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan) (logs string, err error) {
+// If workspacePath is non-empty, it is mounted into the container at /workspace and set as WorkingDir so scripts run against the repo.
+func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, workspacePath string) (logs string, err error) {
 	if cli == nil || job == nil {
 		return "", fmt.Errorf("client and job are required")
 	}
@@ -36,7 +36,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	}
 
 	// 2. Create and start container
-	containerID, err := runContainer(ctx, cli, image, job.Script)
+	containerID, err := runContainer(ctx, cli, image, job.Script, workspacePath)
 	if err != nil {
 		return "", fmt.Errorf("run container: %w", err)
 	}
@@ -58,6 +58,20 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	return logs, nil
 }
 
+// scriptToCmd converts script lines (e.g. ["make build", "make test"]) into Docker Cmd.
+// Docker's Cmd expects the first element to be the executable; we run via sh -c so that
+// "make build" is executed as a shell command, not as an executable named "make build".
+func scriptToCmd(script []string) []string {
+	if len(script) == 0 {
+		return []string{"sh", "-c", "true"}
+	}
+	one := strings.TrimSpace(strings.Join(script, " && "))
+	if one == "" {
+		return []string{"sh", "-c", "true"}
+	}
+	return []string{"sh", "-c", one}
+}
+
 // pullImage pulls the image so it is available for the container.
 func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 	resp, err := cli.ImagePull(ctx, imageRef, client.ImagePullOptions{})
@@ -69,16 +83,25 @@ func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 }
 
 // runContainer creates and starts a container with the given image and script; returns container ID.
-func runContainer(ctx context.Context, cli *client.Client, image string, script []string) (containerID string, err error) {
+// If workspacePath is non-empty, it is bound to /workspace and set as WorkingDir.
+func runContainer(ctx context.Context, cli *client.Client, image string, script []string, workspacePath string) (containerID string, err error) {
+	cmd := scriptToCmd(script)
 	cfg := &container.Config{
 		Image:        image,
-		Cmd:          script,
+		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
-	createResp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
-		Config: cfg,
-	})
+	if workspacePath != "" {
+		cfg.WorkingDir = "/workspace"
+	}
+	opts := client.ContainerCreateOptions{Config: cfg}
+	if workspacePath != "" {
+		opts.HostConfig = &container.HostConfig{
+			Binds: []string{workspacePath + ":/workspace"},
+		}
+	}
+	createResp, err := cli.ContainerCreate(ctx, opts)
 	if err != nil {
 		return "", err
 	}
