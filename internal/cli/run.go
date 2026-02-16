@@ -138,12 +138,12 @@ func runPreRunE(cmd *cobra.Command, args []string) error {
 
 	// cannot provide both --file and --name
 	if runFile == "" && runName == "" {
-		return fmt.Errorf("must provide exactly one of --file or --name")
+		return fmt.Errorf("must provide at least one of --file or --name")
 	}
 
 	// cannot provide both --file and --name
 	if runFile != "" && runName != "" {
-		return fmt.Errorf("--file and --name are mutually exclusive")
+		return fmt.Errorf("must provide exactly one --file or --name")
 	}
 
 	// --file must be a valid file path
