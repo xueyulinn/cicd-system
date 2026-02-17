@@ -1,15 +1,25 @@
 # CI/CD Pipeline Management Tool
 
-A Go-based CLI tool for validating and managing CI/CD pipeline configurations. This tool parses YAML pipeline files and verifies their structure, dependencies, and validity.
+A Go-based CLI tool for validating and managing CI/CD pipeline configurations. This tool parses YAML pipeline files, verifies their structure and dependencies, and can execute pipelines locally through a microservices architecture.
 
 ## Overview
 
 The e-team project is a CI/CD pipeline management system that provides:
 
-- **Pipeline Validation**: Parse and validate YAML pipeline configurations
-- **Dependency Checking**: Verify job dependencies and stage relationships
-- **Error Reporting**: Detailed error messages with line and column information
-- **CLI Interface**: Command-line tool for easy integration into development workflows
+- **Pipeline Validation**: Parse and validate YAML pipeline configurations (via Validation Service)
+- **API Gateway**: Single entry point that routes requests to validation, dry-run, and execution
+- **Execution Service**: Orchestrates pipeline runs (stages, jobs, dependencies)
+- **Worker Layer**: Executes individual jobs (e.g. in containers) and reports status
+- **CLI Interface**: Command-line tool for verify, dryrun, and run
+
+## Architecture (Current Sprint)
+
+| Component            | Port | Description                    |
+|----------------------|------|--------------------------------|
+| API Gateway          | 8000 | Routes to validation/dryrun/execution |
+| Validation Service   | 8001 | Validates pipeline YAML        |
+| Execution Service    | 8002 | Runs pipelines, coordinates jobs |
+| Worker Service       | 8003 | Executes job steps             |
 
 ## Features
 
@@ -20,7 +30,8 @@ The e-team project is a CI/CD pipeline management system that provides:
 - Detailed error reporting with file locations
 - Batch validation of multiple pipeline files
 - Git repository validation
-- Dryrun functionality
+- Dryrun: show execution order without running
+- **Run**: execute a pipeline locally (requires services to be running)
 
 ## Installation
 
@@ -36,27 +47,58 @@ The e-team project is a CI/CD pipeline management system that provides:
 git clone https://github.com/CS7580-SEA-SP26/e-team.git
 cd e-team
 
-#Windows: 
-go build -o bin/cicd ./cicd
-go install ./cicd
+# Build (Windows / macOS / Linux)
+make build
+# or manually:
+go build -o bin/cicd ./cmd/cicd
 
-# macOS/Linux:
-go build -o bin/cicd ./cicd
-go install ./cicd
+# Install to $HOME/bin (optional)
+make install
+# or: go install ./cmd/cicd
 
-# If "cicd: command not found" on macOS, add Go bin to PATH:
+# If "cicd: command not found" on macOS/Linux, add Go bin to PATH:
 echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
 The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by default.
 
+## Quick Start: Run a Pipeline
+
+1. **Start all services** (API Gateway, Validation, Execution, Worker):
+
+   ```bash
+   ./scripts/start-services.sh
+   ```
+
+   Leave this terminal running. In another terminal, continue with the steps below.
+
+2. **Build the CLI** (if not already installed):
+
+   ```bash
+   make build
+   ```
+
+3. **Run a pipeline**:
+
+   ```bash
+   # Run default pipeline (.pipelines/pipeline.yaml), current branch & latest commit
+   ./bin/cicd run --file .pipelines/pipeline.yaml
+
+   # Or by pipeline name (resolved under .pipelines/)
+   ./bin/cicd run --name pipeline.yaml
+
+   # With specific branch and commit
+   ./bin/cicd run --file .pipelines/pipeline.yaml --branch main --commit HEAD
+   ```
+
+   The CLI sends the pipeline YAML to the Execution Service (`http://localhost:8002` by default; override with `EXECUTION_URL`).
+
 ## Usage
 
 ### Basic Commands
-```bash
-# Verify
 
+```bash
 # Verify default pipeline file (.pipelines/pipeline.yaml)
 cicd verify
 
@@ -66,20 +108,24 @@ cicd verify path/to/pipeline.yaml
 # Verify all YAML files in a directory
 cicd verify .pipelines/
 ```
+
 ```bash
-#Dryrun
-
+# Dryrun (show execution order)
 cicd dryrun
-
-#Dryrun specific pipeline file
 cicd dryrun path/to/pipeline.yaml
+```
 
+```bash
+# Run pipeline (services must be running)
+cicd run --file .pipelines/pipeline.yaml
+cicd run --name pipeline.yaml --branch main --commit HEAD
 ```
 
 ### Available Sub-commands
 
-- `verify [config-file]` - Validate pipeline configuration files
-- `dryrun [config-file]` - Dryrun pipeline configuration files
+- `verify [config-file]` - Validate pipeline configuration files (via gateway or direct)
+- `dryrun [config-file]` - Show execution order for stages and jobs
+- `run` - Execute a pipeline locally (requires Execution Service; use `--file` or `--name`, optional `--branch`, `--commit`)
 - `help` - Show help information
 
 ## Pipeline Configuration Format
@@ -148,25 +194,42 @@ deploy:
 
 ## Development
 
+### Running the services (development)
+
+To run the full stack (API Gateway, Validation, Execution, Worker) in development:
+
+```bash
+./scripts/start-services.sh
+```
+
+Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `EXECUTION_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
+
 ### Project Structure
 
 ```
 e-team/
-├── cicd/                 # CLI application
-│   ├── cli/              # Command-line interface
-│   │   ├── root.go       # Root command setup
-│   │   └── verify.go     # Verify command implementation
-│   │   └── dryrun.go     # Dryrun command implementation
-│   └── main.go           # Application entry point
-├── internal/             # Internal packages
-│   ├── models/           # Data models and types
-│   ├── parser/           # YAML parsing logic
-│   └── verifier/         # Validation logic
-│   └── scheduler/        # Scheduler logic
-│   └── dryrun/           # Dryrun logic
-├── .pipelines/           # Test pipeline configurations
-├── dev-docs/             # Development documentation
-└── Makefile             # Build automation
+├── cmd/                     # Application entry points
+│   ├── cicd/                # CLI (verify, dryrun, run)
+│   │   └── main.go
+│   ├── api-gateway/         # API Gateway (port 8000)
+│   ├── validation-service/  # Validation Service (port 8001)
+│   ├── execution-service/   # Execution Service (port 8002)
+│   └── worker-service/      # Worker Service (port 8003)
+├── internal/
+│   ├── cli/                 # CLI commands and gateway client
+│   │   ├── root.go, verify.go, dryrun.go, run.go
+│   │   └── gateway_client.go
+│   ├── models/              # Data models and types
+│   ├── parser/              # YAML parsing logic
+│   ├── verifier/            # Validation logic
+│   ├── scheduler/           # Scheduler logic
+│   ├── dryrun/              # Dryrun logic
+│   └── services/            # Gateway, validation, execution, worker
+├── scripts/
+│   └── start-services.sh    # Start all services (gateway, validation, execution, worker)
+├── .pipelines/              # Pipeline configurations
+├── dev-docs/                # Development documentation
+└── Makefile                 # Build automation
 ```
 
 
@@ -232,6 +295,7 @@ job-b:
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
 - **Testing**: Go standard testing package
+- **Services**: HTTP APIs (API Gateway, Validation, Execution, Worker) for validation, dry-run, and pipeline execution
 
 ## Contributing
 
