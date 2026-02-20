@@ -204,6 +204,18 @@ To run the full stack (API Gateway, Validation, Execution, Worker) in developmen
 
 Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `EXECUTION_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
 
+### Report store database (optional)
+
+For the `report` subcommand, execution and report services need a PostgreSQL database. Start Postgres and apply the schema:
+
+```bash
+docker compose up -d
+export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
+psql "$DATABASE_URL" -f migrations/001_report_store_schema.sql
+```
+
+See [dev-docs/report-db-setup.md](dev-docs/report-db-setup.md) for connection config (`DATABASE_URL` or `REPORT_DB_URL`) and CI notes.
+
 ### Project Structure
 
 ```
