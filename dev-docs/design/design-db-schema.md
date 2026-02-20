@@ -27,7 +27,7 @@ Records each execution of a pipeline (Table 1: information logged for every exec
 | run_no      | INT          | no       | Per-pipeline run number (1, 2, 3, …). |
 | start_time  | TIMESTAMPTZ  | no       | When the pipeline run started. |
 | end_time    | TIMESTAMPTZ  | yes      | When the pipeline run ended (NULL while running). |
-| status      | VARCHAR(32)  | no       | `running`, `success`, or `failed`. |
+| status      | VARCHAR(32)  | no       | `success`, or `failed`. |
 | git_hash    | VARCHAR(64)  | yes      | Git commit hash for this run. |
 | git_branch  | VARCHAR(256) | yes      | Git branch for this run. |
 | git_repo    | VARCHAR(1024)| yes      | Git repository URL for this run. |
@@ -47,7 +47,7 @@ Records each stage within a pipeline run (Table 3: information logged for every 
 | stage      | VARCHAR(256)  | no       | Stage name. |
 | start_time | TIMESTAMPTZ   | no       | When the stage started. |
 | end_time   | TIMESTAMPTZ   | yes      | When the stage ended (NULL while running). |
-| status     | VARCHAR(32)   | no       | `running`, `success`, or `failed`. |
+| status     | VARCHAR(32)   | no       | `success`, or `failed`. |
 
 - **Unique constraint:** `(pipeline, run_no, stage)`.
 - **Foreign key:** `(pipeline, run_no)` → `pipeline_runs(pipeline, run_no)` (optional; can be enforced in app or via FK).
@@ -66,7 +66,7 @@ Records each job within a stage (Table 4: information logged for every job).
 | job        | VARCHAR(256)  | no       | Job name. |
 | start_time | TIMESTAMPTZ   | no       | When the job started. |
 | end_time   | TIMESTAMPTZ   | yes      | When the job ended (NULL while running). |
-| status     | VARCHAR(32)   | no       | `running`, `success`, or `failed`. |
+| status     | VARCHAR(32)   | no       | `success`, or `failed`. |
 
 - **Unique constraint:** `(pipeline, run_no, stage, job)`.
 - **Indexes:** `(pipeline, run_no)`, `(pipeline, run_no, stage)`, `(pipeline, run_no, stage, job)` for report lookups.
