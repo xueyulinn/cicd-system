@@ -25,6 +25,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/services", h.handleServices)
 	mux.HandleFunc("/validate", h.handleValidate)
 	mux.HandleFunc("/dryrun", h.handleDryRun)
+	mux.HandleFunc("/run", h.handleRun)
 }
 
 // handleHealth returns gateway and service health status
@@ -198,6 +199,66 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// handleRun forwards run requests to execution service
+func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer func() {
+		_ = r.Body.Close() // Ignore close error as we're done with the body
+	}()
+
+	// Parse request
+	var req RunRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Forward to execution service
+	response, err := h.client.RunRequest(req)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		// Extract error message if it contains JSON, otherwise use as-is
+		errorMsg := err.Error()
+		if strings.Contains(errorMsg, "{") {
+			// Try to extract just the error message from JSON
+			if strings.Contains(errorMsg, "execution service returned status") {
+				// Extract clean error message
+				start := strings.LastIndex(errorMsg, ": \"")
+				if start != -1 {
+					errorMsg = errorMsg[start+3:]
+					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
+				}
+			}
+		}
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if response.Success {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
