@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -73,9 +74,10 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"services": map[string]string{
-			"validation": "http://localhost:8001",
-			"gateway":   "http://localhost:8000",
-			"reporting": "http://localhost:8004",
+			"validation": h.client.validationURL,
+			"execution":  h.client.executionURL,
+			"reporting":  h.client.reportURL,
+			"gateway":    getGatewayPublicURL(),
 		},
 	}
 
@@ -353,4 +355,12 @@ func writeGatewayError(w http.ResponseWriter, statusCode int, message string) {
 	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+func getGatewayPublicURL() string {
+	url := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_URL"))
+	if url == "" {
+		return "http://localhost:8000"
+	}
+	return strings.TrimRight(url, "/")
 }

@@ -15,14 +15,15 @@ import (
 func main() {
 	// Create validation handler
 	handler := validation.NewHandler()
-	
+
 	// Create HTTP server
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	
+
+	addr := ":" + getEnvOrDefault("PORT", "8001")
 	server := &http.Server{
-		Addr:         ":8001",
-		Handler:       mux,
+		Addr:         addr,
+		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -30,7 +31,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Validation service starting on port 8001")
+		log.Printf("Validation service starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Validation service failed: %v", err)
 		}
@@ -52,4 +53,11 @@ func main() {
 	} else {
 		log.Println("Validation service stopped")
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

@@ -15,13 +15,14 @@ import (
 func main() {
 	// Create gateway handler
 	handler := gateway.NewHandler()
-	
+
 	// Create HTTP server
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	
+
+	addr := ":" + getEnvOrDefault("PORT", "8000")
 	server := &http.Server{
-		Addr:         ":8000",
+		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		// run requests can take several minutes while execution service completes jobs
@@ -31,7 +32,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("API Gateway starting on port 8000")
+		log.Printf("API Gateway starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("API Gateway failed: %v", err)
 		}
@@ -53,4 +54,11 @@ func main() {
 	} else {
 		log.Println("API Gateway stopped")
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

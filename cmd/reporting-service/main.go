@@ -22,8 +22,9 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
+	addr := ":" + getEnvOrDefault("PORT", "8004")
 	server := &http.Server{
-		Addr:         ":8004",
+		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -31,7 +32,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Reporting service starting on port 8004")
+		log.Printf("Reporting service starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Reporting service failed: %v", err)
 		}
@@ -51,4 +52,11 @@ func main() {
 	} else {
 		log.Println("Reporting service stopped")
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
