@@ -2,39 +2,61 @@ package execution
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
 
-// Client handles communication with other services
-type Client struct {
-	workerURL string
+type Service struct {
+	workerURL     string
 	validationURL string
 	httpClient    *http.Client
+	store         *store.Store
 }
 
-func NewClient() *Client {
-	return &Client{
-		workerURL:      "http://localhost:8003",
+func NewService(ctx context.Context) (*Service, error) {
+	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if connURL == "" {
+		connURL = strings.TrimSpace(os.Getenv("REPORT_DB_URL"))
+	}
+	if connURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL or REPORT_DB_URL is required")
+	}
+
+	st, err := store.New(ctx, connURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect report store: %w", err)
+	}
+
+	return &Service{
+		workerURL:     "http://localhost:8003",
 		validationURL: "http://localhost:8001",
 		httpClient: &http.Client{
 			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
 			Timeout: 10 * time.Minute,
 		},
+		store: st}, nil
+}
+
+func (s *Service) Close() {
+	if s.store != nil {
+		s.store.Close()
 	}
 }
 
 // Run validates the pipeline before execution.
 // Actual execution can be added after validation succeeds.
-func (c *Client) Run(req RunRequest) (*RunResponse, error) {
+func (s *Service) Run(req RunRequest) (*RunResponse, error) {
 	if strings.TrimSpace(req.YAMLContent) == "" {
 		return &RunResponse{
 			Success: false,
@@ -42,7 +64,7 @@ func (c *Client) Run(req RunRequest) (*RunResponse, error) {
 		}, nil
 	}
 
-	validationResp, err := c.validatePipeline(req.YAMLContent)
+	validationResp, err := s.validatePipeline(req.YAMLContent)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +99,7 @@ func (c *Client) Run(req RunRequest) (*RunResponse, error) {
 	var logsByJob []string
 	for _, stage := range executionPlan.Stages {
 		for _, job := range stage.Jobs {
-			logs, err := c.executeJob(job, req.WorkspacePath)
+			logs, err := s.executeJob(job, req.WorkspacePath)
 			if err != nil {
 				return &RunResponse{
 					Success: false,
@@ -102,14 +124,14 @@ type workerExecuteBody struct {
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
-func (c *Client) executeJob(job models.JobExecutionPlan, workspacePath string) (string, error) {
+func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) (string, error) {
 	body, err := json.Marshal(workerExecuteBody{JobExecutionPlan: job, WorkspacePath: workspacePath})
 	if err != nil {
 		return "", fmt.Errorf("marshal worker request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.workerURL+"/execute", "application/json", bytes.NewBuffer(body))
-	
+	resp, err := s.httpClient.Post(s.workerURL+"/execute", "application/json", bytes.NewBuffer(body))
+
 	if err != nil {
 		return "", fmt.Errorf("call worker service: %w", err)
 	}
@@ -119,26 +141,26 @@ func (c *Client) executeJob(job models.JobExecutionPlan, workspacePath string) (
 	respBody, err := io.ReadAll(resp.Body)
 
 	if err != nil {
-        return "", fmt.Errorf("read worker response: %w", err)
-    }
+		return "", fmt.Errorf("read worker response: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		var e workerErrorResponse
-        if json.Unmarshal(respBody, &e) == nil && e.Error != "" {
-            return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, e.Error)
-        }
-        return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, string(respBody))
+		if json.Unmarshal(respBody, &e) == nil && e.Error != "" {
+			return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, e.Error)
+		}
+		return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var ok workerExecuteResponse
-    if err := json.Unmarshal(respBody, &ok); err != nil {
-        return "", fmt.Errorf("unmarshal worker response: %w", err)
-    }
-    return ok.Logs, nil
+	if err := json.Unmarshal(respBody, &ok); err != nil {
+		return "", fmt.Errorf("unmarshal worker response: %w", err)
+	}
+	return ok.Logs, nil
 }
 
 // validatePipeline calls validation service and returns validation result.
-func (c *Client) validatePipeline(yamlContent string) (*ValidationResponse, error) {
+func (s *Service) validatePipeline(yamlContent string) (*ValidationResponse, error) {
 	validateReq := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -148,7 +170,7 @@ func (c *Client) validatePipeline(yamlContent string) (*ValidationResponse, erro
 		return nil, fmt.Errorf("failed to marshal validation request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := s.httpClient.Post(s.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
@@ -191,9 +213,9 @@ type RunResponse struct {
 }
 
 type workerExecuteResponse struct {
-    Logs string `json:"logs"`
+	Logs string `json:"logs"`
 }
 
 type workerErrorResponse struct {
-    Error string `json:"error"`
+	Error string `json:"error"`
 }
