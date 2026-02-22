@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
 // Handler handles HTTP requests for API gateway
@@ -26,6 +29,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/validate", h.handleValidate)
 	mux.HandleFunc("/dryrun", h.handleDryRun)
 	mux.HandleFunc("/run", h.handleRun)
+	mux.HandleFunc("/report", h.handleReport)
 }
 
 // handleHealth returns gateway and service health status
@@ -40,11 +44,16 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if resp, err := h.client.checkValidationHealth(); err == nil {
 		validationResp = resp
 	}
+	reportResp := "unknown"
+	if resp, err := h.client.checkReportHealth(); err == nil {
+		reportResp = resp
+	}
 
 	response := map[string]interface{}{
 		"status": "healthy",
 		"services": map[string]string{
 			"validation": validationResp,
+			"reporting":  reportResp,
 		},
 	}
 
@@ -66,6 +75,7 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 		"services": map[string]string{
 			"validation": "http://localhost:8001",
 			"gateway":   "http://localhost:8000",
+			"reporting": "http://localhost:8004",
 		},
 	}
 
@@ -268,6 +278,40 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleReport forwards report requests to reporting service.
+func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := models.ReportQuery{
+		Pipeline: strings.TrimSpace(r.URL.Query().Get("pipeline")),
+		Stage:    strings.TrimSpace(r.URL.Query().Get("stage")),
+		Job:      strings.TrimSpace(r.URL.Query().Get("job")),
+	}
+	if runParam := strings.TrimSpace(r.URL.Query().Get("run")); runParam != "" {
+		runNo, err := strconv.Atoi(runParam)
+		if err != nil {
+			writeGatewayError(w, http.StatusBadRequest, "run must be an integer")
+			return
+		}
+		query.Run = &runNo
+	}
+
+	response, statusCode, err := h.client.ReportRequest(query)
+	if err != nil {
+		writeGatewayError(w, statusCode, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
 // checkValidationHealth checks validation service health
 func (c *Client) checkValidationHealth() (string, error) {
 	resp, err := c.httpClient.Get(c.validationURL + "/health")
@@ -283,4 +327,30 @@ func (c *Client) checkValidationHealth() (string, error) {
 	}
 
 	return "unhealthy", nil
+}
+
+func (c *Client) checkReportHealth() (string, error) {
+	resp, err := c.httpClient.Get(c.reportURL + "/health")
+	if err != nil {
+		return "unhealthy", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		return "healthy", nil
+	}
+	return "unhealthy", nil
+}
+
+func writeGatewayError(w http.ResponseWriter, statusCode int, message string) {
+	if statusCode == 0 {
+		statusCode = http.StatusBadGateway
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }

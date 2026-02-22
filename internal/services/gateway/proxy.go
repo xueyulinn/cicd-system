@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
 // Client handles communication with downstream services
 type Client struct {
 	validationURL string
 	executionURL  string
+	reportURL     string
 	httpClient    *http.Client
 }
 
@@ -21,6 +26,7 @@ func NewClient() *Client {
 	return &Client{
 		validationURL: "http://localhost:8001",
 		executionURL:  "http://localhost:8002",
+		reportURL:     "http://localhost:8004",
 		httpClient: &http.Client{
 			Timeout: 15 * time.Minute, // Pipeline execution can take several minutes
 		},
@@ -162,6 +168,48 @@ func (c *Client) RunRequest(req RunRequest) (*RunResponse, error) {
 	}
 
 	return &runResp, nil
+}
+
+// ReportRequest forwards report request to reporting service.
+func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse, int, error) {
+	params := url.Values{}
+	params.Set("pipeline", query.Pipeline)
+	if query.Run != nil {
+		params.Set("run", strconv.Itoa(*query.Run))
+	}
+	if query.Stage != "" {
+		params.Set("stage", query.Stage)
+	}
+	if query.Job != "" {
+		params.Set("job", query.Job)
+	}
+
+	resp, err := c.httpClient.Get(c.reportURL + "/report?" + params.Encode())
+	if err != nil {
+		return nil, http.StatusBadGateway, fmt.Errorf("failed to call reporting service: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, http.StatusBadGateway, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
+			return nil, resp.StatusCode, fmt.Errorf("%s", errorResp["error"])
+		}
+		return nil, resp.StatusCode, fmt.Errorf("reporting service returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var out models.ReportResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, http.StatusBadGateway, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return &out, http.StatusOK, nil
 }
 
 // ValidationResponse represents validation service response
