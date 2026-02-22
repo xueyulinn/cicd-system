@@ -15,6 +15,7 @@ import (
 func main() {
 	// Create validation handler
 	handler := execution.NewHandler()
+	defer handler.Close()
 	
 	// Create HTTP server
 	mux := http.NewServeMux()
