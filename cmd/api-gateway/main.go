@@ -22,9 +22,10 @@ func main() {
 	
 	server := &http.Server{
 		Addr:         ":8000",
-		Handler:       mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		// run requests can take several minutes while execution service completes jobs
+		WriteTimeout: 20 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 

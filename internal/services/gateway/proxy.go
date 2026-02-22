@@ -12,6 +12,7 @@ import (
 // Client handles communication with downstream services
 type Client struct {
 	validationURL string
+	executionURL  string
 	httpClient    *http.Client
 }
 
@@ -19,8 +20,9 @@ type Client struct {
 func NewClient() *Client {
 	return &Client{
 		validationURL: "http://localhost:8001",
+		executionURL:  "http://localhost:8002",
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 15 * time.Minute, // Pipeline execution can take several minutes
 		},
 	}
 }
@@ -107,6 +109,59 @@ func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
 	}
 
 	return &dryRunResp, nil
+}
+
+// RunRequest represents execution service request
+type RunRequest struct {
+	YAMLContent   string `json:"yaml_content"`
+	Branch        string `json:"branch"`
+	Commit        string `json:"commit"`
+	WorkspacePath string `json:"workspace_path,omitempty"`
+}
+
+// RunResponse represents execution service response
+type RunResponse struct {
+	Success bool     `json:"success"`
+	Errors  []string `json:"errors,omitempty"`
+	Message string   `json:"message,omitempty"`
+}
+
+// RunRequest forwards run request to execution service
+func (c *Client) RunRequest(req RunRequest) (*RunResponse, error) {
+	jsonBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.httpClient.Post(c.executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call execution service: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close() // Ignore close error as we're done with the body
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Try to parse error response first
+		var errorResp RunResponse
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
+			return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
+		}
+		// Fallback to raw body if parsing fails
+		return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var runResp RunResponse
+	if err := json.Unmarshal(body, &runResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &runResp, nil
 }
 
 // ValidationResponse represents validation service response
