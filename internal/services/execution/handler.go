@@ -79,7 +79,7 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Run pipeline through execution service
-	resp, err := h.service.Run(req)
+	resp, err := h.service.Run(r.Context(), req)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
