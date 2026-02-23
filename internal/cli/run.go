@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,30 +14,51 @@ import (
 )
 
 var (
-	runFile string
-	runName string
+	runFile   string
+	runName   string
 	runBranch string
 	runCommit string
 )
 
 var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Execute a pipeline locally",
-	Long:  "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
-	Args:  cobra.NoArgs,
+	Use:     "run",
+	Short:   "Execute a pipeline locally",
+	Long:    "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
+	Args:    cobra.NoArgs,
 	PreRunE: runPreRunE,
-	RunE:  runRun,
+	RunE:    runRun,
 }
 
+// runRun executes a pipeline against a temporary worktree for the resolved
+// commit so file reads and job execution use a consistent repository snapshot.
 func runRun(cmd *cobra.Command, args []string) error {
-	fileContent, err := os.ReadFile(runFile)
+	repoRoot, err := getWorkspacePath()
 	if err != nil {
-		return fmt.Errorf("failed to read pipeline file: %w", err)
+		return fmt.Errorf("failed to resolve workspace path: %w", err)
+	}
+	worktree, cleanup, err := createDetachedWorktree(repoRoot, runCommit)
+	if err != nil {
+		return fmt.Errorf("failed to prepare workspace for commit %q: %w", runCommit, err)
 	}
 
-	workspacePath, err := os.Getwd()
+	// remove temp worktree
+	defer cleanup()
+
+	actualHead, err := getHEADCommitAtPath(worktree)
 	if err != nil {
-		return fmt.Errorf("failed to get workspace: %w", err)
+		return fmt.Errorf("failed to resolve HEAD for commit workspace: %w", err)
+	}
+	if actualHead != runCommit {
+		return fmt.Errorf("commit workspace HEAD %q does not match requested commit %q", actualHead, runCommit)
+	}
+
+	runFileAtCommit, err := resolveRunFileInWorkspace(runFile, repoRoot, worktree)
+	if err != nil {
+		return fmt.Errorf("failed to resolve run file %q in commit workspace: %w", runFile, err)
+	}
+	fileContent, err := os.ReadFile(runFileAtCommit)
+	if err != nil {
+		return fmt.Errorf("failed to read run file at commit %q: %w", runCommit, err)
 	}
 
 	// Test mode - use direct execution instead of gateway
@@ -49,7 +71,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if testMode {
-		return runDirect(runFile, string(fileContent), runBranch, runCommit, workspacePath)
+		fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, worktree)
+		return runDirect(runFile, string(fileContent), runBranch, runCommit, worktree)
 	}
 
 	// Create gateway client
@@ -59,8 +82,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 		YAMLContent:   string(fileContent),
 		Branch:        runBranch,
 		Commit:        runCommit,
-		WorkspacePath: workspacePath,
+		WorkspacePath: worktree,
 	}
+
+	fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, worktree)
 
 	response, err := client.Run(req)
 	if err != nil {
@@ -94,6 +119,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// init registers flags for the run command.
 func init() {
 	runCmd.Flags().StringVar(&runFile, "file", "", "Pipeline file path")
 	runCmd.Flags().StringVar(&runName, "name", "", "Pipeline name")
@@ -101,6 +127,7 @@ func init() {
 	runCmd.Flags().StringVar(&runCommit, "commit", "", "The Git commit on the branch specified by --branch to be used to obtain files for the pipeline run")
 }
 
+// runPreRunE validates CLI inputs and resolves effective branch/commit values.
 func runPreRunE(cmd *cobra.Command, args []string) error {
 	// Normalize user input to avoid accidental whitespace values.
 	runFile = strings.TrimSpace(runFile)
@@ -198,9 +225,9 @@ func findPipelineByName(name string) (string, error) {
 		p := parser.NewParser(filePath)
 		pipeline, _, err := p.Parse()
 		if err != nil {
-			continue	
+			continue
 		}
-		
+
 		if pipeline.Name == name {
 			return filePath, nil
 		}
@@ -289,4 +316,79 @@ func runDirect(configPath, yamlContent, branch, commit, workspacePath string) er
 	fmt.Printf("Workspace: %s\n", workspacePath)
 	fmt.Println("Run completed successfully.")
 	return nil
+}
+
+// getWorkspacePath returns the repository worktree root for the current
+// directory, searching parent directories for .git when needed.
+func getWorkspacePath() (string, error) {
+	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to open git repo: %w", err)
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git worktree: %w", err)
+	}
+
+	return wt.Filesystem.Root(), nil
+}
+
+// createDetachedWorktree creates a temporary detached git worktree at commit
+// and returns the directory path with a cleanup callback.
+func createDetachedWorktree(repoRoot, commit string) (string, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "cicd-run-wt-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temp dir: %w", err)
+	}
+
+	cmd := exec.Command("git", "-C", repoRoot, "worktree", "add", "--detach", tmpDir, commit)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", nil, fmt.Errorf("git worktree add failed: %v, output: %s", err, string(out))
+	}
+
+	cleanup := func() {
+		_ = exec.Command("git", "-C", repoRoot, "worktree", "remove", "--force", tmpDir).Run()
+		_ = exec.Command("git", "-C", repoRoot, "worktree", "prune").Run()
+		_ = os.RemoveAll(tmpDir)
+	}
+	return tmpDir, cleanup, nil
+}
+
+// resolveRunFileInWorkspace maps runFile from the current checkout to the same
+// repository-relative location inside targetWorkspace.
+func resolveRunFileInWorkspace(runFile, repoRoot, targetWorkspace string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	absRunFile := runFile
+	if !filepath.IsAbs(absRunFile) {
+		absRunFile = filepath.Join(cwd, runFile)
+	}
+	absRunFile = filepath.Clean(absRunFile)
+
+	rel, err := filepath.Rel(repoRoot, absRunFile)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("run file is outside repository: %s", runFile)
+	}
+
+	return filepath.Join(targetWorkspace, rel), nil
+}
+
+// getHEADCommitAtPath returns the current HEAD commit hash for the git worktree at dir.
+func getHEADCommitAtPath(dir string) (string, error) {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD failed: %v, output: %s", err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
 }
