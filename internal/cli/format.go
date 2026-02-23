@@ -49,3 +49,19 @@ func scriptToYAMLNode(script []string) *yaml.Node {
 	}
 	return node
 }
+
+// FormatReportYAML formats report output as YAML.
+func FormatReportYAML(report *models.ReportResponse) ([]byte, error) {
+	if report == nil {
+		return nil, fmt.Errorf("report is nil")
+	}
+	return yaml.Marshal(report)
+}
+
+// FormatReportJSON formats report output as indented JSON.
+func FormatReportJSON(report *models.ReportResponse) ([]byte, error) {
+	if report == nil {
+		return nil, fmt.Errorf("report is nil")
+	}
+	return json.MarshalIndent(report, "", "  ")
+}

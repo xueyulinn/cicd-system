@@ -39,8 +39,8 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	return &Service{
-		workerURL:     "http://localhost:8003",
-		validationURL: "http://localhost:8001",
+		workerURL:     getEnvOrDefault("WORKER_URL", "http://localhost:8003"),
+		validationURL: getEnvOrDefault("VALIDATION_URL", "http://localhost:8001"),
 		httpClient: &http.Client{
 			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
 			Timeout: 10 * time.Minute,
@@ -52,6 +52,14 @@ func (s *Service) Close() {
 	if s.store != nil {
 		s.store.Close()
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	return strings.TrimRight(v, "/")
 }
 
 // Run validates the pipeline before execution.

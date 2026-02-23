@@ -15,14 +15,16 @@ import (
 func main() {
 	// Create validation handler
 	handler := execution.NewHandler()
+
 	defer handler.Close()
 	
 	// Create HTTP server
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	
+
+	addr := ":" + getEnvOrDefault("PORT", "8002")
 	server := &http.Server{
-		Addr:         ":8002",
+		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 20 * time.Minute, // pipeline run can take many minutes
@@ -31,7 +33,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Execution service starting on port 8002")
+		log.Printf("Execution service starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Execution service failed: %v", err)
 		}
@@ -53,4 +55,11 @@ func main() {
 	} else {
 		log.Println("Execution service stopped")
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

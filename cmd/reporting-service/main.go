@@ -9,50 +9,48 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/services/gateway"
+	"github.com/CS7580-SEA-SP26/e-team/internal/services/reporting"
 )
 
 func main() {
-	// Create gateway handler
-	handler := gateway.NewHandler()
+	handler, err := reporting.NewHandler()
+	if err != nil {
+		log.Fatalf("Reporting service failed to initialize: %v", err)
+	}
+	defer handler.Close()
 
-	// Create HTTP server
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	addr := ":" + getEnvOrDefault("PORT", "8000")
+	addr := ":" + getEnvOrDefault("PORT", "8004")
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		// run requests can take several minutes while execution service completes jobs
-		WriteTimeout: 20 * time.Minute,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine
 	go func() {
-		log.Printf("API Gateway starting on %s", addr)
+		log.Printf("Reporting service starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("API Gateway failed: %v", err)
+			log.Printf("Reporting service failed: %v", err)
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("API Gateway shutting down...")
+	log.Println("Reporting service shutting down...")
 
-	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("API Gateway forced shutdown: %v", err)
+		log.Printf("Reporting service forced shutdown: %v", err)
 	} else {
-		log.Println("API Gateway stopped")
+		log.Println("Reporting service stopped")
 	}
 }
 

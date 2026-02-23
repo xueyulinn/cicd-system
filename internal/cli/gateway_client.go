@@ -7,13 +7,16 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
 // GatewayClient handles communication with API gateway
 type GatewayClient struct {
 	baseURL    string
-	httpClient  *http.Client
+	httpClient *http.Client
 }
 
 // NewGatewayClient creates a new gateway client
@@ -133,6 +136,54 @@ func (c *GatewayClient) Run(req RunRequest) (*RunResponse, error) {
 	}
 
 	return &runResp, nil
+}
+
+// Report sends report request to gateway.
+func (c *GatewayClient) Report(query models.ReportQuery) (*models.ReportResponse, error) {
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/report", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	params := req.URL.Query()
+	params.Set("pipeline", query.Pipeline)
+	if query.Run != nil {
+		params.Set("run", strconv.Itoa(*query.Run))
+	}
+	if query.Stage != "" {
+		params.Set("stage", query.Stage)
+	}
+	if query.Job != "" {
+		params.Set("job", query.Job)
+	}
+	req.URL.RawQuery = params.Encode()
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call gateway: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
+			return nil, fmt.Errorf("%s", errorResp["error"])
+		}
+		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var reportResp models.ReportResponse
+	if err := json.Unmarshal(body, &reportResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return &reportResp, nil
 }
 
 // ValidationResponse represents gateway validation response
