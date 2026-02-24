@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
@@ -66,5 +67,43 @@ func TestFormatExecutionPlanJSON_NilPlan(t *testing.T) {
 	_, err := FormatExecutionPlanJSON(nil)
 	if err == nil {
 		t.Error("Expected error for nil plan")
+	}
+}
+
+func TestFormatReportYAML_Valid(t *testing.T) {
+	start := time.Date(2025, 8, 29, 16, 17, 52, 0, time.FixedZone("-0700", -7*3600))
+	end := time.Date(2025, 8, 29, 16, 21, 32, 0, time.FixedZone("-0700", -7*3600))
+
+	report := &models.ReportResponse{
+		Pipeline: models.ReportPipeline{
+			Name: "default",
+			Runs: []models.ReportRun{
+				{
+					RunNo:     1,
+					Status:    "success",
+					GitRepo:   "git@gitlab.com:neu-seattle/devops/fa25.git",
+					GitBranch: "main",
+					GitHash:   "c3aefda",
+					Start:     start,
+					End:       &end,
+				},
+			},
+		},
+	}
+
+	out, err := FormatReportYAML(report)
+	if err != nil {
+		t.Fatalf("FormatReportYAML: %v", err)
+	}
+
+	outStr := string(out)
+	if !strings.Contains(outStr, "pipeline:") || !strings.Contains(outStr, "run-no: 1") {
+		t.Fatalf("unexpected report yaml output: %s", outStr)
+	}
+}
+
+func TestFormatReportJSON_NilReport(t *testing.T) {
+	if _, err := FormatReportJSON(nil); err == nil {
+		t.Fatal("expected error for nil report")
 	}
 }

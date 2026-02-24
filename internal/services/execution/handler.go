@@ -1,18 +1,33 @@
 package execution
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Handler struct {
-	client *Client
+	service *Service
+	initErr error
 }
 
 func NewHandler() *Handler {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	svc, err := NewService(ctx)
 	return &Handler{
-		client: NewClient(),
+		service: svc,
+		initErr: err,
+	}
+}
+
+func (h *Handler) Close() {
+	if h.service != nil {
+		h.service.Close()
 	}
 }
 
@@ -20,7 +35,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/run", h.handleExecution)
 }
-
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -42,6 +56,11 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.initErr != nil {
+		http.Error(w, fmt.Sprintf("Execution service not ready: %v", h.initErr), http.StatusServiceUnavailable)
+		return
+	}
+
 	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -57,10 +76,10 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
-	} 
+	}
 
 	// Run pipeline through execution service
-	resp, err := h.client.Run(req)
+	resp, err := h.service.Run(r.Context(), req)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -81,7 +100,6 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 // RunRequest is the input for running a pipeline.
 type RunRequest struct {
 	YAMLContent   string `json:"yaml_content"`
@@ -89,4 +107,3 @@ type RunRequest struct {
 	Commit        string `json:"commit"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
-
