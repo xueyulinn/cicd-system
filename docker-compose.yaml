@@ -19,6 +19,20 @@ services:
       timeout: 5s
       retries: 5
 
+  db-migrate:
+    image: postgres:16-alpine
+    container_name: e-team-db-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: cicd
+    volumes:
+      - ./migrations:/migrations:ro
+    command: >
+      sh -ec "psql -h postgres -U cicd -d reportstore -f /migrations/001_report_store_schema.sql"
+    restart: "no"
+
   api-gateway:
     container_name: e-team-api-gateway
     build:
@@ -47,8 +61,8 @@ services:
       VALIDATION_URL: http://validation-service:8001
       WORKER_URL: http://worker-service:8003
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       validation-service:
         condition: service_started
       worker-service:
@@ -71,6 +85,8 @@ services:
     build:
       context: .
       dockerfile: cmd/worker-service/Dockerfile
+    # Local-dev friendly: run as root so docker.sock works out of the box.
+    user: "0:0"
     environment:
       PORT: "8003"
     ports:
@@ -87,7 +103,7 @@ services:
       PORT: "8004"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     ports:
       - "8004:8004"
