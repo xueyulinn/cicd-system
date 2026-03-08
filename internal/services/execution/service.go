@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
@@ -64,9 +65,9 @@ func getEnvOrDefault(key, fallback string) string {
 
 // Run validates the pipeline before execution.
 // Actual execution can be added after validation succeeds.
-func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error) {
+func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
 	if strings.TrimSpace(req.YAMLContent) == "" {
-		return &RunResponse{
+		return &api.RunResponse{
 			Success: false,
 			Errors:  []string{"yaml_content is required"},
 		}, nil
@@ -78,7 +79,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error)
 	}
 
 	if !validationResp.Valid {
-		return &RunResponse{
+		return &api.RunResponse{
 			Success: false,
 			Errors:  validationResp.Errors,
 		}, nil
@@ -88,7 +89,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error)
 	p := parser.NewParserFromContent(req.YAMLContent)
 	pipeline, _, err := p.Parse()
 	if err != nil {
-		return &RunResponse{
+		return &api.RunResponse{
 			Success: false,
 			Errors:  []string{fmt.Sprintf("pipeline parse failed: %v", err)},
 		}, nil
@@ -106,7 +107,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error)
 		if finishErr := s.finishRun(ctx, pipeline.Name, runNo, store.StatusFailed); finishErr != nil {
 			return nil, fmt.Errorf("update run record failed: %w", finishErr)
 		}
-		return &RunResponse{
+		return &api.RunResponse{
 			Success: false,
 			Errors:  []string{fmt.Sprintf("generate execution plan failed: %v", err)},
 		}, nil
@@ -149,7 +150,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error)
 					return nil, fmt.Errorf("update run record failed: %w", finishErr)
 				}
 
-				return &RunResponse{
+				return &api.RunResponse{
 					Success: false,
 					Errors:  []string{fmt.Sprintf("job %q in stage %q failed: %v", job.Name, stage.Name, jobErr)},
 				}, nil
@@ -175,14 +176,14 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*RunResponse, error)
 	}
 
 	// Execution finished for all jobs.
-	return &RunResponse{
+	return &api.RunResponse{
 		Success: true,
 		Message: strings.Join(logsByJob, "\n\n"),
 	}, nil
 }
 
 // startRun inserts a new pipeline run in running state and returns run_no.
-func (s *Service) startRun(ctx context.Context, pipeline string, req RunRequest) (int, error) {
+func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequest) (int, error) {
 	now := time.Now().UTC()
 	in := store.CreateRunInput{
 		Pipeline:  pipeline,
@@ -294,7 +295,7 @@ func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) 
 }
 
 // validatePipeline calls validation service and returns validation result.
-func (s *Service) validatePipeline(yamlContent string) (*ValidationResponse, error) {
+func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, error) {
 	validateReq := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -317,7 +318,7 @@ func (s *Service) validatePipeline(yamlContent string) (*ValidationResponse, err
 		return nil, fmt.Errorf("failed to read validation response: %w", err)
 	}
 
-	var validationResp ValidationResponse
+	var validationResp api.ValidateResponse
 	if err := json.Unmarshal(body, &validationResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal validation response: %w", err)
 	}
@@ -331,19 +332,6 @@ func (s *Service) validatePipeline(yamlContent string) (*ValidationResponse, err
 	}
 
 	return &validationResp, nil
-}
-
-// ValidationResponse represents validation service response.
-type ValidationResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-}
-
-// RunResponse represents run response.
-type RunResponse struct {
-	Success bool     `json:"success"`
-	Errors  []string `json:"errors,omitempty"`
-	Message string   `json:"message,omitempty"`
 }
 
 type workerExecuteResponse struct {
