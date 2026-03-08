@@ -3,6 +3,7 @@ package validation
 import (
 	"fmt"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
@@ -18,11 +19,11 @@ func NewService() *Service {
 }
 
 // ValidateYAML validates YAML pipeline content
-func (s *Service) ValidateYAML(yamlContent string) ValidationResponse {
+func (s *Service) ValidateYAML(yamlContent string) api.ValidateResponse {
 	// Parse YAML content
 	pipeline, rootNode, err := parseYAMLContent(yamlContent)
 	if err != nil {
-		return ValidationResponse{
+		return api.ValidateResponse{
 			Valid:  false,
 			Errors: []string{err.Error()},
 		}
@@ -37,24 +38,24 @@ func (s *Service) ValidateYAML(yamlContent string) ValidationResponse {
 		for i, err := range errors {
 			errorStrings[i] = err.Error()
 		}
-		return ValidationResponse{
+		return api.ValidateResponse{
 			Valid:  false,
 			Errors: errorStrings,
 		}
 	}
 
-	return ValidationResponse{
+	return api.ValidateResponse{
 		Valid:  true,
 		Errors: []string{},
 	}
 }
 
 // DryRunYAML validates YAML and returns dry run output
-func (s *Service) DryRunYAML(yamlContent string) DryRunResponse {
+func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
 	// Parse YAML content
 	pipeline, rootNode, err := parseYAMLContent(yamlContent)
 	if err != nil {
-		return DryRunResponse{
+		return api.DryRunResponse{
 			Valid:  false,
 			Errors: []string{err.Error()},
 		}
@@ -69,7 +70,7 @@ func (s *Service) DryRunYAML(yamlContent string) DryRunResponse {
 		for i, err := range errors {
 			errorStrings[i] = err.Error()
 		}
-		return DryRunResponse{
+		return api.DryRunResponse{
 			Valid:  false,
 			Errors: errorStrings,
 		}
@@ -78,7 +79,7 @@ func (s *Service) DryRunYAML(yamlContent string) DryRunResponse {
 	// Build execution plan for dry run output
 	plan, err := planner.GenerateExecutionPlan(pipeline)
 	if err != nil {
-		return DryRunResponse{
+		return api.DryRunResponse{
 			Valid:  false,
 			Errors: []string{fmt.Sprintf("failed to generate execution plan: %v", err)},
 		}
@@ -87,13 +88,13 @@ func (s *Service) DryRunYAML(yamlContent string) DryRunResponse {
 	// Convert execution plan to YAML output
 	output, err := marshalExecutionPlan(plan)
 	if err != nil {
-		return DryRunResponse{
+		return api.DryRunResponse{
 			Valid:  false,
 			Errors: []string{fmt.Sprintf("failed to marshal execution plan: %v", err)},
 		}
 	}
 
-	return DryRunResponse{
+	return api.DryRunResponse{
 		Valid:  true,
 		Errors: []string{},
 		Output: output,
@@ -291,17 +292,4 @@ func marshalExecutionPlan(plan *models.ExecutionPlan) (string, error) {
 		}
 	}
 	return result, nil
-}
-
-// ValidationResponse represents validation result
-type ValidationResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-}
-
-// DryRunResponse represents dry run result
-type DryRunResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-	Output string   `json:"output,omitempty"`
 }

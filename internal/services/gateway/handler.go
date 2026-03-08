@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -238,7 +239,7 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Parse request
-	var req RunRequest
+	var req api.RunRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return

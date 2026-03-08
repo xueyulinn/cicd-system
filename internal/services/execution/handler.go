@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
 type Handler struct {
@@ -72,7 +74,7 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Parse request
-	var req RunRequest
+	var req api.RunRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -98,12 +100,4 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
-}
-
-// RunRequest is the input for running a pipeline.
-type RunRequest struct {
-	YAMLContent   string `json:"yaml_content"`
-	Branch        string `json:"branch"`
-	Commit        string `json:"commit"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
 }

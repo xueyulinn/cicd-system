@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
 // Handler handles HTTP requests for validation service
@@ -57,7 +59,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Parse request
-	var req ValidationRequest
+	var req api.ValidateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -96,7 +98,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Parse request
-	var req DryRunRequest
+	var req api.ValidateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -115,14 +117,4 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
-}
-
-// ValidationRequest represents validation request
-type ValidationRequest struct {
-	YAMLContent string `json:"yaml_content"`
-}
-
-// DryRunRequest represents dry run request
-type DryRunRequest struct {
-	YAMLContent string `json:"yaml_content"`
 }
