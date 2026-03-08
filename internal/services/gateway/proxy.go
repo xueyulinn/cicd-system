@@ -7,12 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -27,21 +26,13 @@ type Client struct {
 // NewClient creates a new gateway client
 func NewClient() *Client {
 	return &Client{
-		validationURL: getEnvOrDefault("VALIDATION_URL", "http://localhost:8001"),
-		executionURL:  getEnvOrDefault("EXECUTION_URL", "http://localhost:8002"),
-		reportURL:     getEnvOrDefault("REPORTING_URL", "http://localhost:8004"),
+		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		executionURL:  config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
+		reportURL:     config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
 		httpClient: &http.Client{
 			Timeout: 15 * time.Minute, // Pipeline execution can take several minutes
 		},
 	}
-}
-
-func getEnvOrDefault(key, fallback string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	return strings.TrimRight(v, "/")
 }
 
 // ValidateRequest forwards validation request to validation service

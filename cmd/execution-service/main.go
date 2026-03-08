@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/services/execution"
 )
 
@@ -22,7 +23,7 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	addr := ":" + getEnvOrDefault("PORT", "8002")
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultExecutionPort)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -55,11 +56,4 @@ func main() {
 	} else {
 		log.Println("Execution service stopped")
 	}
-}
-
-func getEnvOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/moby/moby/client"
 )
 
 const (
-	defaultAddr      = ":8003"
 	defaultJobTimeout = 5 * time.Minute
 )
 
@@ -27,13 +27,13 @@ type Server struct {
 	jobTimeout time.Duration // max duration for each ExecuteJob; 0 means defaultJobTimeout
 }
 
-// NewServer creates a new Worker Service server listening on addr (e.g. ":8003").
-// If addr is empty, defaultAddr (":8003") is used.
+// NewServer creates a new Worker Service server listening on addr (e.g. ":"+config.DefaultWorkerPort).
+// If addr is empty, ":"+config.DefaultWorkerPort is used.
 // jobTimeout is the max duration for a single job execution; if 0, defaultJobTimeout (5m) is used.
 // docker may be nil (e.g. in tests); job execution will fail until a client is set.
 func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Server {
 	if addr == "" {
-		addr = defaultAddr
+		addr = ":" + config.DefaultWorkerPort
 	}
 	if jobTimeout == 0 {
 		jobTimeout = defaultJobTimeout

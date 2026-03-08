@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 )
 
 func TestHandleHealth_GET_returnsOK(t *testing.T) {
@@ -41,7 +43,8 @@ func TestHandleHealth_nonGET_returnsMethodNotAllowed(t *testing.T) {
 
 func TestNewServer_emptyAddr_usesDefault(t *testing.T) {
 	srv := NewServer("", nil, 0)
-	if srv.addr != defaultAddr {
-		t.Errorf("NewServer(``, nil, 0): addr = %q, want %q", srv.addr, defaultAddr)
+	want := ":" + config.DefaultWorkerPort
+	if srv.addr != want {
+		t.Errorf("NewServer(``, nil, 0): addr = %q, want %q", srv.addr, want)
 	}
 }

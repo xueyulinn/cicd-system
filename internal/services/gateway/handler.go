@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -284,7 +285,7 @@ func (c *Client) checkReportHealth() (string, error) {
 func getGatewayPublicURL() string {
 	url := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_URL"))
 	if url == "" {
-		return "http://localhost:8000"
+		return config.DefaultGatewayURL
 	}
 	return strings.TrimRight(url, "/")
 }
