@@ -75,7 +75,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 
 	validationResp, err := s.validatePipeline(req.YAMLContent)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("run pipeline: %w", err)
 	}
 
 	if !validationResp.Valid {
