@@ -1,7 +1,10 @@
-.PHONY: build test test-coverage clean install run
+.PHONY: build build-release test test-coverage clean install run
 
 BINARY_NAME=cicd
 BUILD_DIR := bin
+DIST_DIR := dist
+# Release version for artifact names (set when publishing, e.g. make build-release VERSION=v0.1.0)
+VERSION ?= dev
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
@@ -42,6 +45,15 @@ build:
 ifneq ($(OS),Windows_NT)
 	chmod +x $(BUILD_DIR)/$(BINARY_NAME)
 endif
+
+# Static binaries for GitHub Release (no CGO). Use: make build-release [VERSION=v0.1.0]
+build-release:
+	$(call MKDIR_P,$(DIST_DIR))
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/cicd && chmod +x $(DIST_DIR)/$(BINARY_NAME)-linux-amd64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/cicd && chmod +x $(DIST_DIR)/$(BINARY_NAME)-linux-arm64
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/cicd && chmod +x $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/cicd && chmod +x $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64
+	@echo "Built in $(DIST_DIR)/. Upload these to GitHub Release assets."
 
 test:
 	set CICD_TEST_MODE=1 && go test -v ./internal/... ./cmd/...
