@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/services/gateway"
 )
 
@@ -20,7 +21,7 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	addr := ":" + getEnvOrDefault("PORT", "8000")
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultGatewayPort)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -54,11 +55,4 @@ func main() {
 	} else {
 		log.Println("API Gateway stopped")
 	}
-}
-
-func getEnvOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

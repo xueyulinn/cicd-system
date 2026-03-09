@@ -14,6 +14,7 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
@@ -40,8 +41,8 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	return &Service{
-		workerURL:     getEnvOrDefault("WORKER_URL", "http://localhost:8003"),
-		validationURL: getEnvOrDefault("VALIDATION_URL", "http://localhost:8001"),
+		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
+		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		httpClient: &http.Client{
 			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
 			Timeout: 10 * time.Minute,
@@ -53,14 +54,6 @@ func (s *Service) Close() {
 	if s.store != nil {
 		s.store.Close()
 	}
-}
-
-func getEnvOrDefault(key, fallback string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	return strings.TrimRight(v, "/")
 }
 
 // Run validates the pipeline before execution.

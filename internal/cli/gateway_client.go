@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -24,7 +25,7 @@ type GatewayClient struct {
 func NewGatewayClient() *GatewayClient {
 	gatewayURL := os.Getenv("GATEWAY_URL")
 	if gatewayURL == "" {
-		gatewayURL = "http://localhost:8000"
+		gatewayURL = config.DefaultGatewayURL
 	}
 
 	return &GatewayClient{

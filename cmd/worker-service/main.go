@@ -7,14 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/services/worker"
 )
 
 func main() {
-	addr := ":8003"
-	if a := os.Getenv("PORT"); a != "" {
-		addr = ":" + a
-	}
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultWorkerPort)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

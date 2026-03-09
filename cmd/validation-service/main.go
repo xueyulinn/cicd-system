@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/services/validation"
 )
 
@@ -20,7 +21,7 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	addr := ":" + getEnvOrDefault("PORT", "8001")
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultValidationPort)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -53,11 +54,4 @@ func main() {
 	} else {
 		log.Println("Validation service stopped")
 	}
-}
-
-func getEnvOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
