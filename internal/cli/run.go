@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
@@ -78,7 +79,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	// Create gateway client
 	client := NewGatewayClient()
 
-	req := RunRequest{
+	req := api.RunRequest{
 		YAMLContent:   string(fileContent),
 		Branch:        runBranch,
 		Commit:        runCommit,

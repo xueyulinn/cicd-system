@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -26,25 +26,17 @@ type Client struct {
 // NewClient creates a new gateway client
 func NewClient() *Client {
 	return &Client{
-		validationURL: getEnvOrDefault("VALIDATION_URL", "http://localhost:8001"),
-		executionURL:  getEnvOrDefault("EXECUTION_URL", "http://localhost:8002"),
-		reportURL:     getEnvOrDefault("REPORTING_URL", "http://localhost:8004"),
+		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		executionURL:  config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
+		reportURL:     config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
 		httpClient: &http.Client{
 			Timeout: 15 * time.Minute, // Pipeline execution can take several minutes
 		},
 	}
 }
 
-func getEnvOrDefault(key, fallback string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	return strings.TrimRight(v, "/")
-}
-
 // ValidateRequest forwards validation request to validation service
-func (c *Client) ValidateRequest(yamlContent string) (*ValidationResponse, error) {
+func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, error) {
 	reqBody := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -69,7 +61,7 @@ func (c *Client) ValidateRequest(yamlContent string) (*ValidationResponse, error
 
 	if resp.StatusCode != http.StatusOK {
 		// Try to parse the error response first
-		var errorResp ValidationResponse
+		var errorResp api.ValidateResponse
 		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
 			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
 		}
@@ -77,7 +69,7 @@ func (c *Client) ValidateRequest(yamlContent string) (*ValidationResponse, error
 		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var validationResp ValidationResponse
+	var validationResp api.ValidateResponse
 	if err := json.Unmarshal(body, &validationResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -86,7 +78,7 @@ func (c *Client) ValidateRequest(yamlContent string) (*ValidationResponse, error
 }
 
 // DryRunRequest forwards dry run request to validation service
-func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
+func (c *Client) DryRunRequest(yamlContent string) (*api.DryRunResponse, error) {
 	reqBody := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -111,7 +103,7 @@ func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		// Try to parse the error response first
-		var errorResp DryRunResponse
+		var errorResp api.DryRunResponse
 		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
 			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
 		}
@@ -119,7 +111,7 @@ func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
 		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var dryRunResp DryRunResponse
+	var dryRunResp api.DryRunResponse
 	if err := json.Unmarshal(body, &dryRunResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -127,23 +119,8 @@ func (c *Client) DryRunRequest(yamlContent string) (*DryRunResponse, error) {
 	return &dryRunResp, nil
 }
 
-// RunRequest represents execution service request
-type RunRequest struct {
-	YAMLContent   string `json:"yaml_content"`
-	Branch        string `json:"branch"`
-	Commit        string `json:"commit"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
-}
-
-// RunResponse represents execution service response
-type RunResponse struct {
-	Success bool     `json:"success"`
-	Errors  []string `json:"errors,omitempty"`
-	Message string   `json:"message,omitempty"`
-}
-
 // RunRequest forwards run request to execution service
-func (c *Client) RunRequest(req RunRequest) (*RunResponse, error) {
+func (c *Client) RunRequest(req api.RunRequest) (*api.RunResponse, error) {
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -164,7 +141,7 @@ func (c *Client) RunRequest(req RunRequest) (*RunResponse, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		// Try to parse error response first
-		var errorResp RunResponse
+		var errorResp api.RunResponse
 		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
 			return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
 		}
@@ -172,7 +149,7 @@ func (c *Client) RunRequest(req RunRequest) (*RunResponse, error) {
 		return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var runResp RunResponse
+	var runResp api.RunResponse
 	if err := json.Unmarshal(body, &runResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -220,17 +197,4 @@ func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse
 		return nil, http.StatusBadGateway, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 	return &out, http.StatusOK, nil
-}
-
-// ValidationResponse represents validation service response
-type ValidationResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-}
-
-// DryRunResponse represents dry run service response
-type DryRunResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-	Output string   `json:"output,omitempty"`
 }

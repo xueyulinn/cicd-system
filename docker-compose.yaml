@@ -18,3 +18,82 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  db-migrate:
+    image: yulinxue/cicd-db-migrate:v0.1.0-beta
+    container_name: e-team-db-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: cicd
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: cicd
+      DB_NAME: reportstore
+    restart: "no"
+
+  api-gateway:
+    container_name: e-team-api-gateway
+    image: yulinxue/cicd-api-gateway:v0.1.0-beta
+    environment:
+      PORT: "8000"
+      VALIDATION_URL: http://validation-service:8001
+      EXECUTION_URL: http://execution-service:8002
+      REPORTING_URL: http://reporting-service:8004
+    depends_on:
+      - validation-service
+      - execution-service
+      - reporting-service
+    ports:
+      - "8000:8000"
+
+  execution-service:
+    container_name: e-team-execution-service
+    image: yulinxue/cicd-execution-service:v0.1.0-beta
+    environment:
+      PORT: "8002"
+      DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      VALIDATION_URL: http://validation-service:8001
+      WORKER_URL: http://worker-service:8003
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      validation-service:
+        condition: service_started
+      worker-service:
+        condition: service_started
+    ports:
+      - "8002:8002"
+
+  validation-service:
+    container_name: e-team-validation-service
+    image: yulinxue/cicd-validation-service:v0.1.0-beta
+    environment:
+      PORT: "8001"
+    ports:
+      - "8001:8001"
+
+  worker-service:
+    container_name: e-team-worker-service
+    image: yulinxue/cicd-worker-service:v0.1.0-beta
+    # Local-dev friendly: run as root so docker.sock works out of the box.
+    user: "0:0"
+    environment:
+      PORT: "8003"
+    ports:
+      - "8003:8003"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  reporting-service:
+    container_name: e-team-reporting-service
+    image: yulinxue/cicd-reporting-service:v0.1.0-beta
+    environment:
+      PORT: "8004"
+      DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8004:8004"

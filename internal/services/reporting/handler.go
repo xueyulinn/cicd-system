@@ -3,11 +3,13 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -39,26 +41,26 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	query, parseErr := parseReportQuery(r)
 	if parseErr != nil {
-		writeError(w, http.StatusBadRequest, parseErr.Error())
+		api.WriteJSONError(w, http.StatusBadRequest, parseErr.Error())
 		return
 	}
 
@@ -67,14 +69,14 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	report, err := h.service.GetReport(ctx, query)
 	if err != nil {
-		writeError(w, err.StatusCode, err.Error())
+		api.WriteJSONError(w, err.StatusCode, err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(report); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
@@ -89,18 +91,10 @@ func parseReportQuery(r *http.Request) (models.ReportQuery, error) {
 	if runParam != "" {
 		runNo, err := strconv.Atoi(runParam)
 		if err != nil {
-			return models.ReportQuery{}, err
+			return models.ReportQuery{}, fmt.Errorf("parse report query run parameter: %w", err)
 		}
 		query.Run = &runNo
 	}
 
 	return query, nil
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
 }

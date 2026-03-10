@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -36,7 +38,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // handleHealth returns gateway and service health status
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -61,14 +63,14 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleServices returns status of all services
 func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -84,65 +86,42 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleValidate forwards validation requests to validation service
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
 	var req map[string]string
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
 	yamlContent, ok := req["yaml_content"]
 	if !ok {
-		http.Error(w, "Missing yaml_content field", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "missing yaml_content field")
 		return
 	}
 
-	// Forward to validation service
 	response, err := h.client.ValidateRequest(yamlContent)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		// Extract the error message if it contains JSON, otherwise use as-is
-		errorMsg := err.Error()
-		if strings.Contains(errorMsg, "{") {
-			// Try to extract just the error message from JSON
-			if strings.Contains(errorMsg, "validation service returned status") {
-				// Extract the clean error message
-				start := strings.LastIndex(errorMsg, ": \"")
-				if start != -1 {
-					errorMsg = errorMsg[start+3:]
-					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
-				}
-			}
-		}
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
+		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
 		w.WriteHeader(http.StatusOK)
@@ -150,65 +129,42 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleDryRun forwards dry run requests to validation service
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
 	var req map[string]string
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
 	yamlContent, ok := req["yaml_content"]
 	if !ok {
-		http.Error(w, "Missing yaml_content field", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "missing yaml_content field")
 		return
 	}
 
-	// Forward to validation service
 	response, err := h.client.DryRunRequest(yamlContent)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		// Extract the error message if it contains JSON, otherwise use as-is
-		errorMsg := err.Error()
-		if strings.Contains(errorMsg, "{") {
-			// Try to extract just the error message from JSON
-			if strings.Contains(errorMsg, "validation service returned status") {
-				// Extract clean error message
-				start := strings.LastIndex(errorMsg, ": \"")
-				if start != -1 {
-					errorMsg = errorMsg[start+3:]
-					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
-				}
-			}
-		}
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
+		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
 		w.WriteHeader(http.StatusOK)
@@ -216,59 +172,36 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleRun forwards run requests to execution service
 func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
-	var req RunRequest
+	var req api.RunRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	// Forward to execution service
 	response, err := h.client.RunRequest(req)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		// Extract error message if it contains JSON, otherwise use as-is
-		errorMsg := err.Error()
-		if strings.Contains(errorMsg, "{") {
-			// Try to extract just the error message from JSON
-			if strings.Contains(errorMsg, "execution service returned status") {
-				// Extract clean error message
-				start := strings.LastIndex(errorMsg, ": \"")
-				if start != -1 {
-					errorMsg = errorMsg[start+3:]
-					errorMsg = strings.TrimSuffix(errorMsg, "\"}")
-				}
-			}
-		}
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": errorMsg}); err != nil {
-			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		}
+		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Success {
 		w.WriteHeader(http.StatusOK)
@@ -276,14 +209,14 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleReport forwards report requests to reporting service.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -295,7 +228,7 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if runParam := strings.TrimSpace(r.URL.Query().Get("run")); runParam != "" {
 		runNo, err := strconv.Atoi(runParam)
 		if err != nil {
-			writeGatewayError(w, http.StatusBadRequest, "run must be an integer")
+			api.WriteJSONError(w, http.StatusBadRequest, "run must be an integer: "+err.Error())
 			return
 		}
 		query.Run = &runNo
@@ -303,14 +236,17 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	response, statusCode, err := h.client.ReportRequest(query)
 	if err != nil {
-		writeGatewayError(w, statusCode, err.Error())
+		if statusCode == 0 {
+			statusCode = http.StatusBadGateway
+		}
+		api.WriteJSONError(w, statusCode, err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
@@ -346,21 +282,10 @@ func (c *Client) checkReportHealth() (string, error) {
 	return "unhealthy", nil
 }
 
-func writeGatewayError(w http.ResponseWriter, statusCode int, message string) {
-	if statusCode == 0 {
-		statusCode = http.StatusBadGateway
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
-}
-
 func getGatewayPublicURL() string {
 	url := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_URL"))
 	if url == "" {
-		return "http://localhost:8000"
+		return config.DefaultGatewayURL
 	}
 	return strings.TrimRight(url, "/")
 }

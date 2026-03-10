@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
 // Handler handles HTTP requests for validation service
@@ -28,45 +30,39 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // handleHealth returns health status
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleValidate validates YAML pipeline
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
-	var req ValidationRequest
+	var req api.ValidateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	// Validate YAML
 	response := h.service.ValidateYAML(req.YAMLContent)
 
-	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
 		w.WriteHeader(http.StatusOK)
@@ -74,38 +70,32 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
 }
 
 // handleDryRun validates YAML and returns execution plan
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
-	var req DryRunRequest
+	var req api.ValidateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	// Process dry run
 	response := h.service.DryRunYAML(req.YAMLContent)
 
-	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
 		w.WriteHeader(http.StatusOK)
@@ -113,16 +103,6 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
-}
-
-// ValidationRequest represents validation request
-type ValidationRequest struct {
-	YAMLContent string `json:"yaml_content"`
-}
-
-// DryRunRequest represents dry run request
-type DryRunRequest struct {
-	YAMLContent string `json:"yaml_content"`
 }

@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/moby/moby/client"
 )
 
 const (
-	defaultAddr      = ":8003"
 	defaultJobTimeout = 5 * time.Minute
 )
 
@@ -26,13 +27,13 @@ type Server struct {
 	jobTimeout time.Duration // max duration for each ExecuteJob; 0 means defaultJobTimeout
 }
 
-// NewServer creates a new Worker Service server listening on addr (e.g. ":8003").
-// If addr is empty, defaultAddr (":8003") is used.
+// NewServer creates a new Worker Service server listening on addr (e.g. ":"+config.DefaultWorkerPort).
+// If addr is empty, ":"+config.DefaultWorkerPort is used.
 // jobTimeout is the max duration for a single job execution; if 0, defaultJobTimeout (5m) is used.
 // docker may be nil (e.g. in tests); job execution will fail until a client is set.
 func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Server {
 	if addr == "" {
-		addr = defaultAddr
+		addr = ":" + config.DefaultWorkerPort
 	}
 	if jobTimeout == 0 {
 		jobTimeout = defaultJobTimeout
@@ -70,7 +71,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -91,14 +92,14 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.docker == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "docker client not available")
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "docker client not available")
 		return
 	}
 
 	var req executeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("[execute] invalid JSON: %v", err)
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 	job := &models.JobExecutionPlan{Name: req.Name, Image: req.Image, Script: req.Script}
@@ -118,7 +119,7 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("[execute] job=%s duration=%v error=%v", jobName, duration, err)
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		api.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	log.Printf("[execute] job=%s duration=%v ok", jobName, duration)
@@ -126,12 +127,6 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"logs": logs})
-}
-
-func writeJSONError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // Run runs the Worker Service until ctx is cancelled or the server errors.

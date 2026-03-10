@@ -3,10 +3,11 @@ package execution
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
 type Handler struct {
@@ -38,54 +39,44 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
-
 }
 
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	if h.initErr != nil {
-		http.Error(w, fmt.Sprintf("Execution service not ready: %v", h.initErr), http.StatusServiceUnavailable)
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+h.initErr.Error())
 		return
 	}
 
-	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
 		return
 	}
-	defer func() {
-		_ = r.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer func() { _ = r.Body.Close() }()
 
-	// Parse request
-	var req RunRequest
+	var req api.RunRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	// Run pipeline through execution service
 	resp, err := h.service.Run(r.Context(), req)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		if encErr := json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); encErr != nil {
-			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		}
+		api.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -96,14 +87,6 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
 	}
-}
-
-// RunRequest is the input for running a pipeline.
-type RunRequest struct {
-	YAMLContent   string `json:"yaml_content"`
-	Branch        string `json:"branch"`
-	Commit        string `json:"commit"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
 }

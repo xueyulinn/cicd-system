@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
@@ -23,7 +25,7 @@ type GatewayClient struct {
 func NewGatewayClient() *GatewayClient {
 	gatewayURL := os.Getenv("GATEWAY_URL")
 	if gatewayURL == "" {
-		gatewayURL = "http://localhost:8000"
+		gatewayURL = config.DefaultGatewayURL
 	}
 
 	return &GatewayClient{
@@ -35,7 +37,7 @@ func NewGatewayClient() *GatewayClient {
 }
 
 // Validate sends validation request to gateway
-func (c *GatewayClient) Validate(yamlContent string) (*ValidationResponse, error) {
+func (c *GatewayClient) Validate(yamlContent string) (*api.ValidateResponse, error) {
 	reqBody := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -62,7 +64,7 @@ func (c *GatewayClient) Validate(yamlContent string) (*ValidationResponse, error
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var validationResp ValidationResponse
+	var validationResp api.ValidateResponse
 	if err := json.Unmarshal(body, &validationResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -71,7 +73,7 @@ func (c *GatewayClient) Validate(yamlContent string) (*ValidationResponse, error
 }
 
 // DryRun sends dry run request to gateway
-func (c *GatewayClient) DryRun(yamlContent string) (*DryRunResponse, error) {
+func (c *GatewayClient) DryRun(yamlContent string) (*api.DryRunResponse, error) {
 	reqBody := map[string]string{
 		"yaml_content": yamlContent,
 	}
@@ -98,7 +100,7 @@ func (c *GatewayClient) DryRun(yamlContent string) (*DryRunResponse, error) {
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var dryRunResp DryRunResponse
+	var dryRunResp api.DryRunResponse
 	if err := json.Unmarshal(body, &dryRunResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -107,7 +109,7 @@ func (c *GatewayClient) DryRun(yamlContent string) (*DryRunResponse, error) {
 }
 
 // Run sends run request to gateway
-func (c *GatewayClient) Run(req RunRequest) (*RunResponse, error) {
+func (c *GatewayClient) Run(req api.RunRequest) (*api.RunResponse, error) {
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -130,7 +132,7 @@ func (c *GatewayClient) Run(req RunRequest) (*RunResponse, error) {
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var runResp RunResponse
+	var runResp api.RunResponse
 	if err := json.Unmarshal(body, &runResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -184,32 +186,4 @@ func (c *GatewayClient) Report(query models.ReportQuery) (*models.ReportResponse
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 	return &reportResp, nil
-}
-
-// ValidationResponse represents gateway validation response
-type ValidationResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-}
-
-// DryRunResponse represents gateway dry run response
-type DryRunResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
-	Output string   `json:"output,omitempty"`
-}
-
-// RunRequest represents gateway run request
-type RunRequest struct {
-	YAMLContent   string `json:"yaml_content"`
-	Branch        string `json:"branch"`
-	Commit        string `json:"commit"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
-}
-
-// RunResponse represents gateway run response
-type RunResponse struct {
-	Success bool     `json:"success"`
-	Errors  []string `json:"errors,omitempty"`
-	Message string   `json:"message,omitempty"`
 }
