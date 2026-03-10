@@ -2,105 +2,209 @@
 
 ## Purpose
 
-This document describes how non-developers can download and run the application without building it from source.
+This document describes how to download, install, and run the CI/CD application without building anything from source. No programming knowledge is required.
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Git (required only to run pipelines inside a Git repository)
+- A machine running **Ubuntu 24.04.4 LTS** (x86_64 architecture)
+- **Git** (pre-installed on Ubuntu 24.04)
+- **Docker and Docker Compose** — if not installed, follow Step 1 below
 
-You do not need Go, Python, Java, or any other language runtime to use the released application.
+You do **not** need Go, Python, Java, or any other language runtime.
 
-## Download the CLI
+---
 
-Open the GitHub release page and download the binary that matches your operating system:
+## Step 1: Install Docker
 
-- `cicd-linux-amd64`
-- `cicd-linux-arm64`
-- `cicd-darwin-amd64`
-- `cicd-darwin-arm64`
+If Docker is already installed, skip to Step 2.
 
-Release page:
+Run the following commands one at a time in your terminal:
 
-- `https://github.com/CS7580-SEA-SP26/e-team/releases/tag/v0.1.0-beta`
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y ca-certificates curl
 
-After downloading, make the binary executable and move it to a directory in your `PATH` if needed.
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 
-Example on Linux:
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+
+sudo usermod -aG docker $USER
+```
+
+**Important**: Log out and log back in (or run `newgrp docker`) for the group change to take effect.
+
+Verify Docker is working:
+
+```bash
+docker --version
+docker run --rm hello-world
+```
+
+You should see "Hello from Docker!" in the output.
+
+---
+
+## Step 2: Download the CLI and System Components
+
+All release assets are available on the GitHub release page:
+
+> https://github.com/CS7580-SEA-SP26/e-team/releases/tag/v0.1.0-beta
+
+### Option A: Download from the browser
+
+If you have a desktop environment, open the link above in a browser, and download:
+
+- **`cicd-linux-amd64`** (the CLI binary)
+- **`compose-bundle-v0.1.0-beta.tar.gz`** (the backend services)
+
+### Option B: Download from the command line
+
+If you do not have a browser (e.g., Ubuntu Server), install the GitHub CLI and log in first:
+
+```bash
+sudo apt install -y gh
+gh auth login
+```
+
+Follow the prompts: select **GitHub.com** → **HTTPS** → **Login with a web browser**. It will display a short code — open https://github.com/login/device on any other device and enter the code.
+
+> If `sudo apt install -y gh` fails, see [Appendix: Install GitHub CLI](#appendix-install-github-cli) at the bottom of this document.
+
+Then download all release assets:
+
+```bash
+gh release download v0.1.0-beta --repo CS7580-SEA-SP26/e-team
+```
+
+### Install the CLI
 
 ```bash
 chmod +x cicd-linux-amd64
-mv cicd-linux-amd64 cicd
-./cicd --help
+sudo mv cicd-linux-amd64 /usr/local/bin/cicd
 ```
 
-## Download the System Components
+Verify:
 
-From the same GitHub release page, download:
+```bash
+cicd --help
+```
 
-- `compose-bundle-v0.1.0-beta.tar.gz`
+You should see a list of available commands.
 
-Extract it:
+---
+
+## Step 3: Start the System Components
+
+Extract the compose bundle and start the services:
 
 ```bash
 tar -xzf compose-bundle-v0.1.0-beta.tar.gz
 cd compose-bundle
-```
-
-## Configure the Compose Bundle
-
-Copy the environment template:
-
-```bash
 cp .env.example .env
-```
-
-You may edit `.env` if you want to change image tags or ports.
-
-## Start the System
-
-Run:
-
-```bash
 docker compose up -d
 ```
 
-Check status:
+This will download and start all backend services. The first run may take a few minutes.
+
+---
+
+## Step 4: Verify the Installation
+
+Check that all containers are running:
 
 ```bash
 docker compose ps
 ```
 
-Check the API gateway:
+All services should show `Up` status. Then check the API gateway health:
 
 ```bash
 curl http://localhost:8000/health
 ```
 
-## Use the CLI
+You should see a successful response.
 
-Run the CLI inside a Git repository that contains a pipeline file.
+For more detailed verification steps, see [verification.md](verification.md).
 
-Validate:
+---
 
-```bash
-./cicd verify .pipelines/pipeline.yaml
-```
+## Using the CLI
 
-Dry-run:
+The CLI must be run inside a Git repository that contains a pipeline file.
 
-```bash
-./cicd dryrun .pipelines/pipeline.yaml
-```
-
-Run:
+**Validate** a pipeline file:
 
 ```bash
-./cicd run --file .pipelines/pipeline.yaml
+cicd verify .pipelines/pipeline.yaml
 ```
+
+**Dry-run** (validate and simulate without executing):
+
+```bash
+cicd dryrun .pipelines/pipeline.yaml
+```
+
+**Run** a pipeline:
+
+```bash
+cicd run --file .pipelines/pipeline.yaml
+```
+
+For example pipelines that demonstrate success, failure, and validation errors, see the [README](README.md).
+
+---
 
 ## Stop the System
 
 ```bash
+cd ~/compose-bundle
 docker compose down
 ```
+
+To remove all data (database volumes, etc.):
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Troubleshooting
+
+| Problem                                        | Solution                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `permission denied` when running `docker`      | Log out and log back in, or run `newgrp docker`                          |
+| `connection refused` when running CLI commands | Make sure backend is running: `cd ~/compose-bundle && docker compose ps` |
+| Containers show `Exited` status                | Check logs: `docker compose logs <service-name>`                         |
+| `cicd: command not found`                      | Run: `sudo mv cicd-linux-amd64 /usr/local/bin/cicd`                      |
+
+---
+
+## Appendix: Install GitHub CLI
+
+If `sudo apt install -y gh` fails, use the official installation method:
+
+```bash
+(type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+&& sudo mkdir -p -m 755 /etc/apt/keyrings \
+&& out=$(mktemp) \
+&& wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+&& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+| sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+&& sudo apt update \
+&& sudo apt install gh -y
+```
+
+Then run `gh auth login` and follow the prompts.
