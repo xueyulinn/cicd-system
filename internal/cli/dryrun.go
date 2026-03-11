@@ -65,22 +65,7 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	// Call gateway for dry run
 	response, err := client.DryRun(string(fileContent))
 	if err != nil {
-		// Extract just the validation error message without file path
-		errorMsg := err.Error()
-		if strings.Contains(errorMsg, "gateway returned status") {
-			// Look for the actual validation error message
-			start := strings.Index(errorMsg, "content:")
-			if start != -1 {
-				errorMsg = errorMsg[start+8:] // Skip "content:" prefix
-				// Remove any trailing JSON artifacts more thoroughly
-				errorMsg = strings.TrimSuffix(errorMsg, "\"}")
-				errorMsg = strings.TrimSuffix(errorMsg, "\"")
-				errorMsg = strings.TrimSuffix(errorMsg, "}")
-			}
-		}
-		// Fix Unicode escaping
-		errorMsg = strings.ReplaceAll(errorMsg, "\\u003e", ">")
-		fmt.Fprintf(os.Stderr, "%s: %s\n", configPath, errorMsg)
+		fmt.Fprintf(os.Stderr, "%s: %s\n", configPath, err.Error())
 		return fmt.Errorf("dry run failed with %d error(s)", 1)
 	}
 
