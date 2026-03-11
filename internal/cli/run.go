@@ -90,18 +90,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	response, err := client.Run(req)
 	if err != nil {
-		// Extract just the execution error message without file path
-		errorMsg := err.Error()
-		if strings.Contains(errorMsg, "gateway returned status") {
-			// Look for the actual execution error message
-			start := strings.Index(errorMsg, "content:")
-			if start != -1 {
-				errorMsg = errorMsg[start+8:] // Skip "content:" prefix
-			}
-		}
-		// Fix Unicode escaping
-		errorMsg = strings.ReplaceAll(errorMsg, "\\u003e", ">")
-		fmt.Fprintf(os.Stderr, "%s: %s\n", runFile, errorMsg)
+		fmt.Fprintf(os.Stderr, "%s: %s\n", runFile, err.Error())
 		return fmt.Errorf("run failed")
 	}
 

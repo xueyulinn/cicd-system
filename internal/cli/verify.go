@@ -97,25 +97,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		// Call gateway for validation
 		response, err := client.Validate(string(fileContent))
 		if err != nil {
-			// Extract just the validation error message without file path
-			errorMsg := err.Error()
-			if strings.Contains(errorMsg, "gateway returned status") {
-				// Look for the actual validation error message
-				start := strings.Index(errorMsg, "content:")
-				if start != -1 {
-					errorMsg = errorMsg[start+8:] // Skip "content:" prefix
-					// Remove any trailing JSON artifacts more thoroughly
-					// Trim any whitespace first
-					for strings.HasSuffix(errorMsg, "\"") || strings.HasSuffix(errorMsg, "}") {
-						errorMsg = strings.TrimSuffix(errorMsg, "\"")
-						errorMsg = strings.TrimSuffix(errorMsg, "}")
-						errorMsg = strings.TrimSpace(errorMsg)
-					}
-				}
-			}
-			// Fix Unicode escaping
-			errorMsg = strings.ReplaceAll(errorMsg, "\\u003e", ">")
-			fmt.Fprintf(os.Stderr, "%s: %s\n", target, errorMsg)
+			fmt.Fprintf(os.Stderr, "%s: %s\n", target, err.Error())
 			totalErrors++
 			continue
 		}

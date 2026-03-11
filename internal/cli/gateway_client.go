@@ -61,6 +61,10 @@ func (c *GatewayClient) Validate(yamlContent string) (*api.ValidateResponse, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
+			return nil, fmt.Errorf("%s", errorResp["error"])
+		}
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -97,6 +101,10 @@ func (c *GatewayClient) DryRun(yamlContent string) (*api.DryRunResponse, error) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
+			return nil, fmt.Errorf("%s", errorResp["error"])
+		}
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -129,6 +137,10 @@ func (c *GatewayClient) Run(req api.RunRequest) (*api.RunResponse, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
+			return nil, fmt.Errorf("%s", errorResp["error"])
+		}
 		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(body))
 	}
 
