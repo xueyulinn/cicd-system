@@ -89,7 +89,7 @@ func (s *Store) GetStagesForRun(ctx context.Context, pipeline string, runNo int,
 // GetJobsForRun returns all jobs for a pipeline run (optionally filtered by stage and/or job).
 // stageFilter and jobFilter can be empty to mean "all". Results ordered by stage, then job.
 func (s *Store) GetJobsForRun(ctx context.Context, pipeline string, runNo int, stageFilter, jobFilter string) ([]Job, error) {
-	query := `SELECT pipeline, run_no, stage, job, start_time, end_time, status FROM job_runs WHERE pipeline = $1 AND run_no = $2`
+	query := `SELECT pipeline, run_no, stage, job, start_time, end_time, status, COALESCE(failures, false) FROM job_runs WHERE pipeline = $1 AND run_no = $2`
 	args := []interface{}{pipeline, runNo}
 	pos := 3
 	if stageFilter != "" {
@@ -112,7 +112,7 @@ func (s *Store) GetJobsForRun(ctx context.Context, pipeline string, runNo int, s
 	var jobs []Job
 	for rows.Next() {
 		var j Job
-		err := rows.Scan(&j.Pipeline, &j.RunNo, &j.Stage, &j.Job, &j.StartTime, &j.EndTime, &j.Status)
+		err := rows.Scan(&j.Pipeline, &j.RunNo, &j.Stage, &j.Job, &j.StartTime, &j.EndTime, &j.Status, &j.Failures)
 		if err != nil {
 			return nil, err
 		}

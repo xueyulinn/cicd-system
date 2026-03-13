@@ -107,3 +107,81 @@ func TestFormatReportJSON_NilReport(t *testing.T) {
 		t.Fatal("expected error for nil report")
 	}
 }
+
+// TestFormatReportYAML_JobFailuresField verifies that job output always includes the failures field.
+func TestFormatReportYAML_JobFailuresField(t *testing.T) {
+	start := time.Date(2025, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 9, 1, 10, 5, 0, 0, time.UTC)
+
+	report := &models.ReportResponse{
+		Pipeline: models.ReportPipeline{
+			Name:   "Default Pipeline",
+			RunNo:  1,
+			Status: "success",
+			Start:  start,
+			End:    &end,
+			Stage: []models.ReportStage{
+				{
+					Name:   "build",
+					Status: "success",
+					Start:  start,
+					End:    &end,
+					Job: []models.ReportJob{
+						{Name: "compile", Status: "success", Start: start, End: &end, Failures: false},
+						{Name: "lint", Status: "failed", Start: start, End: &end, Failures: true},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := FormatReportYAML(report)
+	if err != nil {
+		t.Fatalf("FormatReportYAML: %v", err)
+	}
+	outStr := string(out)
+	if !strings.Contains(outStr, "failures:") {
+		t.Errorf("report YAML must include failures field for jobs; got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "failures: false") {
+		t.Errorf("report YAML must include failures: false; got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "failures: true") {
+		t.Errorf("report YAML must include failures: true; got:\n%s", outStr)
+	}
+}
+
+func TestFormatReportJSON_JobFailuresField(t *testing.T) {
+	start := time.Date(2025, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 9, 1, 10, 5, 0, 0, time.UTC)
+
+	report := &models.ReportResponse{
+		Pipeline: models.ReportPipeline{
+			Name:   "Default Pipeline",
+			RunNo:  1,
+			Status: "success",
+			Start:  start,
+			End:    &end,
+			Stage: []models.ReportStage{
+				{
+					Name:   "build",
+					Status: "success",
+					Start:  start,
+					End:    &end,
+					Job: []models.ReportJob{
+						{Name: "compile", Status: "success", Start: start, End: &end, Failures: false},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := FormatReportJSON(report)
+	if err != nil {
+		t.Fatalf("FormatReportJSON: %v", err)
+	}
+	outStr := string(out)
+	if !strings.Contains(outStr, `"failures"`) {
+		t.Errorf("report JSON must include failures field; got:\n%s", outStr)
+	}
+}
