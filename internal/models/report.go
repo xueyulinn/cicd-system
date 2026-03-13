@@ -48,10 +48,11 @@ type ReportStage struct {
 	Job    []ReportJob `json:"job,omitempty" yaml:"job,omitempty"`
 }
 
-// ReportJob is a job report block.
+// ReportJob is a job report block. Failures is always present in output (true = allowed to fail).
 type ReportJob struct {
-	Name   string     `json:"name" yaml:"name"`
-	Status string     `json:"status" yaml:"status"`
-	Start  time.Time  `json:"start" yaml:"start"`
-	End    *time.Time `json:"end,omitempty" yaml:"end,omitempty"`
+	Name     string     `json:"name" yaml:"name"`
+	Status   string     `json:"status" yaml:"status"`
+	Start    time.Time  `json:"start" yaml:"start"`
+	End      *time.Time `json:"end,omitempty" yaml:"end,omitempty"`
+	Failures bool       `json:"failures" yaml:"failures"`
 }
