@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -147,6 +148,10 @@ needs:
 	if job.Needs[0] != "setup" {
 		t.Errorf("Expected need 'setup', got '%s'", job.Needs[0])
 	}
+
+	if job.Failures {
+		t.Errorf("Expected failures to default to false, got true")
+	}
 }
 
 func TestJobWithoutOptionalFields(t *testing.T) {
@@ -217,10 +222,11 @@ func TestPipelineMarshal(t *testing.T) {
 		},
 		Jobs: []Job{
 			{
-				Name:   "compile",
-				Stage:  "build",
-				Image:  "golang:1.21",
-				Script: []string{"go build"},
+				Name:     "compile",
+				Stage:    "build",
+				Image:    "golang:1.21",
+				Script:   []string{"go build"},
+				Failures: true,
 			},
 		},
 	}
@@ -247,6 +253,10 @@ func TestPipelineMarshal(t *testing.T) {
 
 	if len(unmarshaled.Jobs) != len(pipeline.Jobs) {
 		t.Errorf("Jobs count mismatch after marshal/unmarshal")
+	}
+
+	if !unmarshaled.Jobs[0].Failures {
+		t.Errorf("Expected failures field to survive marshal/unmarshal")
 	}
 }
 
@@ -306,6 +316,57 @@ script:
 
 	if job.Script[0] != "echo hello" {
 		t.Errorf("Expected script 'echo hello', got '%s'", job.Script[0])
+	}
+
+	if job.Failures {
+		t.Errorf("Expected missing failures to default to false, got true")
+	}
+}
+
+func TestJobUnmarshalFailuresTrue(t *testing.T) {
+	yamlContent := `
+name: "simple-job"
+stage: "build"
+failures: true
+image: "alpine"
+script:
+  - "echo hello"
+`
+
+	var job Job
+	err := yaml.Unmarshal([]byte(yamlContent), &job)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal job: %v", err)
+	}
+
+	if !job.Failures {
+		t.Errorf("Expected failures to be true, got false")
+	}
+}
+
+func TestJobMarshalJSONIncludesFailures(t *testing.T) {
+	job := Job{
+		Name:     "simple-job",
+		Stage:    "build",
+		Failures: true,
+	}
+
+	data, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("Failed to marshal job to JSON: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("Failed to unmarshal marshaled job JSON: %v", err)
+	}
+
+	failures, ok := payload["failures"].(bool)
+	if !ok {
+		t.Fatalf("Expected failures key in JSON output, got %v", payload)
+	}
+	if !failures {
+		t.Errorf("Expected failures to marshal as true, got false")
 	}
 }
 

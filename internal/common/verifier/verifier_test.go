@@ -412,3 +412,38 @@ compile:
 		t.Error("Expected rootNode to be set")
 	}
 }
+
+func TestJobFailuresMustBeBoolean(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Test Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - failures: "sometimes"
+  - script:
+    - "go build"
+`
+
+	pipeline, rootNode := parseYAML(t, yamlContent)
+	verifier := NewPipelineVerifier("test.yaml", pipeline, rootNode)
+
+	errors := verifier.Verify()
+	if len(errors) == 0 {
+		t.Fatal("Expected errors for non-boolean failures value, got none")
+	}
+
+	found := false
+	for _, err := range errors {
+		if strings.Contains(err.Error(), "wrong type for `failures` in job 'compile'. Expected boolean") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected boolean type error for failures, got: %v", errors)
+	}
+}

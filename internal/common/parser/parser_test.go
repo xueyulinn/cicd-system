@@ -251,3 +251,86 @@ func TestParserContentInvalidYAML(t *testing.T) {
 		t.Fatal("Expected parse error, got nil")
 	}
 }
+
+func TestParseJobFailuresTrue(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Failures True Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - failures: true
+  - script:
+    - "go build"
+`
+
+	parser := NewParserFromContent(yamlContent)
+	pipeline, _, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if len(pipeline.Jobs) != 1 {
+		t.Fatalf("Expected 1 job, got %d", len(pipeline.Jobs))
+	}
+	if !pipeline.Jobs[0].Failures {
+		t.Fatal("Expected job failures to be true")
+	}
+}
+
+func TestParseJobFailuresFalse(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Failures False Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - failures: false
+  - script:
+    - "go build"
+`
+
+	parser := NewParserFromContent(yamlContent)
+	pipeline, _, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if len(pipeline.Jobs) != 1 {
+		t.Fatalf("Expected 1 job, got %d", len(pipeline.Jobs))
+	}
+	if pipeline.Jobs[0].Failures {
+		t.Fatal("Expected job failures to be false")
+	}
+}
+
+func TestParseJobFailuresMissingDefaultsFalse(t *testing.T) {
+	yamlContent := `
+pipeline:
+  name: "Failures Default Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - script:
+    - "go build"
+`
+
+	parser := NewParserFromContent(yamlContent)
+	pipeline, _, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if len(pipeline.Jobs) != 1 {
+		t.Fatalf("Expected 1 job, got %d", len(pipeline.Jobs))
+	}
+	if pipeline.Jobs[0].Failures {
+		t.Fatal("Expected missing failures to default to false")
+	}
+}

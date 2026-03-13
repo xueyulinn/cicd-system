@@ -189,6 +189,10 @@ func parseJob(jobName string, node *yaml.Node) models.Job {
 				scriptLines = appendScript(scriptLines, fieldValue)
 			case "needs":
 				job.Needs = appendNeeds(job.Needs, fieldValue)
+			case "failures":
+				if fieldValue.Kind == yaml.ScalarNode && fieldValue.Tag == "!!bool" {
+					job.Failures = fieldValue.Value == "true"
+				}
 			}
 		}
 	}
