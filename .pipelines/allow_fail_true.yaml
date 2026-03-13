@@ -1,0 +1,40 @@
+pipeline:
+  name: "allow-failures-true"
+
+stages:
+  - build
+  - test
+  - deploy
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+    - "go build ./..."
+
+lint:
+  - stage: build
+  - image: "golang:1.21"
+  - failures: true
+  - script:
+    - "golangci-lint run"
+
+unit-tests:
+  - stage: test
+  - image: "golang:1.21"
+  - script:
+    - "go test ./..."
+
+integration-tests:
+  - stage: test
+  - image: "golang:1.21"
+  - failures: false
+  - needs: [unit-tests]
+  - script:
+    - "go test ./integration/..."
+
+deploy-prod:
+  - stage: deploy
+  - image: "alpine:3.20"
+  - script:
+    - "echo deploy"
