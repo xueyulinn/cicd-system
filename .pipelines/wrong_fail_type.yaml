@@ -1,0 +1,12 @@
+pipeline:
+  name: "allow-failures-invalid"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: "golang:1.21"
+  - failures: "sometimes"
+  - script:
+    - "go build ./..."
