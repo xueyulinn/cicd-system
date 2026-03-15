@@ -120,7 +120,8 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 
 		for _, job := range stage.Jobs {
 			// Persist job start immediately before worker execution.
-			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name); err != nil {
+			// Failures: default false until Track A adds field to JobExecutionPlan.
+			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, false); err != nil {
 				if finishErr := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); finishErr != nil {
 					return nil, fmt.Errorf("update stage record failed: %w", finishErr)
 				}
@@ -223,7 +224,8 @@ func (s *Service) finishStage(ctx context.Context, pipeline string, runNo int, s
 }
 
 // startJob inserts a job row in running state before worker execution.
-func (s *Service) startJob(ctx context.Context, pipeline string, runNo int, stage string, job string) error {
+// failures: when true, job is allowed to fail and does not affect stage status (Track B will set from plan).
+func (s *Service) startJob(ctx context.Context, pipeline string, runNo int, stage string, job string, failures bool) error {
 	now := time.Now().UTC()
 	in := store.CreateJobInput{
 		Pipeline:  pipeline,
@@ -232,6 +234,7 @@ func (s *Service) startJob(ctx context.Context, pipeline string, runNo int, stag
 		Job:       job,
 		StartTime: now,
 		Status:    store.StatusRunning,
+		Failures:  failures,
 	}
 	return s.store.CreateJob(ctx, in)
 }

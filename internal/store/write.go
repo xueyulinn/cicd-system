@@ -88,9 +88,9 @@ func (s *Store) UpdateStage(ctx context.Context, pipeline string, runNo int, sta
 // CreateJob inserts a new job run.
 func (s *Store) CreateJob(ctx context.Context, in CreateJobInput) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO job_runs (pipeline, run_no, stage, job, start_time, status)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		in.Pipeline, in.RunNo, in.Stage, in.Job, in.StartTime, in.Status,
+		`INSERT INTO job_runs (pipeline, run_no, stage, job, start_time, status, failures)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		in.Pipeline, in.RunNo, in.Stage, in.Job, in.StartTime, in.Status, in.Failures,
 	)
 	return err
 }

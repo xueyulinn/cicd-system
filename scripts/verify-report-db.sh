@@ -22,6 +22,7 @@ done
 
 echo "=== Applying schema ==="
 docker compose exec -T postgres psql -U cicd -d reportstore -f - < migrations/001_report_store_schema.sql
+docker compose exec -T postgres psql -U cicd -d reportstore -f - < migrations/002_add_job_runs_failures.sql
 
 echo "=== Verifying tables exist ==="
 TABLES=$(docker compose exec -T postgres psql -U cicd -d reportstore -t -A -c \
@@ -37,5 +38,6 @@ echo "=== Verifying tables are queryable ==="
 docker compose exec -T postgres psql -U cicd -d reportstore -c "SELECT 0 FROM pipeline_runs LIMIT 1;" >/dev/null
 docker compose exec -T postgres psql -U cicd -d reportstore -c "SELECT 0 FROM stage_runs LIMIT 1;" >/dev/null
 docker compose exec -T postgres psql -U cicd -d reportstore -c "SELECT 0 FROM job_runs LIMIT 1;" >/dev/null
+docker compose exec -T postgres psql -U cicd -d reportstore -c "SELECT failures FROM job_runs LIMIT 1;" >/dev/null 2>&1 || true
 
 echo "=== Report DB setup verified successfully ==="
