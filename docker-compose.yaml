@@ -20,7 +20,7 @@ services:
       retries: 5
 
   db-migrate:
-    image: yulinxue/cicd-db-migrate:v0.1.0-beta
+    image: yulinxue/cicd-db-migrate:latest
     container_name: e-team-db-migrate
     depends_on:
       postgres:
@@ -50,7 +50,7 @@ services:
 
   execution-service:
     container_name: e-team-execution-service
-    image: yulinxue/cicd-execution-service:v0.1.0-beta
+    image: yulinxue/cicd-execution-service:latest
     environment:
       PORT: "8002"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
@@ -88,7 +88,7 @@ services:
 
   reporting-service:
     container_name: e-team-reporting-service
-    image: yulinxue/cicd-reporting-service:v0.1.0-beta
+    image: yulinxue/cicd-reporting-service:latest
     environment:
       PORT: "8004"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
