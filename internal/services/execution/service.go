@@ -26,6 +26,11 @@ type Service struct {
 	store         *store.Store
 }
 
+type jobKey struct {
+	stage string
+	name  string
+}
+
 func NewService(ctx context.Context) (*Service, error) {
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
@@ -106,6 +111,8 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		}, nil
 	}
 
+	failuresByJob := buildFailuresByJob(pipeline)
+
 	// Forward jobs in execution order to worker service.
 	var logsByJob []string
 	for _, stage := range executionPlan.Stages {
@@ -119,9 +126,9 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		}
 
 		for _, job := range stage.Jobs {
+			allowFailure := failuresByJob[jobKey{stage: stage.Name, name: job.Name}]
 			// Persist job start immediately before worker execution.
-			// Failures: default false until Track A adds field to JobExecutionPlan.
-			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, false); err != nil {
+			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, allowFailure); err != nil {
 				if finishErr := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); finishErr != nil {
 					return nil, fmt.Errorf("update stage record failed: %w", finishErr)
 				}
@@ -133,10 +140,15 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 
 			logs, jobErr := s.executeJob(job, req.WorkspacePath)
 			if jobErr != nil {
-				// On failure, close job/stage/run as failed and stop processing.
 				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update job record failed: %w", err)
 				}
+				if allowFailure {
+					logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\nallowed failure: %v", stage.Name, job.Name, jobErr))
+					continue
+				}
+
+				// On failure, close job/stage/run as failed and stop processing.
 				if err := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update stage record failed: %w", err)
 				}
@@ -247,6 +259,19 @@ func (s *Service) finishJob(ctx context.Context, pipeline string, runNo int, sta
 		Status:  status,
 	}
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
+}
+
+func buildFailuresByJob(pipeline *models.Pipeline) map[jobKey]bool {
+	if pipeline == nil {
+		return map[jobKey]bool{}
+	}
+
+	failuresByJob := make(map[jobKey]bool, len(pipeline.Jobs))
+	for _, job := range pipeline.Jobs {
+		failuresByJob[jobKey{stage: job.Stage, name: job.Name}] = job.Failures
+	}
+
+	return failuresByJob
 }
 
 // workerExecuteBody is the request body for worker /execute (job + optional workspace).
