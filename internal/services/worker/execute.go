@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
@@ -121,7 +122,10 @@ func waitContainer(ctx context.Context, cli *client.Client, containerID string) 
 	select {
 	case err := <-wait.Error:
 		return err
-	case <-wait.Result:
+	case result := <-wait.Result:
+		if result.StatusCode != 0 {
+			return fmt.Errorf("container exited with status %s", strconv.FormatInt(result.StatusCode, 10))
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

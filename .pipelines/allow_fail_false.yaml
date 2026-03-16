@@ -1,5 +1,5 @@
 pipeline:
-  name: "allow-failures-true"
+  name: "allow-failures-false"
 
 stages:
   - build
