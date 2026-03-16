@@ -1,36 +1,67 @@
 package execution
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
-func TestBuildFailuresByJob(t *testing.T) {
+func TestBuildJobConfigs(t *testing.T) {
 	pipeline := &models.Pipeline{
 		Jobs: []models.Job{
 			{Name: "compile", Stage: "build", Failures: false},
-			{Name: "lint", Stage: "build", Failures: true},
+			{Name: "lint", Stage: "build", Failures: true, Needs: []string{"compile"}},
 			{Name: "deploy", Stage: "release", Failures: false},
 		},
 	}
 
-	failuresByJob := buildFailuresByJob(pipeline)
+	jobConfigs := buildJobConfigs(pipeline)
 
-	if failuresByJob[jobKey{stage: "build", name: "compile"}] {
+	if jobConfigs[jobKey{stage: "build", name: "compile"}].failures {
 		t.Fatalf("expected compile to require success")
 	}
-	if !failuresByJob[jobKey{stage: "build", name: "lint"}] {
+
+	lintConfig := jobConfigs[jobKey{stage: "build", name: "lint"}]
+	if !lintConfig.failures {
 		t.Fatalf("expected lint to allow failure")
 	}
-	if failuresByJob[jobKey{stage: "release", name: "deploy"}] {
+	if !reflect.DeepEqual(lintConfig.needs, []string{"compile"}) {
+		t.Fatalf("expected lint needs [compile], got %v", lintConfig.needs)
+	}
+
+	if jobConfigs[jobKey{stage: "release", name: "deploy"}].failures {
 		t.Fatalf("expected deploy to require success")
 	}
 }
 
-func TestBuildFailuresByJobNilPipeline(t *testing.T) {
-	failuresByJob := buildFailuresByJob(nil)
-	if len(failuresByJob) != 0 {
-		t.Fatalf("expected empty map for nil pipeline, got %d entries", len(failuresByJob))
+func TestBuildJobConfigsNilPipeline(t *testing.T) {
+	jobConfigs := buildJobConfigs(nil)
+	if len(jobConfigs) != 0 {
+		t.Fatalf("expected empty map for nil pipeline, got %d entries", len(jobConfigs))
+	}
+}
+
+func TestBlockedByFailedDependency(t *testing.T) {
+	allowedFailedJobs := map[jobKey]bool{
+		{stage: "build", name: "lint"}: true,
+	}
+
+	failedNeed, blocked := blockedByFailedDependency("build", []string{"compile", "lint"}, allowedFailedJobs)
+	if !blocked {
+		t.Fatal("expected dependency check to block job")
+	}
+	if failedNeed != "lint" {
+		t.Fatalf("expected lint to block job, got %q", failedNeed)
+	}
+}
+
+func TestBlockedByFailedDependencyDifferentStage(t *testing.T) {
+	allowedFailedJobs := map[jobKey]bool{
+		{stage: "build", name: "lint"}: true,
+	}
+
+	if failedNeed, blocked := blockedByFailedDependency("test", []string{"lint"}, allowedFailedJobs); blocked {
+		t.Fatalf("expected no block across different stages, got dependency %q", failedNeed)
 	}
 }

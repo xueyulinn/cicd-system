@@ -31,6 +31,11 @@ type jobKey struct {
 	name  string
 }
 
+type jobConfig struct {
+	failures bool
+	needs    []string
+}
+
 func NewService(ctx context.Context) (*Service, error) {
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
@@ -111,7 +116,8 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		}, nil
 	}
 
-	failuresByJob := buildFailuresByJob(pipeline)
+	jobConfigs := buildJobConfigs(pipeline)
+	allowedFailedJobs := make(map[jobKey]bool)
 
 	// Forward jobs in execution order to worker service.
 	var logsByJob []string
@@ -126,7 +132,9 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		}
 
 		for _, job := range stage.Jobs {
-			allowFailure := failuresByJob[jobKey{stage: stage.Name, name: job.Name}]
+			key := jobKey{stage: stage.Name, name: job.Name}
+			cfg := jobConfigs[key]
+			allowFailure := cfg.failures
 			// Persist job start immediately before worker execution.
 			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, allowFailure); err != nil {
 				if finishErr := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); finishErr != nil {
@@ -138,12 +146,33 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 				return nil, fmt.Errorf("create job record failed: %w", err)
 			}
 
+			if failedNeed, blocked := blockedByFailedDependency(stage.Name, cfg.needs, allowedFailedJobs); blocked {
+				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
+					return nil, fmt.Errorf("update job record failed: %w", err)
+				}
+				if err := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); err != nil {
+					return nil, fmt.Errorf("update stage record failed: %w", err)
+				}
+				if finishErr := s.finishRun(ctx, pipeline.Name, runNo, store.StatusFailed); finishErr != nil {
+					return nil, fmt.Errorf("update run record failed: %w", finishErr)
+				}
+
+				return &api.RunResponse{
+					Success: false,
+					Errors: []string{fmt.Sprintf(
+						"job %q in stage %q blocked by failed dependency %q marked with failures=true",
+						job.Name, stage.Name, failedNeed,
+					)},
+				}, nil
+			}
+
 			logs, jobErr := s.executeJob(job, req.WorkspacePath)
 			if jobErr != nil {
 				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update job record failed: %w", err)
 				}
 				if allowFailure {
+					allowedFailedJobs[key] = true
 					logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\nallowed failure: %v", stage.Name, job.Name, jobErr))
 					continue
 				}
@@ -261,17 +290,30 @@ func (s *Service) finishJob(ctx context.Context, pipeline string, runNo int, sta
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
 }
 
-func buildFailuresByJob(pipeline *models.Pipeline) map[jobKey]bool {
+func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	if pipeline == nil {
-		return map[jobKey]bool{}
+		return map[jobKey]jobConfig{}
 	}
 
-	failuresByJob := make(map[jobKey]bool, len(pipeline.Jobs))
+	jobConfigs := make(map[jobKey]jobConfig, len(pipeline.Jobs))
 	for _, job := range pipeline.Jobs {
-		failuresByJob[jobKey{stage: job.Stage, name: job.Name}] = job.Failures
+		jobConfigs[jobKey{stage: job.Stage, name: job.Name}] = jobConfig{
+			failures: job.Failures,
+			needs:    append([]string(nil), job.Needs...),
+		}
 	}
 
-	return failuresByJob
+	return jobConfigs
+}
+
+func blockedByFailedDependency(stage string, needs []string, allowedFailedJobs map[jobKey]bool) (string, bool) {
+	for _, need := range needs {
+		if allowedFailedJobs[jobKey{stage: stage, name: need}] {
+			return need, true
+		}
+	}
+
+	return "", false
 }
 
 // workerExecuteBody is the request body for worker /execute (job + optional workspace).
