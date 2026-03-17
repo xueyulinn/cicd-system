@@ -95,6 +95,43 @@ func TestE2E_Execute(t *testing.T) {
 	}
 }
 
+// TestE2E_Execute_failedCommand verifies non-zero container exits are treated as job failures.
+func TestE2E_Execute_failedCommand(t *testing.T) {
+	dockerCli, err := NewDockerClient(context.Background())
+	if err != nil {
+		t.Skipf("Docker not available, skip E2E: %v", err)
+	}
+	defer func() { _ = dockerCli.Close() }()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	srv := NewServer("", dockerCli, 0)
+	go func() { _ = srv.ServeListener(listener) }()
+	time.Sleep(100 * time.Millisecond)
+
+	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
+
+	body := []byte(`{"name":"e2e-fail","image":"alpine:latest","script":["exit 7"]}`)
+	resp, err := http.Post(baseURL+"/execute", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /execute: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("POST /execute: status = %d, want 500; body = %s", resp.StatusCode, string(bodyBytes))
+	}
+	if !strings.Contains(string(bodyBytes), "status 7") {
+		t.Fatalf("expected error body to mention exit status, got %s", string(bodyBytes))
+	}
+}
+
 // TestE2E_Execute_invalidJSON returns 400 for bad request body.
 func TestE2E_Execute_invalidJSON(t *testing.T) {
 	dockerCli, err := NewDockerClient(context.Background())

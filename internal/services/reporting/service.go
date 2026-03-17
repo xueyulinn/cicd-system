@@ -178,10 +178,11 @@ func mapJobs(jobs []store.Job) []models.ReportJob {
 	out := make([]models.ReportJob, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, models.ReportJob{
-			Name:   j.Job,
-			Status: j.Status,
-			Start:  j.StartTime,
-			End:    j.EndTime,
+			Name:     j.Job,
+			Status:   j.Status,
+			Start:    j.StartTime,
+			End:      j.EndTime,
+			Failures: j.Failures,
 		})
 	}
 	return out

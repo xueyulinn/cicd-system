@@ -436,6 +436,15 @@ func (v *PipelineVerifier) validateJobs(jobNodes []parser.JobNode) []error {
 					errors = append(errors, v.formatError(loc,
 						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected sequence, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
 				}
+			case "failures":
+				if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!bool" {
+					loc := models.Location{
+						Line:   fieldValue.Line,
+						Column: fieldValue.Column,
+					}
+					errors = append(errors, v.formatError(loc,
+						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected boolean, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
+				}
 			}
 		}
 	}

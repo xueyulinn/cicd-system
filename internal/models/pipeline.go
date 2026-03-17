@@ -39,11 +39,12 @@ func (s *Stage) UnmarshalYAML(value *yaml.Node) error {
 
 // Job represents a job with stage reference
 type Job struct {
-	Name   string   `yaml:"name"`
-	Stage  string   `yaml:"stage"` // Reference to stage name
-	Image  string   `yaml:"image,omitempty"`
-	Script []string `yaml:"script,omitempty"`
-	Needs  []string `yaml:"needs,omitempty"`
+	Name     string   `yaml:"name"`
+	Stage    string   `yaml:"stage"` // Reference to stage name
+	Image    string   `yaml:"image,omitempty"`
+	Script   []string `yaml:"script,omitempty"`
+	Needs    []string `yaml:"needs,omitempty"`
+	Failures bool     `json:"failures" yaml:"failures"`
 }
 
 // Location represents a position in the YAML file

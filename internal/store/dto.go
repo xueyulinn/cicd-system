@@ -40,6 +40,7 @@ type Job struct {
 	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	Status     string     `json:"status"`
+	Failures   bool       `json:"failures"` // when true, job is allowed to fail and does not affect stage status
 }
 
 // CreateRunInput is the input for CreateRun (run_no is allocated by the store).
@@ -81,6 +82,7 @@ type CreateJobInput struct {
 	Job        string
 	StartTime  time.Time
 	Status     string // typically StatusRunning
+	Failures   bool   // when true, job is allowed to fail; default false
 }
 
 // UpdateJobInput is the input for UpdateJob.

@@ -1,0 +1,24 @@
+pipeline:
+  name: "allow-failures-missing"
+
+stages:
+  - build
+  - docs
+
+compile:
+  - stage: build
+  - image: "golang:1.25"
+  - script:
+      - "go build ./..."
+
+lint:
+  - stage: build
+  - image: "golang:1.21"
+  - script:
+      - "golangci-lint run"
+
+generate-docs:
+  - stage: docs
+  - image: "alpine:3.20"
+  - script:
+      - "echo generating docs"
