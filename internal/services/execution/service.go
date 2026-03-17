@@ -117,8 +117,6 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	}
 
 	jobConfigs := buildJobConfigs(pipeline)
-	allowedFailedJobs := make(map[jobKey]bool)
-
 	// Forward jobs in execution order to worker service.
 	var logsByJob []string
 	for _, stage := range executionPlan.Stages {
@@ -146,33 +144,12 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 				return nil, fmt.Errorf("create job record failed: %w", err)
 			}
 
-			if failedNeed, blocked := blockedByFailedDependency(stage.Name, cfg.needs, allowedFailedJobs); blocked {
-				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
-					return nil, fmt.Errorf("update job record failed: %w", err)
-				}
-				if err := s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed); err != nil {
-					return nil, fmt.Errorf("update stage record failed: %w", err)
-				}
-				if finishErr := s.finishRun(ctx, pipeline.Name, runNo, store.StatusFailed); finishErr != nil {
-					return nil, fmt.Errorf("update run record failed: %w", finishErr)
-				}
-
-				return &api.RunResponse{
-					Success: false,
-					Errors: []string{fmt.Sprintf(
-						"job %q in stage %q blocked by failed dependency %q marked with failures=true",
-						job.Name, stage.Name, failedNeed,
-					)},
-				}, nil
-			}
-
 			logs, jobErr := s.executeJob(job, req.WorkspacePath)
 			if jobErr != nil {
 				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update job record failed: %w", err)
 				}
 				if allowFailure {
-					allowedFailedJobs[key] = true
 					logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\nallowed failure: %v", stage.Name, job.Name, jobErr))
 					continue
 				}
@@ -304,16 +281,6 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	}
 
 	return jobConfigs
-}
-
-func blockedByFailedDependency(stage string, needs []string, allowedFailedJobs map[jobKey]bool) (string, bool) {
-	for _, need := range needs {
-		if allowedFailedJobs[jobKey{stage: stage, name: need}] {
-			return need, true
-		}
-	}
-
-	return "", false
 }
 
 // workerExecuteBody is the request body for worker /execute (job + optional workspace).
