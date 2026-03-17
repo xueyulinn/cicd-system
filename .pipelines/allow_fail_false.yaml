@@ -10,20 +10,20 @@ compile:
   - stage: build
   - image: "golang:1.25"
   - script:
-    - "go build ./..."
+      - "go build ./..."
 
 lint:
   - stage: build
-  - image: "golang:1.25"
-  - failures: true
+  - image: "golang:1.21"
+  - failures: false
   - script:
-    - "golangci-lint run"
+      - "golangci-lint run"
 
 unit-tests:
   - stage: test
   - image: "golang:1.25"
   - script:
-    - "go test ./..."
+      - "go test ./..."
 
 integration-tests:
   - stage: test
@@ -31,10 +31,10 @@ integration-tests:
   - failures: false
   - needs: [unit-tests]
   - script:
-    - "go test ./integration/..."
+      - "go test ./integration/..."
 
 deploy-prod:
   - stage: deploy
   - image: "alpine:3.20"
   - script:
-    - "echo deploy"
+      - "echo deploy"
