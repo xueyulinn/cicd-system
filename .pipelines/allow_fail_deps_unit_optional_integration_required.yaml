@@ -16,7 +16,6 @@ unit-tests:
   - image: "golang:1.25"
   - failures: true
   - script:
-      # 这里可以让 unit-tests 偶尔失败，但不影响 stage
       - "echo running unit tests (optional) && exit 1"
 
 integration-tests:
@@ -25,5 +24,4 @@ integration-tests:
   - image: "golang:1.25"
   - failures: false
   - script:
-      # 真实场景下可以根据 unit 结果做不同处理，这里先简单设成成功
-      - "echo running integration tests (required) && go test ./internal/... ./cmd/... && exit 0"
+      - "echo running integration tests (required) && go test -v ./internal/... ./cmd/... && exit 0"
