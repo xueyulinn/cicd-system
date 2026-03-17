@@ -14,7 +14,7 @@ compile:
 unit-tests:
   - stage: test
   # change to golang:1.21 to test failure case"
-  - image: "golang:1.21"
+  - image: "golang:1.25"
   - script:
       - "echo running unit tests && go test ./internal/... ./cmd/... && exit 0"
 

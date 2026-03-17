@@ -16,7 +16,7 @@ unit-tests:
   - image: "golang:1.25"
   - failures: true
   - script:
-      - "echo running unit tests (optional) && exit 1"
+      - "echo 'running unit tests optional' && exit 1"
 
 integration-tests:
   - stage: test
@@ -24,4 +24,4 @@ integration-tests:
   - image: "golang:1.25"
   - failures: true
   - script:
-      - "echo running integration tests (optional) && exit 1"
+      - "echo 'running integration tests optional' && exit 1"
