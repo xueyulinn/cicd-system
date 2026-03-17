@@ -1,11 +1,11 @@
-# Week 5
+# Week 6
 
 
 # Completed tasks
 
 | Task                                                                                                                                               | Weight | Assignee  | 
 |----------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
-| [[Containerization] Containerize backend services with a single Docker Compose command](https://github.com/CS7580-SEA-SP26/e-team/issues/165)                               |M|xueyulinn|
+| [[Failure Feature] Update execution logic for allow-failure jobs](https://github.com/CS7580-SEA-SP26/e-team/issues/183)                               |M|xueyulinn|
 
 
 # Carry over tasks
@@ -16,15 +16,12 @@ Please note: the carry-over items in the backlog are intended to improve codebas
 
 
 # What worked this week?
-1. Code refactoring worked well. We redesigned reusable components/classes and reduced a significant amount of redundant code.
-2. Task division worked well. By splitting work across CLI, services, and documentation, team members were able to work asynchronously with fewer conflicts.
+1. Divided tasks early, so each team member could complete their work whenever they had time available.
 
 # What did not work this week?
 
 # Design updates
 
-1. We have added database schema into the design doc. Please check it out [here](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/design-db-schema.md).
-2. Updated high level architecture diagram to include the data layer. [here](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/high-level-design.md)
 
 
 > | Task | Points|
