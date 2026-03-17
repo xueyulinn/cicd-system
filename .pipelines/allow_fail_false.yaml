@@ -25,14 +25,6 @@ unit-tests:
   - script:
       - "go test ./..."
 
-integration-tests:
-  - stage: test
-  - image: "golang:1.25"
-  - failures: false
-  - needs: [unit-tests]
-  - script:
-      - "go test ./integration/..."
-
 deploy-prod:
   - stage: deploy
   - image: "alpine:3.20"
