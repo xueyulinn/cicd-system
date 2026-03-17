@@ -9,7 +9,9 @@
 | [[Failure Feature] Include failures in report response models & CLI report formatting](https://github.com/CS7580-SEA-SP26/e-team/issues/178) | M | Eugenia-Z|
 |[[Failure Feature] Update Store write path and read path to include Failures field](https://github.com/CS7580-SEA-SP26/e-team/issues/177) | M | Eugenia-Z |
 |[[Failure Feature]Add failures column to job_runs table](https://github.com/CS7580-SEA-SP26/e-team/issues/176) | S | Eugenia-Z |
-
+| [[Failure Feature] Add failures field to Job model and parser support](https://github.com/CS7580-SEA-SP26/e-team/issues/185)                               |S|Asurkatha|
+| [Parse failures from pipeline YAML job definitions](https://github.com/CS7580-SEA-SP26/e-team/issues/186)                               |S|Asurkatha|
+| [Add tests for failures parsing and validation](https://github.com/CS7580-SEA-SP26/e-team/issues/187)                               |S|Asurkatha|
 # Carry over tasks
 
 N/A
