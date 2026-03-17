@@ -23,5 +23,4 @@ integration-tests:
   - image: "golang:1.25"
   - failures: true
   - script:
-      # 故意失败，演示 optional 行为
       - "echo running integration tests && exit 1"
