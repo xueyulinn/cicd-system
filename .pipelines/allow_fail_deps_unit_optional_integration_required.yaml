@@ -1,0 +1,27 @@
+pipeline:
+  name: "allow-fail-deps-unit-optional-integration-required"
+
+stages:
+  - build
+  - test
+
+compile:
+  - stage: build
+  - image: "golang:1.25"
+  - script:
+      - "go build -o bin/cicd ./cmd/cicd"
+
+unit-tests:
+  - stage: test
+  - image: "golang:1.25"
+  - failures: true
+  - script:
+      - "echo 'running unit tests optional' && exit 1"
+
+integration-tests:
+  - stage: test
+  - needs: [unit-tests]
+  - image: "golang:1.25"
+  - failures: false
+  - script:
+      - "echo 'running integration tests required' && go test -v ./internal/... ./cmd/... && exit 0"

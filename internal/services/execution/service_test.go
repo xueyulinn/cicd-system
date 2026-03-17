@@ -42,26 +42,17 @@ func TestBuildJobConfigsNilPipeline(t *testing.T) {
 	}
 }
 
-func TestBlockedByFailedDependency(t *testing.T) {
-	allowedFailedJobs := map[jobKey]bool{
-		{stage: "build", name: "lint"}: true,
+func TestBuildJobConfigsCopiesNeeds(t *testing.T) {
+	pipeline := &models.Pipeline{
+		Jobs: []models.Job{
+			{Name: "compile", Stage: "build"},
+			{Name: "integration-tests", Stage: "build", Needs: []string{"compile"}},
+		},
 	}
 
-	failedNeed, blocked := blockedByFailedDependency("build", []string{"compile", "lint"}, allowedFailedJobs)
-	if !blocked {
-		t.Fatal("expected dependency check to block job")
-	}
-	if failedNeed != "lint" {
-		t.Fatalf("expected lint to block job, got %q", failedNeed)
-	}
-}
-
-func TestBlockedByFailedDependencyDifferentStage(t *testing.T) {
-	allowedFailedJobs := map[jobKey]bool{
-		{stage: "build", name: "lint"}: true,
-	}
-
-	if failedNeed, blocked := blockedByFailedDependency("test", []string{"lint"}, allowedFailedJobs); blocked {
-		t.Fatalf("expected no block across different stages, got dependency %q", failedNeed)
+	jobConfigs := buildJobConfigs(pipeline)
+	integrationConfig := jobConfigs[jobKey{stage: "build", name: "integration-tests"}]
+	if !reflect.DeepEqual(integrationConfig.needs, []string{"compile"}) {
+		t.Fatalf("expected integration-tests needs [compile], got %v", integrationConfig.needs)
 	}
 }
