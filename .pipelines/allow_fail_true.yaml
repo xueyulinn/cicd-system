@@ -14,7 +14,7 @@ compile:
 
 lint:
   - stage: build
-  - image: "golang:1.25"
+  - image: "golang:1.21"
   - failures: true
   - script:
       - "golangci-lint run"
