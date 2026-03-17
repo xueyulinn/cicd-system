@@ -8,26 +8,26 @@ stages:
 
 compile:
   - stage: build
-  - image: "golang:1.21"
+  - image: "golang:1.25"
   - script:
     - "go build ./..."
 
 lint:
   - stage: build
-  - image: "golang:1.21"
+  - image: "golang:1.25"
   - failures: true
   - script:
     - "golangci-lint run"
 
 unit-tests:
   - stage: test
-  - image: "golang:1.21"
+  - image: "golang:1.25"
   - script:
     - "go test ./..."
 
 integration-tests:
   - stage: test
-  - image: "golang:1.21"
+  - image: "golang:1.25"
   - failures: false
   - needs: [unit-tests]
   - script:
