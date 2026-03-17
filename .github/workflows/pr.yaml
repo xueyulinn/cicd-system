@@ -106,3 +106,4 @@ jobs:
         with:
           name: golangci-lint-report
           path: golangci-lint-report.json
+          retention-days: 1

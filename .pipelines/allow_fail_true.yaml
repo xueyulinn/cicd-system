@@ -9,6 +9,7 @@ stages:
 compile:
   - stage: build
   - image: "golang:1.21"
+  - failures: true
   - script:
     - "go build ./..."
 
