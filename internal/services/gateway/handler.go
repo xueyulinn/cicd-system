@@ -36,46 +36,19 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ready", h.handleReady)
 }
 
-// handleHealth returns gateway and service health status
+// handleHealth reports gateway liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
-	services := map[string]string{
-		"validation": "unknown",
-		"reporting":  "unknown",
-		"execution":  "unknown",
-	}
-
-	if resp, err := h.client.checkValidationHealth(); err == nil {
-		services["validation"] = resp
-	}
-	if resp, err := h.client.checkReportHealth(); err == nil {
-		services["reporting"] = resp
-	}
-	if resp, err := h.client.checkExecutionHealth(); err == nil {
-		services["execution"] = resp
-	}
-
-	overallStatus := "healthy"
-	statusCode := http.StatusOK
-	for _, status := range services {
-		if status != "healthy" {
-			overallStatus = "unhealthy"
-			statusCode = http.StatusServiceUnavailable
-			break
-		}
-	}
-
 	response := map[string]interface{}{
-		"status":   overallStatus,
-		"services": services,
+		"status": "healthy",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
+	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
@@ -265,7 +238,47 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
-	
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	services := map[string]string{
+		"validation": "unknown",
+		"reporting":  "unknown",
+		"execution":  "unknown",
+	}
+
+	if resp, err := h.client.checkValidationReady(); err == nil {
+		services["validation"] = resp
+	}
+	if resp, err := h.client.checkReportReady(); err == nil {
+		services["reporting"] = resp
+	}
+	if resp, err := h.client.checkExecutionReady(); err == nil {
+		services["execution"] = resp
+	}
+
+	overallStatus := "ready"
+	statusCode := http.StatusOK
+	for _, status := range services {
+		if status != "ready" {
+			overallStatus = "not ready"
+			statusCode = http.StatusServiceUnavailable
+			break
+		}
+	}
+
+	response := map[string]interface{}{
+		"status":   overallStatus,
+		"services": services,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
 }
 
 
@@ -286,6 +299,22 @@ func (c *Client) checkValidationHealth() (string, error) {
 	return "unhealthy", nil
 }
 
+func (c *Client) checkValidationReady() (string, error) {
+	resp, err := c.httpClient.Get(c.validationURL + "/ready")
+	if err != nil {
+		return "not ready", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		return "ready", nil
+	}
+
+	return "not ready", nil
+}
+
 func (c *Client) checkReportHealth() (string, error) {
 	resp, err := c.httpClient.Get(c.reportURL + "/health")
 	if err != nil {
@@ -301,6 +330,21 @@ func (c *Client) checkReportHealth() (string, error) {
 	return "unhealthy", nil
 }
 
+func (c *Client) checkReportReady() (string, error) {
+	resp, err := c.httpClient.Get(c.reportURL + "/ready")
+	if err != nil {
+		return "not ready", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		return "ready", nil
+	}
+	return "not ready", nil
+}
+
 func (c *Client) checkExecutionHealth() (string, error) {
 	resp, err := c.httpClient.Get(c.executionURL + "/health")
 	if err != nil {
@@ -314,6 +358,21 @@ func (c *Client) checkExecutionHealth() (string, error) {
 		return "healthy", nil
 	}
 	return "unhealthy", nil
+}
+
+func (c *Client) checkExecutionReady() (string, error) {
+	resp, err := c.httpClient.Get(c.executionURL + "/ready")
+	if err != nil {
+		return "not ready", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		return "ready", nil
+	}
+	return "not ready", nil
 }
 
 
