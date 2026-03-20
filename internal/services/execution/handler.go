@@ -35,6 +35,33 @@ func (h *Handler) Close() {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/run", h.handleExecution)
+	mux.HandleFunc("/ready", h.handleReady)
+}
+
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	if h.initErr != nil {
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+h.initErr.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := h.service.Ready(ctx); err != nil {
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {

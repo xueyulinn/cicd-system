@@ -47,6 +47,13 @@ func (e *ServiceError) Error() string {
 	return e.Message
 }
 
+func (s *Service) Ping(ctx context.Context) error{
+	if s.store == nil {
+		return errors.New("store is not initialized")
+	}
+	return s.store.Ping(ctx)  
+}
+
 func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*models.ReportResponse, *ServiceError) {
 	if strings.TrimSpace(query.Pipeline) == "" {
 		return nil, &ServiceError{StatusCode: 400, Message: "pipeline is required"}
@@ -186,4 +193,8 @@ func mapJobs(jobs []store.Job) []models.ReportJob {
 		})
 	}
 	return out
+}
+
+func (s *Service) Ping(ctx context.Context) error {
+	return s.db
 }

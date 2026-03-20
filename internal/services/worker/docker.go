@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/moby/moby/client"
 )
@@ -20,4 +21,16 @@ func NewDockerClient(ctx context.Context) (*client.Client, error) {
 		return nil, err
 	}
 	return cli, nil
+}
+
+func pingDocker(ctx context.Context, cli *client.Client) error {
+	if cli == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	if _, err := cli.Ping(ctx, client.PingOptions{}); err != nil {
+		return err
+	}
+
+	return nil
 }

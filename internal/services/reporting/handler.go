@@ -37,6 +37,27 @@ func (h *Handler) Close() {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/report", h.handleReport)
+	mux.HandleFunc("/ready", h.handleReady)
+}
+
+// Check is DB is ready
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2 * time.Second)
+	defer cancel()
+
+	if err := h.service.Ping(ctx); err != nil {
+		api.WriteJSONError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")                                                                                                                                                                                                       
+    w.WriteHeader(http.StatusOK)                                                                                                                                                                                                                             
+    _ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})   
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {

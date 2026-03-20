@@ -66,6 +66,36 @@ func (s *Service) Close() {
 	}
 }
 
+// Ready reports whether the execution service can serve requests.
+// The service depends on the report store and the worker service.
+func (s *Service) Ready(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("execution service is not initialized")
+	}
+	if s.store == nil {
+		return fmt.Errorf("report store is not initialized")
+	}
+	if err := s.store.Ping(ctx); err != nil {
+		return fmt.Errorf("report store is not ready: %w", err)
+	}
+
+	resp, err := s.httpClient.Get(s.workerURL + "/ready")
+	if err != nil {
+		return fmt.Errorf("worker service is not ready: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("worker service readiness returned status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("worker service readiness returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	return nil
+}
+
 // Run validates the pipeline before execution.
 // Actual execution can be added after validation succeeds.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
