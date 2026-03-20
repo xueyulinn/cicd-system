@@ -33,44 +33,58 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dryrun", h.handleDryRun)
 	mux.HandleFunc("/run", h.handleRun)
 	mux.HandleFunc("/report", h.handleReport)
+	mux.HandleFunc("/ready", h.handleReady)
 }
 
 // handleHealth returns gateway and service health status
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
-	// Check validation service health
-	validationResp := "unknown"
-	if resp, err := h.client.checkValidationHealth(); err == nil {
-		validationResp = resp
+	services := map[string]string{
+		"validation": "unknown",
+		"reporting":  "unknown",
+		"execution":  "unknown",
 	}
-	reportResp := "unknown"
+
+	if resp, err := h.client.checkValidationHealth(); err == nil {
+		services["validation"] = resp
+	}
 	if resp, err := h.client.checkReportHealth(); err == nil {
-		reportResp = resp
+		services["reporting"] = resp
+	}
+	if resp, err := h.client.checkExecutionHealth(); err == nil {
+		services["execution"] = resp
+	}
+
+	overallStatus := "healthy"
+	statusCode := http.StatusOK
+	for _, status := range services {
+		if status != "healthy" {
+			overallStatus = "unhealthy"
+			statusCode = http.StatusServiceUnavailable
+			break
+		}
 	}
 
 	response := map[string]interface{}{
-		"status": "healthy",
-		"services": map[string]string{
-			"validation": validationResp,
-			"reporting":  reportResp,
-		},
+		"status":   overallStatus,
+		"services": services,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleServices returns status of all services
 func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -86,14 +100,14 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleValidate forwards validation requests to validation service
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -129,14 +143,14 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleDryRun forwards dry run requests to validation service
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -172,14 +186,14 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleRun forwards run requests to execution service
 func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -209,14 +223,14 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleReport forwards report requests to reporting service.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -246,9 +260,14 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
+
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
+	
+}
+
 
 // checkValidationHealth checks validation service health
 func (c *Client) checkValidationHealth() (string, error) {
@@ -281,6 +300,22 @@ func (c *Client) checkReportHealth() (string, error) {
 	}
 	return "unhealthy", nil
 }
+
+func (c *Client) checkExecutionHealth() (string, error) {
+	resp, err := c.httpClient.Get(c.executionURL + "/health")
+	if err != nil {
+		return "unhealthy", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		return "healthy", nil
+	}
+	return "unhealthy", nil
+}
+
 
 func getGatewayPublicURL() string {
 	url := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_URL"))

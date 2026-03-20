@@ -39,20 +39,20 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -87,6 +87,6 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
