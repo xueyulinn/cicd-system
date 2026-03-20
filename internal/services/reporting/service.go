@@ -194,7 +194,3 @@ func mapJobs(jobs []store.Job) []models.ReportJob {
 	}
 	return out
 }
-
-func (s *Service) Ping(ctx context.Context) error {
-	return s.db
-}
