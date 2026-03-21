@@ -35,6 +35,16 @@ Stop:
 docker compose down
 ```
 
+## Kubernetes (Postgres StatefulSet + PVC)
+
+For in-cluster Postgres (Track B / Issue 1), apply the manifests under `k8s/postgres/`:
+
+```bash
+kubectl apply -k k8s/postgres/
+```
+
+See **[k8s/postgres/README.md](../k8s/postgres/README.md)** for verification, in-cluster `DATABASE_URL`, and production notes.
+
 ## Apply schema
 
 After Postgres is running, create the report store tables and indexes once:
