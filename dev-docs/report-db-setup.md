@@ -37,7 +37,7 @@ docker compose down
 
 ## Kubernetes (Postgres StatefulSet + PVC)
 
-For in-cluster Postgres (Track B / Issue 1), apply the manifests under `k8s/postgres/`:
+For in-cluster Postgres, apply the manifests under `k8s/postgres/`:
 
 ```bash
 kubectl apply -k k8s/postgres/
