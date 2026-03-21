@@ -25,26 +25,27 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/validate", h.handleValidate)
 	mux.HandleFunc("/dryrun", h.handleDryRun)
+	mux.HandleFunc("/ready", h.handleReady)
 }
 
 // handleHealth returns health status
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleValidate validates YAML pipeline
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -70,14 +71,14 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }
 
 // handleDryRun validates YAML and returns execution plan
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -103,6 +104,20 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, "failed to encode response")
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+}
+
+// handleReady returns readiness status
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 }

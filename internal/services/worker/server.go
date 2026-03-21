@@ -42,11 +42,32 @@ func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Se
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/execute", s.handleExecute)
+	mux.HandleFunc("/ready", s.handleReady)
 	s.server = &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
 	return s
+}
+
+// handleReady reports whether the worker can reach the Docker daemon.
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := pingDocker(ctx, s.docker); err != nil {
+		api.WriteJSONError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }
 
 // Start starts the HTTP server. It blocks until the server is stopped.
@@ -71,7 +92,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
