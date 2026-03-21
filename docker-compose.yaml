@@ -35,7 +35,7 @@ services:
 
   api-gateway:
     container_name: e-team-api-gateway
-    image: yulinxue/cicd-api-gateway:v0.1.0-beta
+    image: yulinxue/cicd-api-gateway:latest
     environment:
       PORT: "8000"
       VALIDATION_URL: http://validation-service:8001
@@ -68,7 +68,7 @@ services:
 
   validation-service:
     container_name: e-team-validation-service
-    image: yulinxue/cicd-validation-service:v0.1.0-beta
+    image: yulinxue/cicd-validation-service:latest
     environment:
       PORT: "8001"
     ports:
@@ -76,7 +76,7 @@ services:
 
   worker-service:
     container_name: e-team-worker-service
-    image: yulinxue/cicd-worker-service:v0.1.0-beta
+    image: yulinxue/cicd-worker-service:latest
     # Local-dev friendly: run as root so docker.sock works out of the box.
     user: "0:0"
     environment:
