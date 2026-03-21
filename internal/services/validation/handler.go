@@ -35,11 +35,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
 // handleValidate validates YAML pipeline
@@ -64,14 +60,10 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	response := h.service.ValidateYAML(req.YAMLContent)
 
-	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
 
@@ -97,14 +89,10 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	response := h.service.DryRunYAML(req.YAMLContent)
 
-	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
 
@@ -115,9 +103,5 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
