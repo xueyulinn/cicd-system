@@ -24,7 +24,7 @@
 - `scripts/install.sh` currently installs only the CLI binary and does not install the Docker Compose bundle.
 - `scripts/install.sh` supports Linux and macOS only; Windows environments such as Git Bash are not supported.
 - The current `docker-compose.yaml` still builds images locally and depends on repository-local files, so it is not yet a fully portable release bundle.
-- The `db-migrate` service currently mounts local migration files instead of using a standalone migration image.
+- The `db-migrate` service builds from `migrations/Dockerfile` (SQL files baked into the image); changing migrations requires rebuilding that image.
 - PostgreSQL data persistence is not configured with a named volume, so recreated containers may lose database data.
 - `worker-service` depends on Docker socket access and runs as root in local containerized setups, which is convenient for development but not ideal for hardened environments.
 - Running the full stack still assumes the user is working from the repository directory.

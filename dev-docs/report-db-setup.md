@@ -35,15 +35,18 @@ Stop:
 docker compose down
 ```
 
-## Kubernetes (Postgres StatefulSet + PVC)
+## Kubernetes (Postgres StatefulSet + PVC + migration Job)
 
-For in-cluster Postgres, apply the manifests under `k8s/postgres/`:
+1. Build the migrate image (includes all `migrations/*.sql` in sorted order):  
+   `docker build -f migrations/Dockerfile -t e-team-db-migrate:latest .`  
+   (On minikube, load or build into the cluster — see README below.)
+2. Apply manifests:
 
 ```bash
 kubectl apply -k k8s/postgres/
 ```
 
-See **[k8s/postgres/README.md](../k8s/postgres/README.md)** for verification, in-cluster `DATABASE_URL`, and production notes.
+See **[k8s/postgres/README.md](../k8s/postgres/README.md)** for Postgres/migration verification, in-cluster `DATABASE_URL`, re-running the Job, and production notes.
 
 ## Apply schema
 

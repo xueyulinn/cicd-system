@@ -10,3 +10,4 @@ resources:
   - service-headless.yaml
   - service.yaml
   - statefulset.yaml
+  - migrate-job.yaml
