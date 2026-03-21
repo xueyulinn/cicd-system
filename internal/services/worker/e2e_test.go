@@ -44,8 +44,12 @@ func TestE2E_Health(t *testing.T) {
 		t.Errorf("GET /health: status = %d, want 200", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if string(body) != `{"status":"ok"}` {
-		t.Errorf("GET /health: body = %q, want %q", body, `{"status":"ok"}`)
+	var payload map[string]string
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("GET /health: decode body: %v; raw=%q", err, body)
+	}
+	if payload["status"] != "healthy" {
+		t.Errorf("GET /health: status body = %q, want %q", payload["status"], "healthy")
 	}
 }
 
