@@ -253,23 +253,6 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, statusCode, response)
 }
 
-// checkValidationHealth checks validation service health
-func (c *Client) checkValidationHealth() (string, error) {
-	resp, err := c.httpClient.Get(c.validationURL + "/health")
-	if err != nil {
-		return "unhealthy", err
-	}
-	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
-	}()
-
-	if resp.StatusCode == http.StatusOK {
-		return "healthy", nil
-	}
-
-	return "unhealthy", nil
-}
-
 func (c *Client) checkValidationReady() (string, error) {
 	resp, err := c.httpClient.Get(c.validationURL + "/ready")
 	if err != nil {
@@ -286,21 +269,6 @@ func (c *Client) checkValidationReady() (string, error) {
 	return "not ready", nil
 }
 
-func (c *Client) checkReportHealth() (string, error) {
-	resp, err := c.httpClient.Get(c.reportURL + "/health")
-	if err != nil {
-		return "unhealthy", err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode == http.StatusOK {
-		return "healthy", nil
-	}
-	return "unhealthy", nil
-}
-
 func (c *Client) checkReportReady() (string, error) {
 	resp, err := c.httpClient.Get(c.reportURL + "/ready")
 	if err != nil {
@@ -314,21 +282,6 @@ func (c *Client) checkReportReady() (string, error) {
 		return "ready", nil
 	}
 	return "not ready", nil
-}
-
-func (c *Client) checkExecutionHealth() (string, error) {
-	resp, err := c.httpClient.Get(c.executionURL + "/health")
-	if err != nil {
-		return "unhealthy", err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode == http.StatusOK {
-		return "healthy", nil
-	}
-	return "unhealthy", nil
 }
 
 func (c *Client) checkExecutionReady() (string, error) {
