@@ -67,7 +67,7 @@ kubectl apply -k k8s/postgres/
 postgres://cicd:cicd@postgres.e-team.svc.cluster.local:5432/reportstore?sslmode=disable
 ```
 
-Set `DATABASE_URL` or `REPORT_DB_URL` on execution/reporting workloads **after** the migrate Job has completed (or use an init container / ordering in a later change).
+Execution and reporting Deployments in `k8s/` use `postgres.e-team.svc.cluster.local` and an **init container** that waits for Postgres plus the `pipeline_runs` table (migrations applied) before starting the app.
 
 ## Credentials
 
@@ -77,7 +77,16 @@ Default user/password/db match `docker-compose.yaml` (`cicd` / `cicd` / `reports
 
 `docker-compose.yaml` `db-migrate` uses the same `migrations/Dockerfile`; it now applies **all** `migrations/*.sql` in order when the container runs.
 
-## Next (optional)
+## End-to-end schema check (cluster)
 
-- Wire execution/reporting Deployments to wait for migrations + use internal DNS
-- CI: build/push `e-team-db-migrate` (or your registry) on migration changes
+From repo root (after `kubectl apply -k k8s/postgres/` and migrate image available):
+
+```bash
+./scripts/verify-report-db-k8s.sh
+```
+
+Override namespace: `K8S_NAMESPACE=e-team ./scripts/verify-report-db-k8s.sh`
+
+## CI
+
+PRs that touch `migrations/**` run `.github/workflows/migrations-docker.yaml` to ensure `migrations/Dockerfile` still builds. Pushing to a registry remains a separate release step.

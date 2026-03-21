@@ -6,7 +6,8 @@ metadata:
     app: execution-service
 data:
   PORT: "8002"
-  DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+  # Postgres + migrations live in namespace e-team (see k8s/postgres/).
+  DATABASE_URL: postgres://cicd:cicd@postgres.e-team.svc.cluster.local:5432/reportstore?sslmode=disable
   VALIDATION_URL: http://validation-service:8001
   WORKER_URL: http://worker-service:8003
 ---
@@ -26,6 +27,36 @@ spec:
       labels:
         app: execution-service
     spec:
+      initContainers:
+        - name: wait-for-report-db
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              value: postgres.e-team.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: cicd
+            - name: PGDATABASE
+              value: reportstore
+            - name: PGPASSWORD
+              value: cicd
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Postgres (e-team)..."
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+                sleep 2
+              done
+              echo "Waiting for migrations (pipeline_runs)..."
+              until [ "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -A -c \
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs'")" = "1" ]; do
+                sleep 2
+              done
+              echo "Report DB schema ready."
       containers:
         - name: execution-service
           image: yulinxue/cicd-execution-service:latest

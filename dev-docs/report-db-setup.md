@@ -48,6 +48,14 @@ kubectl apply -k k8s/postgres/
 
 See **[k8s/postgres/README.md](../k8s/postgres/README.md)** for Postgres/migration verification, in-cluster `DATABASE_URL`, re-running the Job, and production notes.
 
+After Postgres and the migrate Job are up, you can verify tables/columns in-cluster with:
+
+```bash
+./scripts/verify-report-db-k8s.sh
+```
+
+Execution and reporting services (`k8s/execution-service.yaml`, `k8s/reporting-service.yaml`) point at `postgres.e-team.svc.cluster.local` and use an init container to wait until migrations have created `pipeline_runs` before starting.
+
 ## Apply schema
 
 After Postgres is running, create the report store tables and indexes once:
