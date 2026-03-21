@@ -47,7 +47,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 2 * time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	if err := h.service.Ping(ctx); err != nil {
@@ -55,9 +55,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")                                                                                                                                                                                                       
-    w.WriteHeader(http.StatusOK)                                                                                                                                                                                                                             
-    _ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})   
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -66,11 +64,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
@@ -94,11 +88,7 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(report); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, report)
 }
 
 func parseReportQuery(r *http.Request) (models.ReportQuery, error) {

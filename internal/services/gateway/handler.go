@@ -47,11 +47,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleServices returns status of all services
@@ -70,11 +66,7 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleValidate forwards validation requests to validation service
@@ -109,14 +101,10 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
 
@@ -152,14 +140,10 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if response.Valid {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
 
@@ -189,14 +173,10 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if response.Success {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
 
@@ -230,14 +210,10 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
-func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
@@ -274,13 +250,8 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
 		"services": services,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, statusCode, response)
 }
-
 
 // checkValidationHealth checks validation service health
 func (c *Client) checkValidationHealth() (string, error) {
@@ -374,7 +345,6 @@ func (c *Client) checkExecutionReady() (string, error) {
 	}
 	return "not ready", nil
 }
-
 
 func getGatewayPublicURL() string {
 	url := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_URL"))

@@ -38,7 +38,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ready", h.handleReady)
 }
 
-func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
+func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
@@ -57,11 +57,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -70,11 +66,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
@@ -107,13 +99,9 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if resp.Success {
-		w.WriteHeader(http.StatusOK)
+		api.WriteJSON(w, http.StatusOK, resp)
 	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		api.WriteJSONError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		api.WriteJSON(w, http.StatusBadRequest, resp)
 	}
 }
