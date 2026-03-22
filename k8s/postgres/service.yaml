@@ -1,0 +1,17 @@
+# ClusterIP only — Postgres is not exposed outside the cluster by default.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: e-team
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: e-team
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+  selector:
+    app.kubernetes.io/name: postgres
