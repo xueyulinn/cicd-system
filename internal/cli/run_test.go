@@ -168,6 +168,27 @@ func TestRunPreRunE_FailsWhenCommitMismatch(t *testing.T) {
 	}
 }
 
+func TestNormalizeRepoURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "https", in: "https://github.com/org/repo.git", want: "https://github.com/org/repo.git"},
+		{name: "git ssh", in: "git@github.com:org/repo.git", want: "https://github.com/org/repo.git"},
+		{name: "ssh url", in: "ssh://git@github.com/org/repo.git", want: "https://github.com/org/repo.git"},
+		{name: "empty", in: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeRepoURL(tt.in); got != tt.want {
+				t.Fatalf("normalizeRepoURL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func initTempGitRepo(t *testing.T) (string, func()) {
 	t.Helper()
 

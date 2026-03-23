@@ -25,6 +25,7 @@ type RunRequest struct {
 	YAMLContent   string `json:"yaml_content"`
 	Branch        string `json:"branch"`
 	Commit        string `json:"commit"`
+	RepoURL       string `json:"repo_url,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 

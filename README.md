@@ -21,6 +21,34 @@ The e-team project is a CI/CD pipeline management system that provides:
 | Execution Service    | 8002 | Runs pipelines, coordinates jobs |
 | Worker Service       | 8003 | Executes job steps             |
 
+## Kubernetes Support
+
+The repository supports Kubernetes deployment for all current stateless services and optional in-cluster deployment for the report database.
+
+| Component | Type | K8s Enabled | Notes |
+|-----------|------|-------------|-------|
+| API Gateway | Stateless | Yes | Deployable via raw manifests in `k8s/` or Helm chart in `charts/e-team/` |
+| Validation Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| Execution Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
+| Reporting Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| PostgreSQL report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
+
+### Kubernetes Deployment Modes
+
+- **All-in-cluster**: install the Helm chart with `postgres.enabled=true` to run stateless services, Postgres, and the migration Job inside Kubernetes.
+- **Hybrid**: install the Helm chart with `postgres.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
+
+Service-to-service communication inside the cluster is done through Kubernetes Services and environment variables:
+
+- `VALIDATION_URL`
+- `EXECUTION_URL`
+- `REPORTING_URL`
+- `WORKER_URL`
+- `DATABASE_URL`
+
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](/mnt/c/Users/aarav/OneDrive/Desktop/CS7580/e-team/charts/e-team/README.md).
+
 ## Features
 
 - Validate pipeline configuration files (YAML format)

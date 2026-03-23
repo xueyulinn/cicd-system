@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,14 +13,16 @@ import (
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
 )
 
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
 const DefaultImage = "alpine:latest"
 
-// ExecuteJob runs a single job: optionally pull image (if provided), run container, wait for exit, collect logs, remove container.
-// If workspacePath is non-empty, it is mounted into the container at /workspace and set as WorkingDir so scripts run against the repo.
-func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, workspacePath string) (logs string, err error) {
+// ExecuteJob runs a single job: optionally pull image (if provided), materialize a workspace, run container, wait for exit,
+// collect logs, and remove the container.
+func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
 	if cli == nil || job == nil {
 		return "", fmt.Errorf("client and job are required")
 	}
@@ -34,6 +37,14 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 		if err := pullImage(ctx, cli, image); err != nil {
 			return "", fmt.Errorf("pull image %q: %w", image, err)
 		}
+	}
+
+	workspacePath, cleanup, err := materializeWorkspace(ctx, repoURL, commit, workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("prepare workspace: %w", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 
 	// 2. Create and start container
@@ -57,6 +68,41 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	}
 
 	return logs, nil
+}
+
+func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath string) (string, func(), error) {
+	if strings.TrimSpace(repoURL) != "" && strings.TrimSpace(commit) != "" {
+		tmpDir, err := os.MkdirTemp("", "cicd-worker-repo-*")
+		if err != nil {
+			return "", nil, err
+		}
+
+		repo, err := git.PlainCloneContext(ctx, tmpDir, &git.CloneOptions{
+			URL: repoURL,
+		})
+		if err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return "", nil, err
+		}
+
+		wt, err := repo.Worktree()
+		if err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return "", nil, err
+		}
+
+		if err := wt.Checkout(&git.CheckoutOptions{
+			Hash:  plumbing.NewHash(commit),
+			Force: true,
+		}); err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return "", nil, err
+		}
+
+		return tmpDir, func() { _ = os.RemoveAll(tmpDir) }, nil
+	}
+
+	return workspacePath, nil, nil
 }
 
 // scriptToCmd converts script lines (e.g. ["make build", "make test"]) into Docker Cmd.
