@@ -14,6 +14,10 @@
 |[Kubernetes Job to apply SQL migrations (001, 002, future-proof) ](https://github.com/CS7580-SEA-SP26/e-team/issues/204) | S | Eugenia-Z|
 |[Wire dependencies: migration after Postgres healthy; apps after migration success](https://github.com/CS7580-SEA-SP26/e-team/issues/205) | S | Eugenia-Z|
 |[Verify Postgres health and report-store schema inside the cluster](https://github.com/CS7580-SEA-SP26/e-team/issues/206) | M |Eugenia-Z|
+|[[Kubernetes] Standardize health and readiness endpoints across services](https://github.com/CS7580-SEA-SP26/e-team/issues/196) | M | xueyulinn|
+|[[Refactor] Unify JSON response handling across services](https://github.com/CS7580-SEA-SP26/e-team/issues/199) | M | xueyulinn|
+|[[Kubernetes] Add Kubernetes manifests for core services](https://github.com/CS7580-SEA-SP26/e-team/issues/202) | M | xueyulinn|
+|[[Kubernetes] Standardize health and readiness endpoints across services](https://github.com/CS7580-SEA-SP26/e-team/issues/196) | M | xueyulinn|
 
 # Carry over tasks
 
