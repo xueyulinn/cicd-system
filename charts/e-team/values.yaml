@@ -1,0 +1,162 @@
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  imagePullSecrets: []
+  podAnnotations: {}
+
+apiGateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: e-team-api-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  ingress:
+    enabled: true
+    className: nginx
+    host: cicd.local
+    path: /
+    pathType: Prefix
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "1200"
+
+validationService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: e-team-validation-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 8001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+executionService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: e-team-execution-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 8002
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  waitForDatabase:
+    enabled: true
+    image:
+      repository: postgres
+      tag: 16-alpine
+      pullPolicy: IfNotPresent
+
+workerService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: e-team-worker-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 8003
+  dockerSocket:
+    enabled: true
+    hostPath: /var/run/docker.sock
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+reportingService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: e-team-reporting-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 8004
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  waitForDatabase:
+    enabled: true
+    image:
+      repository: postgres
+      tag: 16-alpine
+      pullPolicy: IfNotPresent
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    username: cicd
+    password: cicd
+    database: reportstore
+  service:
+    port: 5432
+  persistence:
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+externalDatabase:
+  url: ""
+  host: ""
+  port: 5432
+  username: ""
+  password: ""
+  database: ""
+
+migration:
+  enabled: true
+  image:
+    repository: e-team-db-migrate
+    tag: latest
+    pullPolicy: IfNotPresent
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 86400
+  hookDeletePolicy: before-hook-creation,hook-succeeded
