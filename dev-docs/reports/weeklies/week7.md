@@ -20,8 +20,9 @@
 |[[Kubernetes] Standardize health and readiness endpoints across services](https://github.com/CS7580-SEA-SP26/e-team/issues/196) | M | xueyulinn|
 
 # Carry over tasks
-
-- N/A
+| Task                                                                                                                                               | Weight | Assignee  | 
+|----------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
+|[[Refactor] Async Dispatch in Execution Service and Add RabbitMQ Infrastructure ](https://github.com/CS7580-SEA-SP26/e-team/issues/208) | L | xueyulinn|
 
 
 
