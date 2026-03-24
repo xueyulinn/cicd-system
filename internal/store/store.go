@@ -26,9 +26,13 @@ func New(ctx context.Context, connURL string) (*Store, error) {
 	return &Store{pool: pool}, nil
 }
 
-// Close closes the connection pool. Call when shutting down the service.
+// Close the connection pool. Call when shutting down the service.
 func (s *Store) Close() {
 	if s.pool != nil {
 		s.pool.Close()
 	}
+}
+
+func (s * Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
 }

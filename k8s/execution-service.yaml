@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: execution-service-config
+  labels:
+    app: execution-service
+data:
+  PORT: "8002"
+  # Postgres + migrations live in namespace e-team (see k8s/postgres/).
+  DATABASE_URL: postgres://cicd:cicd@postgres.e-team.svc.cluster.local:5432/reportstore?sslmode=disable
+  VALIDATION_URL: http://validation-service:8001
+  WORKER_URL: http://worker-service:8003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+  labels:
+    app: execution-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: execution-service
+  template:
+    metadata:
+      labels:
+        app: execution-service
+    spec:
+      initContainers:
+        - name: wait-for-report-db
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              value: postgres.e-team.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: cicd
+            - name: PGDATABASE
+              value: reportstore
+            - name: PGPASSWORD
+              value: cicd
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Postgres (e-team)..."
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+                sleep 2
+              done
+              echo "Waiting for migrations (pipeline_runs)..."
+              until [ "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -A -c \
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs'")" = "1" ]; do
+                sleep 2
+              done
+              echo "Report DB schema ready."
+      containers:
+        - name: execution-service
+          image: yulinxue/cicd-execution-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8002
+          envFrom:
+            - configMapRef:
+                name: execution-service-config
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-service
+  labels:
+    app: execution-service
+spec:
+  selector:
+    app: execution-service
+  ports:
+    - name: http
+      port: 8002
+      targetPort: http
+  type: ClusterIP

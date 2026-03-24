@@ -66,6 +66,36 @@ func (s *Service) Close() {
 	}
 }
 
+// Ready reports whether the execution service can serve requests.
+// The service depends on the report store and the worker service.
+func (s *Service) Ready(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("execution service is not initialized")
+	}
+	if s.store == nil {
+		return fmt.Errorf("report store is not initialized")
+	}
+	if err := s.store.Ping(ctx); err != nil {
+		return fmt.Errorf("report store is not ready: %w", err)
+	}
+
+	resp, err := s.httpClient.Get(s.workerURL + "/ready")
+	if err != nil {
+		return fmt.Errorf("worker service is not ready: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("worker service readiness returned status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("worker service readiness returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	return nil
+}
+
 // Run validates the pipeline before execution.
 // Actual execution can be added after validation succeeds.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
@@ -144,7 +174,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 				return nil, fmt.Errorf("create job record failed: %w", err)
 			}
 
-			logs, jobErr := s.executeJob(job, req.WorkspacePath)
+			logs, jobErr := s.executeJob(job, req.WorkspacePath, req)
 			if jobErr != nil {
 				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update job record failed: %w", err)
@@ -203,7 +233,7 @@ func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequ
 		Status:    store.StatusRunning,
 		GitBranch: req.Branch,
 		GitHash:   req.Commit,
-		GitRepo:   req.WorkspacePath,
+		GitRepo:   firstNonEmpty(req.RepoURL, req.WorkspacePath),
 	}
 	return s.store.CreateRun(ctx, in)
 }
@@ -286,11 +316,18 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 // workerExecuteBody is the request body for worker /execute (job + optional workspace).
 type workerExecuteBody struct {
 	models.JobExecutionPlan
+	RepoURL       string `json:"repo_url,omitempty"`
+	Commit        string `json:"commit,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
-func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) (string, error) {
-	body, err := json.Marshal(workerExecuteBody{JobExecutionPlan: job, WorkspacePath: workspacePath})
+func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string, req api.RunRequest) (string, error) {
+	body, err := json.Marshal(workerExecuteBody{
+		JobExecutionPlan: job,
+		RepoURL:          req.RepoURL,
+		Commit:           req.Commit,
+		WorkspacePath:    workspacePath,
+	})
 	if err != nil {
 		return "", fmt.Errorf("marshal worker request: %w", err)
 	}
@@ -322,6 +359,15 @@ func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) 
 		return "", fmt.Errorf("unmarshal worker response: %w", err)
 	}
 	return ok.Logs, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // validatePipeline calls validation service and returns validation result.

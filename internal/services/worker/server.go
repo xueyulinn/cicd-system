@@ -42,11 +42,30 @@ func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Se
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/execute", s.handleExecute)
+	mux.HandleFunc("/ready", s.handleReady)
 	s.server = &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
 	return s
+}
+
+// handleReady reports whether the worker can reach the Docker daemon.
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := pingDocker(ctx, s.docker); err != nil {
+		api.WriteJSONError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable))
+		return
+	}
+
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 // Start starts the HTTP server. It blocks until the server is stopped.
@@ -71,24 +90,24 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, `{"status":"ok"}`)
+	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
 // executeRequest is the JSON body for /execute (job fields + optional workspace_path).
 type executeRequest struct {
 	models.JobExecutionPlan
+	RepoURL       string `json:"repo_url,omitempty"`
+	Commit        string `json:"commit,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
 // handleExecute runs a single job from a JSON body (JobExecutionPlan) and returns logs or error.
 func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	if s.docker == nil {
@@ -114,7 +133,7 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	start := time.Now()
-	logs, err := ExecuteJob(ctx, s.docker, job, req.WorkspacePath)
+	logs, err := ExecuteJob(ctx, s.docker, job, req.RepoURL, req.Commit, req.WorkspacePath)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -124,9 +143,7 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[execute] job=%s duration=%v ok", jobName, duration)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"logs": logs})
+	api.WriteJSON(w, http.StatusOK, map[string]string{"logs": logs})
 }
 
 // Run runs the Worker Service until ctx is cancelled or the server errors.

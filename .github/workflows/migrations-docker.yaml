@@ -1,0 +1,24 @@
+name: Migrations Docker image
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**"
+      - ".github/workflows/migrations-docker.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "migrations/**"
+      - ".github/workflows/migrations-docker.yaml"
+
+jobs:
+  build-db-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build migrate image (syntax + COPY sanity)
+        run: docker build -f migrations/Dockerfile -t e-team-db-migrate:ci .

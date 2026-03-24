@@ -1,0 +1,28 @@
+1. API Gateway access
+{{- if .Values.apiGateway.ingress.enabled }}
+  Add this host entry if needed:
+    {{ .Values.apiGateway.ingress.host }} -> your ingress IP
+
+  Then browse:
+    http://{{ .Values.apiGateway.ingress.host }}/health
+{{- else }}
+  Port-forward the gateway:
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "e-team.apiGatewayName" . }} {{ .Values.apiGateway.service.port }}:{{ .Values.apiGateway.service.port }}
+{{- end }}
+
+2. Helpful log commands
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.apiGatewayName" . }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.executionServiceName" . }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.reportingServiceName" . }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.workerServiceName" . }}
+{{- if and .Values.postgres.enabled .Values.migration.enabled }}
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "e-team.migrationJobName" . }}
+{{- end }}
+
+3. Uninstall behavior
+{{- if .Values.postgres.enabled }}
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+  The PostgreSQL PVC is intended to remain so report data is not deleted accidentally.
+{{- else }}
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- end }}
