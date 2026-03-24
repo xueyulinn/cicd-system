@@ -99,6 +99,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // executeRequest is the JSON body for /execute (job fields + optional workspace_path).
 type executeRequest struct {
 	models.JobExecutionPlan
+	RepoURL       string `json:"repo_url,omitempty"`
+	Commit        string `json:"commit,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
@@ -131,7 +133,7 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	start := time.Now()
-	logs, err := ExecuteJob(ctx, s.docker, job, req.WorkspacePath)
+	logs, err := ExecuteJob(ctx, s.docker, job, req.RepoURL, req.Commit, req.WorkspacePath)
 	duration := time.Since(start)
 
 	if err != nil {

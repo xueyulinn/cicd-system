@@ -174,7 +174,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 				return nil, fmt.Errorf("create job record failed: %w", err)
 			}
 
-			logs, jobErr := s.executeJob(job, req.WorkspacePath)
+			logs, jobErr := s.executeJob(job, req.WorkspacePath, req)
 			if jobErr != nil {
 				if err := s.finishJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, store.StatusFailed); err != nil {
 					return nil, fmt.Errorf("update job record failed: %w", err)
@@ -233,7 +233,7 @@ func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequ
 		Status:    store.StatusRunning,
 		GitBranch: req.Branch,
 		GitHash:   req.Commit,
-		GitRepo:   req.WorkspacePath,
+		GitRepo:   firstNonEmpty(req.RepoURL, req.WorkspacePath),
 	}
 	return s.store.CreateRun(ctx, in)
 }
@@ -316,11 +316,18 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 // workerExecuteBody is the request body for worker /execute (job + optional workspace).
 type workerExecuteBody struct {
 	models.JobExecutionPlan
+	RepoURL       string `json:"repo_url,omitempty"`
+	Commit        string `json:"commit,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 
-func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) (string, error) {
-	body, err := json.Marshal(workerExecuteBody{JobExecutionPlan: job, WorkspacePath: workspacePath})
+func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string, req api.RunRequest) (string, error) {
+	body, err := json.Marshal(workerExecuteBody{
+		JobExecutionPlan: job,
+		RepoURL:          req.RepoURL,
+		Commit:           req.Commit,
+		WorkspacePath:    workspacePath,
+	})
 	if err != nil {
 		return "", fmt.Errorf("marshal worker request: %w", err)
 	}
@@ -352,6 +359,15 @@ func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string) 
 		return "", fmt.Errorf("unmarshal worker response: %w", err)
 	}
 	return ok.Logs, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // validatePipeline calls validation service and returns validation result.

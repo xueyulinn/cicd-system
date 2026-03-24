@@ -83,6 +83,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		YAMLContent:   string(fileContent),
 		Branch:        runBranch,
 		Commit:        runCommit,
+		RepoURL:       getRepoURL(),
 		WorkspacePath: worktree,
 	}
 
@@ -324,6 +325,56 @@ func getWorkspacePath() (string, error) {
 	}
 
 	return wt.Filesystem.Root(), nil
+}
+
+func getRepoURL() string {
+	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		return ""
+	}
+
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		remotes, listErr := repo.Remotes()
+		if listErr != nil || len(remotes) == 0 {
+			return ""
+		}
+		remote = remotes[0]
+	}
+
+	cfg := remote.Config()
+	if cfg == nil || len(cfg.URLs) == 0 {
+		return ""
+	}
+
+	return normalizeRepoURL(cfg.URLs[0])
+}
+
+func normalizeRepoURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if strings.HasPrefix(raw, "git@") {
+		parts := strings.SplitN(strings.TrimPrefix(raw, "git@"), ":", 2)
+		if len(parts) == 2 {
+			return "https://" + parts[0] + "/" + parts[1]
+		}
+	}
+	if strings.HasPrefix(raw, "ssh://git@") {
+		trimmed := strings.TrimPrefix(raw, "ssh://git@")
+		parts := strings.SplitN(trimmed, "/", 2)
+		if len(parts) == 2 {
+			host := strings.Split(parts[0], ":")[0]
+			return "https://" + host + "/" + parts[1]
+		}
+	}
+	return raw
 }
 
 // createDetachedWorktree creates a temporary detached git worktree at commit
