@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - {{ include "e-team.prometheusName" . }}:{{ .Values.observability.prometheus.service.port }}
+
+  - job_name: otel-collector
+    static_configs:
+      - targets:
+          - {{ include "e-team.otelCollectorName" . }}:{{ .Values.observability.otelCollector.service.metricsPort }}
+
+  - job_name: cicd-services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - {{ include "e-team.apiGatewayName" . }}:{{ .Values.apiGateway.service.port }}
+          - {{ include "e-team.validationServiceName" . }}:{{ .Values.validationService.service.port }}
+          - {{ include "e-team.executionServiceName" . }}:{{ .Values.executionService.service.port }}
+          - {{ include "e-team.workerServiceName" . }}:{{ .Values.workerService.service.port }}
+          - {{ include "e-team.reportingServiceName" . }}:{{ .Values.reportingService.service.port }}

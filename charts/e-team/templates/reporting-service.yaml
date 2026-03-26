@@ -9,6 +9,12 @@ metadata:
 data:
   PORT: {{ .Values.reportingService.service.port | quote }}
   DATABASE_URL: {{ include "e-team.databaseURL" . | quote }}
+  SERVICE_NAME: reporting-service
+  OTEL_SERVICE_NAME: reporting-service
+  {{- if .Values.observability.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "e-team.otelHTTPEndpoint" . | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
