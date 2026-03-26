@@ -44,6 +44,9 @@ services:
       VALIDATION_URL: http://validation-service:8001
       EXECUTION_URL: http://execution-service:8002
       REPORTING_URL: http://reporting-service:8004
+      SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       - validation-service
       - execution-service
@@ -59,6 +62,9 @@ services:
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
       VALIDATION_URL: http://validation-service:8001
       WORKER_URL: http://worker-service:8003
+      SERVICE_NAME: execution-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -74,6 +80,9 @@ services:
     image: yulinxue/cicd-validation-service:latest
     environment:
       PORT: "8001"
+      SERVICE_NAME: validation-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "8001:8001"
 
@@ -84,6 +93,9 @@ services:
     user: "0:0"
     environment:
       PORT: "8003"
+      SERVICE_NAME: worker-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "8003:8003"
     volumes:
@@ -95,8 +107,86 @@ services:
     environment:
       PORT: "8004"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      SERVICE_NAME: reporting-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       db-migrate:
         condition: service_completed_successfully
     ports:
       - "8004:8004"
+
+  prometheus:
+    image: prom/prometheus:v3.7.2
+    container_name: e-team-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.5.7
+    container_name: e-team-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: e-team-tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    container_name: e-team-otel-collector
+    command:
+      - --config=/etc/otelcol-contrib/config.yml
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - loki
+      - tempo
+    ports:
+      - "4319:4318"
+      - "13133:13133"
+      - "8890:8889"
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: e-team-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    ports:
+      - "3000:3000"
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

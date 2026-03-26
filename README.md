@@ -47,7 +47,7 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `WORKER_URL`
 - `DATABASE_URL`
 
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](/mnt/c/Users/aarav/OneDrive/Desktop/CS7580/e-team/charts/e-team/README.md).
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
 
 ## Features
 
