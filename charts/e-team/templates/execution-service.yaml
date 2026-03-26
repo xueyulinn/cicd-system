@@ -11,6 +11,12 @@ data:
   DATABASE_URL: {{ include "e-team.databaseURL" . | quote }}
   VALIDATION_URL: http://{{ include "e-team.validationServiceName" . }}:{{ .Values.validationService.service.port }}
   WORKER_URL: http://{{ include "e-team.workerServiceName" . }}:{{ .Values.workerService.service.port }}
+  SERVICE_NAME: execution-service
+  OTEL_SERVICE_NAME: execution-service
+  {{- if .Values.observability.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "e-team.otelHTTPEndpoint" . | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment

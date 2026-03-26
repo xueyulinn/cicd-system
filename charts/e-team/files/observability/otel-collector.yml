@@ -1,0 +1,66 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.service.healthPort }}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.service.otlpGrpcPort }}
+      http:
+        endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.service.otlpHttpPort }}
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - action: upsert
+        key: deployment.environment
+        value: kubernetes
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.service.metricsPort }}
+  loki:
+    endpoint: http://{{ include "e-team.lokiName" . }}:{{ .Values.observability.loki.service.port }}/loki/api/v1/push
+    default_labels_enabled:
+      exporter: true
+      job: true
+  otlphttp/tempo:
+    endpoint: http://{{ include "e-team.tempoName" . }}:{{ .Values.observability.tempo.service.otlpHttpPort }}
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - prometheus
+        - debug
+    logs:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - loki
+        - debug
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - otlphttp/tempo
+        - debug

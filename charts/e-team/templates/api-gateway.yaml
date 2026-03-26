@@ -11,6 +11,12 @@ data:
   VALIDATION_URL: http://{{ include "e-team.validationServiceName" . }}:{{ .Values.validationService.service.port }}
   EXECUTION_URL: http://{{ include "e-team.executionServiceName" . }}:{{ .Values.executionService.service.port }}
   REPORTING_URL: http://{{ include "e-team.reportingServiceName" . }}:{{ .Values.reportingService.service.port }}
+  SERVICE_NAME: api-gateway
+  OTEL_SERVICE_NAME: api-gateway
+  {{- if .Values.observability.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "e-team.otelHTTPEndpoint" . | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment

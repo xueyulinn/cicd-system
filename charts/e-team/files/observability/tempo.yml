@@ -1,0 +1,29 @@
+server:
+  http_listen_port: {{ .Values.observability.tempo.service.port }}
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:{{ .Values.observability.tempo.service.otlpGrpcPort }}
+        http:
+          endpoint: 0.0.0.0:{{ .Values.observability.tempo.service.otlpHttpPort }}
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 24h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: []
