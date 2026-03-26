@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: e-team-observability
+    orgId: 1
+    folder: E-Team Observability
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
