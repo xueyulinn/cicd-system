@@ -4,6 +4,21 @@
 # Connection: see dev-docs/report-db-setup.md and use DATABASE_URL or REPORT_DB_URL
 
 services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: e-team-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     container_name: e-team-postgres
@@ -60,6 +75,7 @@ services:
     environment:
       PORT: "8002"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       VALIDATION_URL: http://validation-service:8001
       WORKER_URL: http://worker-service:8003
       SERVICE_NAME: execution-service
@@ -68,6 +84,8 @@ services:
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
       validation-service:
         condition: service_started
       worker-service:
@@ -93,6 +111,7 @@ services:
     user: "0:0"
     environment:
       PORT: "8003"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       SERVICE_NAME: worker-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -100,6 +119,9 @@ services:
       - "8003:8003"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   reporting-service:
     container_name: e-team-reporting-service
