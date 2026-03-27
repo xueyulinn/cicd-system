@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
 // Handler handles HTTP requests for API gateway
@@ -95,15 +97,20 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log := observability.WithTraceContext(r.Context(), slog.Default())
+
 	response, err := h.client.ValidateRequest(yamlContent)
 	if err != nil {
+		log.Warn("validate proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
 	if response.Valid {
+		log.Info("validate ok")
 		api.WriteJSON(w, http.StatusOK, response)
 	} else {
+		log.Info("validate rejected", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
@@ -134,15 +141,20 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log := observability.WithTraceContext(r.Context(), slog.Default())
+
 	response, err := h.client.DryRunRequest(yamlContent)
 	if err != nil {
+		log.Warn("dryrun proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
 	if response.Valid {
+		log.Info("dryrun ok")
 		api.WriteJSON(w, http.StatusOK, response)
 	} else {
+		log.Info("dryrun rejected", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
@@ -167,15 +179,20 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log := observability.WithTraceContext(r.Context(), slog.Default())
+
 	response, err := h.client.RunRequest(req)
 	if err != nil {
+		log.Error("run proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
 	if response.Success {
+		log.Info("run completed", "message", response.Message)
 		api.WriteJSON(w, http.StatusOK, response)
 	} else {
+		log.Warn("run failed", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
@@ -201,15 +218,21 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		query.Run = &runNo
 	}
 
+	log := observability.WithTraceContext(r.Context(), slog.Default()).With(
+		"pipeline", query.Pipeline,
+	)
+
 	response, statusCode, err := h.client.ReportRequest(query)
 	if err != nil {
 		if statusCode == 0 {
 			statusCode = http.StatusBadGateway
 		}
+		log.Warn("report proxy failed", "error", err, "status", statusCode)
 		api.WriteJSONError(w, statusCode, err.Error())
 		return
 	}
 
+	log.Info("report ok")
 	api.WriteJSON(w, http.StatusOK, response)
 }
 

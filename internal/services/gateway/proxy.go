@@ -13,6 +13,7 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
 // Client handles communication with downstream services
@@ -23,15 +24,15 @@ type Client struct {
 	httpClient    *http.Client
 }
 
-// NewClient creates a new gateway client
+// NewClient creates a new gateway client with trace-propagating HTTP transport.
 func NewClient() *Client {
+	traced := observability.NewHTTPClient()
+	traced.Timeout = 15 * time.Minute
 	return &Client{
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		executionURL:  config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
 		reportURL:     config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
-		httpClient: &http.Client{
-			Timeout: 15 * time.Minute, // Pipeline execution can take several minutes
-		},
+		httpClient:    traced,
 	}
 }
 
