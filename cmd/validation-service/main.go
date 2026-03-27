@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,48 +10,59 @@ import (
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/services/validation"
 )
 
+const serviceName = "validation-service"
+
 func main() {
-	// Create validation handler
+	ctx := context.Background()
+
+	shutdown, err := observability.Init(ctx, serviceName)
+	if err != nil {
+		slog.Error("failed to init observability", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdown(ctx) }()
+
 	handler := validation.NewHandler()
 
-	// Create HTTP server
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
+	mux.Handle("/metrics", observability.MetricsHandler())
+
+	wrapped := observability.HTTPMetricsMiddleware(
+		observability.TracingMiddleware(serviceName, mux))
 
 	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultValidationPort)
 	server := &http.Server{
 		Addr:         addr,
-		Handler:      mux,
+		Handler:      wrapped,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine
 	go func() {
-		log.Printf("Validation service starting on %s", addr)
+		slog.Info("service starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Validation service failed: %v", err)
+			slog.Error("listen failed", "error", err)
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Validation service shutting down...")
+	slog.Info("service shutting down")
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Validation service forced shutdown: %v", err)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("forced shutdown", "error", err)
 	} else {
-		log.Println("Validation service stopped")
+		slog.Info("service stopped")
 	}
 }
