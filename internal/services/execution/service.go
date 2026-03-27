@@ -242,7 +242,7 @@ func (s *Service) runStage(
 			return store.StatusFailed, logsByJob, nil
 		}
 
-		logs, jobErr := s.executeJob(job, req.WorkspacePath, req)
+		logs, jobErr := s.executeJob(ctx, job, req.WorkspacePath, req, pipelineName, runNo, stage.Name)
 		if jobErr != nil {
 			_ = s.finishJob(ctx, pipelineName, runNo, stage.Name, job.Name, store.StatusFailed)
 			if allowFailure {
@@ -382,27 +382,38 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	return jobConfigs
 }
 
-// workerExecuteBody is the request body for worker /execute (job + optional workspace).
+// workerExecuteBody is the request body for worker /execute (job + optional workspace + pipeline context).
 type workerExecuteBody struct {
 	models.JobExecutionPlan
 	RepoURL       string `json:"repo_url,omitempty"`
 	Commit        string `json:"commit,omitempty"`
 	WorkspacePath string `json:"workspace_path,omitempty"`
+	Pipeline      string `json:"pipeline,omitempty"`
+	RunNo         int    `json:"run_no,omitempty"`
+	Stage         string `json:"stage,omitempty"`
 }
 
-func (s *Service) executeJob(job models.JobExecutionPlan, workspacePath string, req api.RunRequest) (string, error) {
+func (s *Service) executeJob(ctx context.Context, job models.JobExecutionPlan, workspacePath string, req api.RunRequest, pipeline string, runNo int, stage string) (string, error) {
 	body, err := json.Marshal(workerExecuteBody{
 		JobExecutionPlan: job,
 		RepoURL:          req.RepoURL,
 		Commit:           req.Commit,
 		WorkspacePath:    workspacePath,
+		Pipeline:         pipeline,
+		RunNo:            runNo,
+		Stage:            stage,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal worker request: %w", err)
 	}
 
-	resp, err := s.httpClient.Post(s.workerURL+"/execute", "application/json", bytes.NewBuffer(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.workerURL+"/execute", bytes.NewBuffer(body))
+	if err != nil {
+		return "", fmt.Errorf("create worker request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
 
+	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("call worker service: %w", err)
 	}
