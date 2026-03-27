@@ -296,6 +296,12 @@ func (s *Service) recordPipelineFailure(ctx context.Context, span trace.Span, lo
 // startRun inserts a new pipeline run in running state and returns run_no.
 func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequest) (int, error) {
 	now := time.Now().UTC()
+
+	var traceID string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.HasTraceID() {
+		traceID = sc.TraceID().String()
+	}
+
 	in := store.CreateRunInput{
 		Pipeline:  pipeline,
 		StartTime: now,
@@ -303,6 +309,7 @@ func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequ
 		GitBranch: req.Branch,
 		GitHash:   req.Commit,
 		GitRepo:   firstNonEmpty(req.RepoURL, req.WorkspacePath),
+		TraceID:   traceID,
 	}
 	return s.store.CreateRun(ctx, in)
 }

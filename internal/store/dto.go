@@ -19,6 +19,7 @@ type Run struct {
 	GitHash    string     `json:"git_hash,omitempty"`
 	GitBranch  string     `json:"git_branch,omitempty"`
 	GitRepo    string     `json:"git_repo,omitempty"`
+	TraceID    string     `json:"trace_id,omitempty"`
 }
 
 // Stage represents a stage run (one row in stage_runs).
@@ -51,6 +52,7 @@ type CreateRunInput struct {
 	GitHash   string
 	GitBranch string
 	GitRepo   string
+	TraceID   string
 }
 
 // UpdateRunInput is the input for UpdateRun (only non-zero/non-nil fields are updated).
