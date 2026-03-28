@@ -143,9 +143,6 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	defer rootSpan.End()
 	pipelineStart := time.Now()
 
-	log := observability.WithTraceContext(ctx,
-		observability.WithPipelineContext(slog.Default(), pipeline.Name, 0))
-
 	runNo, err := s.startRun(ctx, pipeline.Name, req)
 	if err != nil {
 		rootSpan.SetStatus(codes.Error, err.Error())
@@ -153,8 +150,8 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	}
 
 	rootSpan.SetAttributes(attribute.Int("run_no", runNo))
-	log = observability.WithPipelineContext(slog.Default(), pipeline.Name, runNo)
-	log = observability.WithTraceContext(ctx, log)
+	log := observability.WithTraceContext(ctx,
+		observability.WithPipelineContext(slog.Default(), pipeline.Name, runNo))
 	log.Info("pipeline run started")
 
 	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
