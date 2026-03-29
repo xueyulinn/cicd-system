@@ -190,6 +190,17 @@ services:
       - "13133:13133"
       - "8890:8889"
 
+  promtail:
+    image: grafana/promtail:3.5.7
+    container_name: e-team-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
   grafana:
     image: grafana/grafana:12.0.2
     container_name: e-team-grafana
