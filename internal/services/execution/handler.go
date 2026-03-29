@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
 type Handler struct {
@@ -93,15 +95,20 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log := observability.WithTraceContext(r.Context(), slog.Default())
+
 	resp, err := h.service.Run(r.Context(), req)
 	if err != nil {
+		log.Error("execution failed", "error", err)
 		api.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	if resp.Success {
+		log.Info("execution completed")
 		api.WriteJSON(w, http.StatusOK, resp)
 	} else {
+		log.Warn("execution returned errors", "errors", resp.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, resp)
 	}
 }
