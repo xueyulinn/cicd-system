@@ -3,7 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -17,13 +17,13 @@ func WriteJSONError(w http.ResponseWriter, statusCode int, message string) {
 func WriteJSON(w http.ResponseWriter, statusCode int, v any) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(v); err != nil {
-		log.Printf("[api] failed to encode response: %v", err)
+		slog.Error("failed to encode response", "error", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("[api] failed to write response: %v", err)
+		slog.Error("failed to write response", "error", err)
 	}
 }
