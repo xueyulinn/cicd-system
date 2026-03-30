@@ -70,7 +70,7 @@ spec:
               done
               echo "Waiting for migrations (pipeline_runs)..."
               until [ "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -A -c \
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs'")" = "1" ]; do
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs')::text" | tr -d '[:space:]')" = "true" ]; do
                 sleep 2
               done
       {{- end }}

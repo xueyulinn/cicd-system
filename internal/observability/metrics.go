@@ -13,30 +13,30 @@ var (
 	PipelineRunsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "cicd_pipeline_runs_total",
 		Help: "Total pipeline executions.",
-	}, []string{"pipeline", "status"})
+	}, []string{"pipeline", "run_no", "status"})
 
 	PipelineDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cicd_pipeline_duration_seconds",
 		Help:    "End-to-end pipeline execution time.",
 		Buckets: []float64{5, 10, 30, 60, 120, 300, 600, 1800},
-	}, []string{"pipeline"})
+	}, []string{"pipeline", "run_no"})
 
 	StageDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cicd_stage_duration_seconds",
 		Help:    "Per-stage execution time.",
 		Buckets: []float64{5, 10, 30, 60, 120, 300, 600},
-	}, []string{"pipeline", "stage"})
+	}, []string{"pipeline", "run_no", "stage"})
 
 	JobDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "cicd_job_duration_seconds",
 		Help:    "Per-job execution time.",
 		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
-	}, []string{"pipeline", "stage", "job"})
+	}, []string{"pipeline", "run_no", "stage", "job"})
 
 	JobRunsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "cicd_job_runs_total",
 		Help: "Total job executions.",
-	}, []string{"pipeline", "stage", "job", "status"})
+	}, []string{"pipeline", "run_no", "stage", "job", "status"})
 )
 
 // httpRequestsTotal and httpRequestDuration are per-service HTTP metrics.

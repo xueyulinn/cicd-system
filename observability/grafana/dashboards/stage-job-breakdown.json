@@ -1,0 +1,246 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "text": {}
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (stage) (cicd_stage_duration_seconds_sum{pipeline=~\"$pipeline\",run_no=~\"$run_no\"}) / clamp_min(sum by (stage) (cicd_stage_duration_seconds_count{pipeline=~\"$pipeline\",run_no=~\"$run_no\"}), 1)",
+          "legendFormat": "{{stage}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Per-Stage Duration",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (stage, job) (cicd_job_duration_seconds_sum{pipeline=~\"$pipeline\",run_no=~\"$run_no\",stage=~\"$stage\"}) / clamp_min(sum by (stage, job) (cicd_job_duration_seconds_count{pipeline=~\"$pipeline\",run_no=~\"$run_no\",stage=~\"$stage\"}), 1)",
+          "legendFormat": "{{stage}} / {{job}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Per-Job Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent",
+          "value"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (status) (cicd_job_runs_total{pipeline=~\"$pipeline\",run_no=~\"$run_no\",stage=~\"$stage\",job=~\"$job\"})",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Job Status Breakdown",
+      "type": "piechart"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "style": "dark",
+  "tags": [
+    "observability",
+    "stages",
+    "jobs"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": ".*",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cicd_pipeline_runs_total, pipeline)",
+        "includeAll": true,
+        "label": "Pipeline",
+        "name": "pipeline",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cicd_pipeline_runs_total, pipeline)",
+          "refId": "Prometheus-pipeline"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": ".*",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cicd_pipeline_runs_total{pipeline=~\"$pipeline\"}, run_no)",
+        "includeAll": true,
+        "label": "Run No",
+        "name": "run_no",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cicd_pipeline_runs_total{pipeline=~\"$pipeline\"}, run_no)",
+          "refId": "Prometheus-run-no"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": ".*",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cicd_stage_duration_seconds_count{pipeline=~\"$pipeline\",run_no=~\"$run_no\"}, stage)",
+        "includeAll": true,
+        "label": "Stage",
+        "name": "stage",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cicd_stage_duration_seconds_count{pipeline=~\"$pipeline\",run_no=~\"$run_no\"}, stage)",
+          "refId": "Prometheus-stage"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": ".*",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cicd_job_runs_total{pipeline=~\"$pipeline\",run_no=~\"$run_no\",stage=~\"$stage\"}, job)",
+        "includeAll": true,
+        "label": "Job",
+        "name": "job",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cicd_job_runs_total{pipeline=~\"$pipeline\",run_no=~\"$run_no\",stage=~\"$stage\"}, job)",
+          "refId": "Prometheus-job"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Stage and Job Breakdown",
+  "uid": "stage-job-breakdown",
+  "version": 2
+}

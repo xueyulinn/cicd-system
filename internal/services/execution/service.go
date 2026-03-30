@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,8 +152,13 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 
 	rootSpan.SetAttributes(attribute.Int("run_no", runNo))
 	log := observability.WithTraceContext(ctx,
-		observability.WithPipelineContext(slog.Default(), pipeline.Name, runNo))
-	log.Info("pipeline run started")
+		observability.WithPipelineContext(slog.Default(), pipeline.Name, runNo)).
+		With("git_branch", req.Branch, "git_hash", req.Commit)
+	log.Info("pipeline run started",
+		"event", "pipeline-run",
+		"status", store.StatusRunning,
+		"source", "service",
+	)
 
 	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
 	if err != nil {
@@ -184,10 +190,16 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	}
 
 	elapsed := time.Since(pipelineStart).Seconds()
-	observability.PipelineRunsTotal.WithLabelValues(pipeline.Name, "success").Inc()
-	observability.PipelineDurationSeconds.WithLabelValues(pipeline.Name).Observe(elapsed)
+	runNoLabel := strconv.Itoa(runNo)
+	observability.PipelineRunsTotal.WithLabelValues(pipeline.Name, runNoLabel, store.StatusSuccess).Inc()
+	observability.PipelineDurationSeconds.WithLabelValues(pipeline.Name, runNoLabel).Observe(elapsed)
 	rootSpan.SetStatus(codes.Ok, "")
-	log.Info("pipeline run completed", "status", "success", "duration_s", elapsed)
+	log.Info("pipeline run completed",
+		"event", "pipeline-run",
+		"status", store.StatusSuccess,
+		"source", "service",
+		"duration_s", elapsed,
+	)
 
 	return &api.RunResponse{
 		Success: true,
@@ -227,7 +239,11 @@ func (s *Service) runStage(
 		return store.StatusFailed, nil, nil
 	}
 
-	log.Info("stage started")
+	log.Info("stage started",
+		"event", "stage-run",
+		"status", store.StatusRunning,
+		"source", "service",
+	)
 	var logsByJob []string
 
 	for _, job := range stage.Jobs {
@@ -246,18 +262,30 @@ func (s *Service) runStage(
 		if jobErr != nil {
 			_ = s.finishJob(ctx, pipelineName, runNo, stage.Name, job.Name, store.StatusFailed)
 			if allowFailure {
-				log.Warn("job allowed failure", "job", job.Name, "error", jobErr)
+				log.Warn("job allowed failure",
+					"event", "job-run",
+					"status", store.StatusFailed,
+					"source", "service",
+					"job", job.Name,
+					"error", jobErr,
+				)
 				logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\nallowed failure: %v", stage.Name, job.Name, jobErr))
 				continue
 			}
 
 			stageSpan.SetStatus(codes.Error, jobErr.Error())
-			log.Error("job failed", "job", job.Name, "error", jobErr)
+			log.Error("job failed",
+				"event", "job-run",
+				"status", store.StatusFailed,
+				"source", "service",
+				"job", job.Name,
+				"error", jobErr,
+			)
 			_ = s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusFailed)
 			_ = s.finishRun(ctx, pipelineName, runNo, store.StatusFailed)
 
 			elapsed := time.Since(stageStart).Seconds()
-			observability.StageDurationSeconds.WithLabelValues(pipelineName, stage.Name).Observe(elapsed)
+				observability.StageDurationSeconds.WithLabelValues(pipelineName, strconv.Itoa(runNo), stage.Name).Observe(elapsed)
 
 			return store.StatusFailed, logsByJob, &api.RunResponse{
 				Success: false,
@@ -276,9 +304,14 @@ func (s *Service) runStage(
 	}
 
 	elapsed := time.Since(stageStart).Seconds()
-	observability.StageDurationSeconds.WithLabelValues(pipelineName, stage.Name).Observe(elapsed)
+	observability.StageDurationSeconds.WithLabelValues(pipelineName, strconv.Itoa(runNo), stage.Name).Observe(elapsed)
 	stageSpan.SetStatus(codes.Ok, "")
-	log.Info("stage completed", "status", "success", "duration_s", elapsed)
+	log.Info("stage completed",
+		"event", "stage-run",
+		"status", store.StatusSuccess,
+		"source", "service",
+		"duration_s", elapsed,
+	)
 
 	return store.StatusSuccess, logsByJob, nil
 }
@@ -286,10 +319,16 @@ func (s *Service) runStage(
 // recordPipelineFailure records failure metrics/span status and persists the failed run.
 func (s *Service) recordPipelineFailure(ctx context.Context, span trace.Span, log *slog.Logger, pipeline string, runNo int, start time.Time) {
 	elapsed := time.Since(start).Seconds()
-	observability.PipelineRunsTotal.WithLabelValues(pipeline, "failed").Inc()
-	observability.PipelineDurationSeconds.WithLabelValues(pipeline).Observe(elapsed)
+	runNoLabel := strconv.Itoa(runNo)
+	observability.PipelineRunsTotal.WithLabelValues(pipeline, runNoLabel, store.StatusFailed).Inc()
+	observability.PipelineDurationSeconds.WithLabelValues(pipeline, runNoLabel).Observe(elapsed)
 	span.SetStatus(codes.Error, "pipeline failed")
-	log.Error("pipeline run failed", "status", "failed", "duration_s", elapsed)
+	log.Error("pipeline run failed",
+		"event", "pipeline-run",
+		"status", store.StatusFailed,
+		"source", "service",
+		"duration_s", elapsed,
+	)
 	_ = s.finishRun(ctx, pipeline, runNo, store.StatusFailed)
 }
 

@@ -33,9 +33,20 @@ scrape_configs:
             run_no: run_no
             stage: stage
             job: job
-            svc: service
+            service: service
+            source: source
+            event: event
+            git_branch: git_branch
+            git_hash: git_hash
+            status: status
+            duration_s: duration_s
       - labels:
           level:
           trace_id:
           pipeline:
-          svc:
+          run_no:
+          stage:
+          job:
+          source:
+          event:
+          status:

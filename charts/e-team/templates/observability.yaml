@@ -46,6 +46,17 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: {{ include "e-team.otelCollectorName" . }}-promtail-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+data:
+  promtail.yml: |
+{{ tpl (.Files.Get "files/observability/promtail.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: {{ include "e-team.grafanaName" . }}-datasources
   labels:
     {{- include "e-team.labels" . | nindent 4 }}
@@ -73,8 +84,10 @@ metadata:
     {{- include "e-team.labels" . | nindent 4 }}
     app.kubernetes.io/component: grafana
 data:
-  README.txt: |
-{{ tpl (.Files.Get "files/observability/dashboard-readme.txt") . | nindent 4 }}
+  {{- range $path, $_ := .Files.Glob "files/observability/dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Secret
@@ -539,6 +552,101 @@ spec:
       port: {{ .Values.observability.grafana.service.port }}
       targetPort: http
   type: {{ .Values.observability.grafana.service.type }}
+{{- if .Values.observability.promtail.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "e-team.fullname" . }}-promtail
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "e-team.fullname" . }}-promtail
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "e-team.fullname" . }}-promtail
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "e-team.fullname" . }}-promtail
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "e-team.fullname" . }}-promtail
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "e-team.fullname" . }}-promtail
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+spec:
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "promtail") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "promtail") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "e-team.fullname" . }}-promtail
+      containers:
+        - name: promtail
+          image: "{{ .Values.observability.promtail.image.repository }}:{{ .Values.observability.promtail.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.promtail.image.pullPolicy }}
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          args:
+            - -config.file=/etc/promtail/promtail.yml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail/promtail.yml
+              subPath: promtail.yml
+            - name: run
+              mountPath: /run/promtail
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+          resources:
+            {{- toYaml .Values.observability.promtail.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "e-team.otelCollectorName" . }}-promtail-config
+        - name: run
+          emptyDir: {}
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+            type: DirectoryOrCreate
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+            type: DirectoryOrCreate
+{{- end }}
 {{- if .Values.observability.grafana.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
