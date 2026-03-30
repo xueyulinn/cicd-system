@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: migrations/Dockerfile
-    image: e-team-db-migrate:latest
+    image: yulinxue/cicd-db-migrate:latest
     container_name: e-team-db-migrate
     depends_on:
       postgres:
