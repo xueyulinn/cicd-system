@@ -1,0 +1,66 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - action: upsert
+        key: deployment.environment
+        value: local-compose
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: true
+      job: true
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - prometheus
+        - debug
+    logs:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - loki
+        - debug
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - resource
+        - batch
+      exporters:
+        - otlphttp/tempo
+        - debug

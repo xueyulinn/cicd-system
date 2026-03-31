@@ -68,6 +68,46 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "%s-report-db-migrate" (include "e-team.fullname" .) -}}
 {{- end -}}
 
+{{- define "e-team.prometheusName" -}}
+{{- printf "%s-prometheus" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.lokiName" -}}
+{{- printf "%s-loki" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.tempoName" -}}
+{{- printf "%s-tempo" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.otelCollectorName" -}}
+{{- printf "%s-otel-collector" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.grafanaName" -}}
+{{- printf "%s-grafana" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.observabilityPrometheusPVCName" -}}
+{{- printf "%s-prometheus-data" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.observabilityLokiPVCName" -}}
+{{- printf "%s-loki-data" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.observabilityTempoPVCName" -}}
+{{- printf "%s-tempo-data" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.observabilityGrafanaPVCName" -}}
+{{- printf "%s-grafana-data" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.otelHTTPEndpoint" -}}
+{{- printf "http://%s:%v" (include "e-team.otelCollectorName" .) .Values.observability.otelCollector.service.otlpHttpPort -}}
+{{- end -}}
+
 {{- define "e-team.databaseURL" -}}
 {{- if .Values.postgres.enabled -}}
 {{- printf "postgres://%s:%s@%s:%v/%s?sslmode=disable" .Values.postgres.auth.username .Values.postgres.auth.password (include "e-team.postgresName" .) .Values.postgres.service.port .Values.postgres.auth.database -}}

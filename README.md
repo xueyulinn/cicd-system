@@ -20,6 +20,13 @@ The e-team project is a CI/CD pipeline management system that provides:
 | Validation Service   | 8001 | Validates pipeline YAML        |
 | Execution Service    | 8002 | Runs pipelines, coordinates jobs |
 | Worker Service       | 8003 | Executes job steps             |
+| Reporting Service    | 8004 | Pipeline run reports           |
+| PostgreSQL           | 5432 | Report store database          |
+| Prometheus           | 9090 | Metrics collection & storage   |
+| Loki                 | 3100 | Log aggregation & storage      |
+| Tempo                | 3200 | Distributed tracing storage    |
+| OTel Collector       | 4318 | Telemetry ingestion & routing  |
+| Grafana              | 3000 | Unified observability UI       |
 
 ## Kubernetes Support
 
@@ -47,7 +54,87 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `WORKER_URL`
 - `DATABASE_URL`
 
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](/mnt/c/Users/aarav/OneDrive/Desktop/CS7580/e-team/charts/e-team/README.md).
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
+
+## Observability
+
+All CI/CD services are instrumented across three pillars — metrics, logs, and traces — using an open-source stack deployed alongside the application via Docker Compose.
+
+### Stack
+
+| Role | Component | Config location |
+|------|-----------|-----------------|
+| Metrics collection & storage | Prometheus | `observability/prometheus/prometheus.yml` |
+| Log aggregation | Loki + Promtail | `observability/loki/loki-config.yml`, `observability/promtail/promtail-config.yml` |
+| Distributed tracing | Tempo | `observability/tempo/tempo.yml` |
+| Telemetry routing | OpenTelemetry Collector | `observability/otel-collector/config.yml` |
+| Visualization | Grafana | `observability/grafana/` |
+
+This implementation uses the recommended stack with one documented substitution: traces are emitted to the OTel Collector, Prometheus scrapes `/metrics` endpoints directly, and Promtail scrapes structured container logs and forwards them to Loki. This keeps job-container stdout/stderr observable without modifying job images while still using only open-source components. Grafana queries Prometheus, Loki, and Tempo.
+
+### Metrics
+
+Every service exposes a `/metrics` endpoint scraped by Prometheus. The following CI/CD-specific metrics are recorded:
+
+| Metric | Type | Labels | Emitted by |
+|--------|------|--------|------------|
+| `cicd_pipeline_runs_total` | Counter | `pipeline`, `status` (+ `run_no`) | Execution Service |
+| `cicd_pipeline_duration_seconds` | Histogram | `pipeline` (+ `run_no`) | Execution Service |
+| `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` (+ `run_no`) | Execution Service |
+| `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
+| `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
+
+HTTP request metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware.
+
+### Structured Logs
+
+All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
+
+### Distributed Tracing
+
+Services use OpenTelemetry SDK with W3C Trace Context propagation. The following spans are emitted:
+
+- **`pipeline.run`** (root span) — full pipeline execution, with `pipeline` and `run_no` attributes
+- **`stage.run`** (child) — per-stage execution
+- **`job.run`** (child) — per-job execution in the Worker
+
+Outbound HTTP calls between services automatically propagate trace context.
+
+The `trace-id` is persisted in the report database and included in `report --run` output, allowing operators to correlate a report with its trace in Grafana/Tempo.
+
+### Accessing the Observability Stack
+
+After `docker compose up -d`:
+
+| Tool | URL | Credentials |
+|------|-----|-------------|
+| Grafana | http://localhost:3000 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| Tempo (API) | http://localhost:3200 | — |
+| Loki (API) | http://localhost:3100 | — |
+
+In Grafana, use the Explore view to query Prometheus (metrics), Loki (logs), or Tempo (traces). Paste a `trace-id` from a report into Tempo to view the full span hierarchy.
+
+The following dashboards are provisioned from files committed to the repository:
+
+- `Pipeline Overview`
+- `Stage and Job Breakdown`
+- `Logs Viewer`
+- `Trace Explorer`
+
+`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
+
+### Configuration
+
+Observability is controlled by environment variables set in `docker-compose.yaml`:
+
+| Variable | Purpose |
+|----------|---------|
+| `SERVICE_NAME` | Identifies the service in logs and traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTel Collector endpoint for traces |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol (`http/protobuf`) |
+
+All observability configuration files are committed under `observability/`. The shared instrumentation library lives in `internal/observability/`.
 
 ## Features
 
@@ -356,9 +443,30 @@ deploy:
 
 ## Development
 
-### Running the services (development)
+### Running the full stack (Docker Compose)
 
-To run the full stack (API Gateway, Validation, Execution, Worker) in development:
+The recommended way to run everything locally — all services, database, migrations, and the observability stack:
+
+```bash
+# Start all containers (builds services from local source via docker-compose.override.yaml)
+docker compose up -d
+
+# Verify everything is running
+docker compose ps
+
+# View logs
+docker compose logs -f execution-service worker-service
+```
+
+`docker-compose.yaml` defines the baseline configuration with registry images. `docker-compose.override.yaml` (automatically loaded) adds `build:` directives so services are built from local source code. This means:
+
+- `docker compose up -d` — builds from local source (development)
+- `docker compose up -d --build` — forces a rebuild after code changes
+- `docker compose -f docker-compose.yaml up -d` — uses registry images only (CI/production)
+
+### Running services without Docker
+
+To run services directly (without Docker Compose):
 
 ```bash
 ./scripts/start-services.sh
@@ -366,14 +474,13 @@ To run the full stack (API Gateway, Validation, Execution, Worker) in developmen
 
 Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `EXECUTION_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
 
-### Report store database (optional)
+### Report store database
 
-For the `report` subcommand, execution and report services need a PostgreSQL database. Start Postgres and apply the schema:
+For the `report` subcommand, execution and report services need a PostgreSQL database. With Docker Compose this is handled automatically (Postgres + migrations start together). For manual setup:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres db-migrate
 export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
-psql "$DATABASE_URL" -f migrations/001_report_store_schema.sql
 ```
 
 See [dev-docs/report-db-setup.md](dev-docs/report-db-setup.md) for connection config (`DATABASE_URL` or `REPORT_DB_URL`) and CI notes.
@@ -382,28 +489,33 @@ See [dev-docs/report-db-setup.md](dev-docs/report-db-setup.md) for connection co
 
 ```
 e-team/
-├── cmd/                     # Application entry points
-│   ├── cicd/                # CLI (verify, dryrun, run)
-│   │   └── main.go
-│   ├── api-gateway/         # API Gateway (port 8000)
-│   ├── validation-service/  # Validation Service (port 8001)
-│   ├── execution-service/   # Execution Service (port 8002)
-│   └── worker-service/      # Worker Service (port 8003)
+├── cmd/                          # Application entry points
+│   ├── cicd/                     # CLI (verify, dryrun, run, report)
+│   ├── api-gateway/              # API Gateway (port 8000)
+│   ├── validation-service/       # Validation Service (port 8001)
+│   ├── execution-service/        # Execution Service (port 8002)
+│   ├── worker-service/           # Worker Service (port 8003)
+│   └── reporting-service/        # Reporting Service (port 8004)
 ├── internal/
-│   ├── cli/                 # CLI commands and gateway client
-│   │   ├── root.go, verify.go, dryrun.go, run.go
-│   │   └── gateway_client.go
-│   ├── models/              # Data models and types
-│   ├── parser/              # YAML parsing logic
-│   ├── verifier/            # Validation logic
-│   ├── scheduler/           # Scheduler logic
-│   ├── dryrun/              # Dryrun logic
-│   └── services/            # Gateway, validation, execution, worker
-├── scripts/
-│   └── start-services.sh    # Start all services (gateway, validation, execution, worker)
-├── .pipelines/              # Pipeline configurations
-├── dev-docs/                # Development documentation
-└── Makefile                 # Build automation
+│   ├── cli/                      # CLI commands and gateway client
+│   ├── models/                   # Data models and types
+│   ├── observability/            # Shared instrumentation (metrics, logs, tracing)
+│   ├── store/                    # Database access layer (report store)
+│   └── services/                 # Gateway, validation, execution, worker, reporting
+├── migrations/                   # SQL schema migrations and Dockerfile
+├── observability/                # Observability stack configuration
+│   ├── prometheus/               # Prometheus scrape config
+│   ├── loki/                     # Loki log aggregation config
+│   ├── tempo/                    # Tempo tracing config
+│   ├── otel-collector/           # OpenTelemetry Collector pipeline config
+│   └── grafana/                  # Grafana provisioning and dashboards
+├── charts/e-team/                # Helm chart for Kubernetes deployment
+├── k8s/                          # Raw Kubernetes manifests
+├── scripts/                      # Dev scripts (start services, verify DB)
+├── .pipelines/                   # Pipeline configurations
+├── docker-compose.yaml           # Full stack (services + observability)
+├── docker-compose.override.yaml  # Local dev overrides (build from source)
+└── Makefile                      # Build automation
 ```
 
 
@@ -465,11 +577,14 @@ job-b:
 
 ## Technology Stack
 
-- **Language**: Go 1.25.6
+- **Language**: Go 1.25
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
+- **Database**: PostgreSQL 16 with pgx driver
+- **Observability**: OpenTelemetry SDK, Prometheus, Loki, Tempo, Grafana
+- **Containers**: Docker, Docker Compose
+- **Kubernetes**: Helm, Kustomize, raw manifests
 - **Testing**: Go standard testing package
-- **Services**: HTTP APIs (API Gateway, Validation, Execution, Worker) for validation, dry-run, and pipeline execution
 
 ## Contributing
 

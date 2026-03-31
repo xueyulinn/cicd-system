@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/worker-service ./cmd/worker-service
+RUN CGO_ENABLED=0 go build -o /out/worker-service ./cmd/worker-service
 
 FROM gcr.io/distroless/static-debian12:nonroot
 

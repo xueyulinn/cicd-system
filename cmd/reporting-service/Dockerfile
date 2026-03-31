@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/reporting-service ./cmd/reporting-service
+RUN CGO_ENABLED=0 go build -o /out/reporting-service ./cmd/reporting-service
 
 FROM gcr.io/distroless/static-debian12:nonroot
 

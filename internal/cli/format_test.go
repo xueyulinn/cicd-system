@@ -185,3 +185,51 @@ func TestFormatReportJSON_JobFailuresField(t *testing.T) {
 		t.Errorf("report JSON must include failures field; got:\n%s", outStr)
 	}
 }
+
+func TestFormatReportYAML_TraceIDField(t *testing.T) {
+	start := time.Date(2025, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 9, 1, 10, 5, 0, 0, time.UTC)
+
+	report := &models.ReportResponse{
+		Pipeline: models.ReportPipeline{
+			Name:    "Default Pipeline",
+			RunNo:   7,
+			Status:  "success",
+			TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
+			Start:   start,
+			End:     &end,
+		},
+	}
+
+	out, err := FormatReportYAML(report)
+	if err != nil {
+		t.Fatalf("FormatReportYAML: %v", err)
+	}
+	if !strings.Contains(string(out), "trace-id: 4bf92f3577b34da6a3ce929d0e0e4736") {
+		t.Fatalf("expected trace-id in YAML output, got:\n%s", string(out))
+	}
+}
+
+func TestFormatReportJSON_TraceIDField(t *testing.T) {
+	start := time.Date(2025, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 9, 1, 10, 5, 0, 0, time.UTC)
+
+	report := &models.ReportResponse{
+		Pipeline: models.ReportPipeline{
+			Name:    "Default Pipeline",
+			RunNo:   7,
+			Status:  "success",
+			TraceID: "4bf92f3577b34da6a3ce929d0e0e4736",
+			Start:   start,
+			End:     &end,
+		},
+	}
+
+	out, err := FormatReportJSON(report)
+	if err != nil {
+		t.Fatalf("FormatReportJSON: %v", err)
+	}
+	if !strings.Contains(string(out), `"trace-id": "4bf92f3577b34da6a3ce929d0e0e4736"`) {
+		t.Fatalf("expected trace-id in JSON output, got:\n%s", string(out))
+	}
+}

@@ -4,6 +4,21 @@
 # Connection: see dev-docs/report-db-setup.md and use DATABASE_URL or REPORT_DB_URL
 
 services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: e-team-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     container_name: e-team-postgres
@@ -23,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: migrations/Dockerfile
-    image: e-team-db-migrate:latest
+    image: yulinxue/cicd-db-migrate:latest
     container_name: e-team-db-migrate
     depends_on:
       postgres:
@@ -44,6 +59,9 @@ services:
       VALIDATION_URL: http://validation-service:8001
       EXECUTION_URL: http://execution-service:8002
       REPORTING_URL: http://reporting-service:8004
+      SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       - validation-service
       - execution-service
@@ -57,11 +75,17 @@ services:
     environment:
       PORT: "8002"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       VALIDATION_URL: http://validation-service:8001
       WORKER_URL: http://worker-service:8003
+      SERVICE_NAME: execution-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       db-migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
       validation-service:
         condition: service_started
       worker-service:
@@ -74,6 +98,9 @@ services:
     image: yulinxue/cicd-validation-service:latest
     environment:
       PORT: "8001"
+      SERVICE_NAME: validation-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "8001:8001"
 
@@ -84,10 +111,17 @@ services:
     user: "0:0"
     environment:
       PORT: "8003"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: worker-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "8003:8003"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   reporting-service:
     container_name: e-team-reporting-service
@@ -95,8 +129,97 @@ services:
     environment:
       PORT: "8004"
       DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      SERVICE_NAME: reporting-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     depends_on:
       db-migrate:
         condition: service_completed_successfully
     ports:
       - "8004:8004"
+
+  prometheus:
+    image: prom/prometheus:v3.7.2
+    container_name: e-team-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.5.7
+    container_name: e-team-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: e-team-tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    container_name: e-team-otel-collector
+    command:
+      - --config=/etc/otelcol-contrib/config.yml
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - loki
+      - tempo
+    ports:
+      - "4319:4318"
+      - "13133:13133"
+      - "8890:8889"
+
+  promtail:
+    image: grafana/promtail:3.5.7
+    container_name: e-team-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: e-team-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    ports:
+      - "3000:3000"
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

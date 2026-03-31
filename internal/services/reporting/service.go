@@ -97,11 +97,12 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 
 	resp := &models.ReportResponse{
 		Pipeline: models.ReportPipeline{
-			Name:   run.Pipeline,
-			RunNo:  run.RunNo,
-			Status: run.Status,
-			Start:  run.StartTime,
-			End:    run.EndTime,
+			Name:    run.Pipeline,
+			RunNo:   run.RunNo,
+			Status:  run.Status,
+			TraceID: run.TraceID,
+			Start:   run.StartTime,
+			End:     run.EndTime,
 		},
 	}
 
@@ -158,6 +159,7 @@ func mapRuns(runs []store.Run) []models.ReportRun {
 		out = append(out, models.ReportRun{
 			RunNo:     r.RunNo,
 			Status:    r.Status,
+			TraceID:   r.TraceID,
 			GitRepo:   r.GitRepo,
 			GitBranch: r.GitBranch,
 			GitHash:   r.GitHash,
