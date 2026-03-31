@@ -11,7 +11,15 @@
 | [feat(obs): store and display trace-id in pipeline run reports](https://github.com/CS7580-SEA-SP26/e-team/issues/235)|M|Eugenia-Z|
 | [docs(obs): E2E test and validation checklist](https://github.com/CS7580-SEA-SP26/e-team/issues/236)|M|Eugenia-Z|
 | [docs(obs): E2E test and validation checklist](https://github.com/CS7580-SEA-SP26/e-team/issues/236)|M|Eugenia-Z|
-| [Bug-Fix] DB-Migrate image in docker-compose does not exist(https://github.com/CS7580-SEA-SP26/e-team/issues/244) | S | xueyulinn|
+| [[Bug-Fix] DB-Migrate image in docker-compose does not exist](https://github.com/CS7580-SEA-SP26/e-team/issues/244) | S | xueyulinn|
+| [Extend local orchestration so observability services start together with the CI/CD stack.](https://github.com/CS7580-SEA-SP26/e-team/issues/223) | M | Asurkatha|
+| [Add repo-managed config files for Prometheus, Loki, Tempo, OTel Collector, and Grafana provisioning.](https://github.com/CS7580-SEA-SP26/e-team/issues/224) | M | Asurkatha|
+| [Commit Helm-managed observability configs inside the chart so the release is self-contained.](https://github.com/CS7580-SEA-SP26/e-team/issues/228) | M | Asurkatha|
+| [Add Helm resources for the observability stack with persistent storage.](https://github.com/CS7580-SEA-SP26/e-team/issues/227) | S | Asurkatha|
+| [Extend the Helm chart values to support optional deployment of the observability stack.](https://github.com/CS7580-SEA-SP26/e-team/issues/226) | M | Asurkatha|
+| [Add OTEL-related environment variables to application Helm templates so service instrumentation can be enabled without further chart restructuring.](https://github.com/CS7580-SEA-SP26/e-team/issues/229) | S | Asurkatha|
+| [[Dashboard]Standardize dashboard variable strategy across observability dashboards](https://github.com/CS7580-SEA-SP26/e-team/issues/249)| M | Asurkatha |
+| [Restore a working pipeline variable for Pipeline Overview](https://github.com/CS7580-SEA-SP26/e-team/issues/250)| S | Asurkatha |
 
 # Carry over tasks
 
