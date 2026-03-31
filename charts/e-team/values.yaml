@@ -9,7 +9,7 @@ apiGateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: e-team-api-gateway
+    repository: yulinxue/cicd-api-gateway
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -36,7 +36,7 @@ validationService:
   enabled: true
   replicaCount: 1
   image:
-    repository: e-team-validation-service
+    repository: yulinxue/cicd-validation-service
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -53,7 +53,7 @@ executionService:
   enabled: true
   replicaCount: 1
   image:
-    repository: e-team-execution-service
+    repository: yulinxue/cicd-execution-service
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -76,7 +76,7 @@ workerService:
   enabled: true
   replicaCount: 1
   image:
-    repository: e-team-worker-service
+    repository: yulinxue/cicd-worker-service
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -99,7 +99,7 @@ reportingService:
   enabled: true
   replicaCount: 1
   image:
-    repository: e-team-reporting-service
+    repository: yulinxue/cicd-reporting-service
     tag: latest
     pullPolicy: IfNotPresent
   service:
