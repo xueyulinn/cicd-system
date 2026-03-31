@@ -1,6 +1,6 @@
 This folder holds provisioned Grafana dashboard JSON files for the observability extension.
 
-Expected files for the next phase:
+Current dashboards:
 
 - `pipeline-overview.json`
 - `stage-job-breakdown.json`

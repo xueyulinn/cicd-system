@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -160,16 +161,28 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	log.Info("job started", "image", job.Image)
+	runNoLabel := strconv.Itoa(req.RunNo)
+	log.Info("job started",
+		"event", "job-run",
+		"status", "running",
+		"source", "service",
+		"image", job.Image,
+	)
 	start := time.Now()
 	logs, err := ExecuteJob(ctx, s.docker, job, req.RepoURL, req.Commit, req.WorkspacePath)
 	elapsed := time.Since(start).Seconds()
 
 	if err != nil {
 		jobSpan.SetStatus(codes.Error, err.Error())
-		observability.JobRunsTotal.WithLabelValues(req.Pipeline, req.Stage, jobName, "failed").Inc()
-		observability.JobDurationSeconds.WithLabelValues(req.Pipeline, req.Stage, jobName).Observe(elapsed)
-		log.Error("job failed", "duration_s", elapsed, "error", err)
+		observability.JobRunsTotal.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName, "failed").Inc()
+		observability.JobDurationSeconds.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName).Observe(elapsed)
+		log.Error("job failed",
+			"event", "job-run",
+			"status", "failed",
+			"source", "service",
+			"duration_s", elapsed,
+			"error", err,
+		)
 
 		emitJobContainerLogs(log, logs)
 
@@ -178,9 +191,14 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobSpan.SetStatus(codes.Ok, "")
-	observability.JobRunsTotal.WithLabelValues(req.Pipeline, req.Stage, jobName, "success").Inc()
-	observability.JobDurationSeconds.WithLabelValues(req.Pipeline, req.Stage, jobName).Observe(elapsed)
-	log.Info("job completed", "duration_s", elapsed)
+	observability.JobRunsTotal.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName, "success").Inc()
+	observability.JobDurationSeconds.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName).Observe(elapsed)
+	log.Info("job completed",
+		"event", "job-run",
+		"status", "success",
+		"source", "service",
+		"duration_s", elapsed,
+	)
 
 	emitJobContainerLogs(log, logs)
 

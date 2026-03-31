@@ -65,12 +65,12 @@ All CI/CD services are instrumented across three pillars — metrics, logs, and 
 | Role | Component | Config location |
 |------|-----------|-----------------|
 | Metrics collection & storage | Prometheus | `observability/prometheus/prometheus.yml` |
-| Log aggregation | Loki | `observability/loki/loki-config.yml` |
+| Log aggregation | Loki + Promtail | `observability/loki/loki-config.yml`, `observability/promtail/promtail-config.yml` |
 | Distributed tracing | Tempo | `observability/tempo/tempo.yml` |
 | Telemetry routing | OpenTelemetry Collector | `observability/otel-collector/config.yml` |
 | Visualization | Grafana | `observability/grafana/` |
 
-Services emit telemetry to the OTel Collector (`http://otel-collector:4318`), which routes metrics to Prometheus, logs to Loki, and traces to Tempo. Grafana queries all three backends.
+This implementation uses the recommended stack with one documented substitution: traces are emitted to the OTel Collector, Prometheus scrapes `/metrics` endpoints directly, and Promtail scrapes structured container logs and forwards them to Loki. This keeps job-container stdout/stderr observable without modifying job images while still using only open-source components. Grafana queries Prometheus, Loki, and Tempo.
 
 ### Metrics
 
@@ -78,11 +78,11 @@ Every service exposes a `/metrics` endpoint scraped by Prometheus. The following
 
 | Metric | Type | Labels | Emitted by |
 |--------|------|--------|------------|
-| `cicd_pipeline_runs_total` | Counter | `pipeline`, `status` | Execution Service |
-| `cicd_pipeline_duration_seconds` | Histogram | `pipeline` | Execution Service |
-| `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` | Execution Service |
-| `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` | Worker Service |
-| `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` | Worker Service |
+| `cicd_pipeline_runs_total` | Counter | `pipeline`, `status` (+ `run_no`) | Execution Service |
+| `cicd_pipeline_duration_seconds` | Histogram | `pipeline` (+ `run_no`) | Execution Service |
+| `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` (+ `run_no`) | Execution Service |
+| `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
+| `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
 
 HTTP request metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware.
 
@@ -114,6 +114,15 @@ After `docker compose up -d`:
 | Loki (API) | http://localhost:3100 | — |
 
 In Grafana, use the Explore view to query Prometheus (metrics), Loki (logs), or Tempo (traces). Paste a `trace-id` from a report into Tempo to view the full span hierarchy.
+
+The following dashboards are provisioned from files committed to the repository:
+
+- `Pipeline Overview`
+- `Stage and Job Breakdown`
+- `Logs Viewer`
+- `Trace Explorer`
+
+`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
 
 ### Configuration
 
