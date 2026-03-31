@@ -154,7 +154,7 @@ externalDatabase:
 migration:
   enabled: true
   image:
-    repository: e-team-db-migrate
+    repository: yulinxue/cicd-db-migrate
     tag: latest
     pullPolicy: IfNotPresent
   backoffLimit: 5
