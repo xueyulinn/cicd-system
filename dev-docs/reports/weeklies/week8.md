@@ -10,7 +10,8 @@
 | [feat(obs): worker & container — job metrics, spans, structured job logs](https://github.com/CS7580-SEA-SP26/e-team/issues/234) | M | Eugenia-Z|
 | [feat(obs): store and display trace-id in pipeline run reports](https://github.com/CS7580-SEA-SP26/e-team/issues/235)|M|Eugenia-Z|
 | [docs(obs): E2E test and validation checklist](https://github.com/CS7580-SEA-SP26/e-team/issues/236)|M|Eugenia-Z|
-
+| [docs(obs): E2E test and validation checklist](https://github.com/CS7580-SEA-SP26/e-team/issues/236)|M|Eugenia-Z|
+| [Bug-Fix] DB-Migrate image in docker-compose does not exist(https://github.com/CS7580-SEA-SP26/e-team/issues/244) | S | xueyulinn|
 
 # Carry over tasks
 
@@ -22,7 +23,7 @@
 
 | Task | Weight | Assignee |
 | ---- | ------ | -------- |
-|      |        |          |
+|[Refactor] Async Dispatch in Execution Service and Add RabbitMQ Infrastructure(https://github.com/CS7580-SEA-SP26/e-team/issues/208)      |L        |xueyulinn          |
 
 
 
