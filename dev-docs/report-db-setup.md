@@ -18,35 +18,33 @@ export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=dis
 
 ## Run PostgreSQL (development)
 
-From the repo root:
+From the repo root, align env with the Helm chart defaults (see `charts/e-team/values.yaml`):
 
 ```bash
-docker compose up -d
+ruby scripts/gen-compose-env-from-values.rb   # writes compose.values.env
+docker compose --env-file compose.values.env up -d
 ```
 
-Default (from `docker-compose.yaml`):
-
-- Host: `localhost`, port: `5432`
-- User: `cicd`, password: `cicd`, database: `reportstore`
+Default credentials and image tags match `compose.values.env` (typically user `cicd`, database `reportstore`). Host from your machine: `localhost`, port `5432`.
 
 Stop:
 
 ```bash
-docker compose down
+docker compose --env-file compose.values.env down
 ```
 
-## Kubernetes (Postgres StatefulSet + PVC + migration Job)
+## Kubernetes (Helm chart or rendered manifests)
 
-1. Build the migrate image (includes all `migrations/*.sql` in sorted order):  
-   `docker build -f migrations/Dockerfile -t e-team-db-migrate:latest .`  
-   (On minikube, load or build into the cluster — see README below.)
-2. Apply manifests:
+Postgres, the migration Job, and app Deployments are defined in [`charts/e-team/`](../charts/e-team/). For `kubectl apply` without Helm, use the checked-in render:
 
 ```bash
-kubectl apply -k k8s/postgres/
+kubectl create namespace e-team --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/helm-rendered/e-team.yaml -n e-team
 ```
 
-See **[k8s/postgres/README.md](../k8s/postgres/README.md)** for Postgres/migration verification, in-cluster `DATABASE_URL`, re-running the Job, and production notes.
+Regenerate that file after chart changes: `./scripts/render-k8s-manifests.sh`.
+
+See [`k8s/README.md`](../k8s/README.md) and [`charts/e-team/README.md`](../charts/e-team/README.md) for Helm installs and troubleshooting.
 
 After Postgres and the migrate Job are up, you can verify tables/columns in-cluster with:
 
@@ -54,7 +52,7 @@ After Postgres and the migrate Job are up, you can verify tables/columns in-clus
 ./scripts/verify-report-db-k8s.sh
 ```
 
-Execution and reporting services (`k8s/execution-service.yaml`, `k8s/reporting-service.yaml`) point at `postgres.e-team.svc.cluster.local` and use an init container to wait until migrations have created `pipeline_runs` before starting.
+Execution and reporting services resolve Postgres via the in-cluster Service from the chart (e.g. `e-team-postgres` when using `fullnameOverride=e-team` in the render script).
 
 ## Apply schema
 
@@ -67,7 +65,7 @@ psql "$DATABASE_URL" -f migrations/001_report_store_schema.sql
 If you don’t have `psql` installed, run the SQL inside the container (from repo root so the file path is available):
 
 ```bash
-docker compose exec -T postgres psql -U cicd -d reportstore -f - < migrations/001_report_store_schema.sql
+docker compose --env-file compose.values.env exec -T postgres psql -U cicd -d reportstore -f - < migrations/001_report_store_schema.sql
 ```
 
 If the repo is not mounted, copy the migration into the container and run it, or paste the DDL from `migrations/001_report_store_schema.sql` into `psql` manually.
@@ -89,12 +87,12 @@ The script starts Postgres if needed, applies the migration, and checks that the
 1. Start Postgres and apply the schema (see above).
 2. Connect and list tables:
    ```bash
-   docker compose exec postgres psql -U cicd -d reportstore -c "\dt"
+   docker compose --env-file compose.values.env exec postgres psql -U cicd -d reportstore -c "\dt"
    ```
    You should see `pipeline_runs`, `stage_runs`, `job_runs`.
 3. Check columns for one table:
    ```bash
-   docker compose exec postgres psql -U cicd -d reportstore -c "\d pipeline_runs"
+   docker compose --env-file compose.values.env exec postgres psql -U cicd -d reportstore -c "\d pipeline_runs"
    ```
    Confirm columns: `id`, `pipeline`, `run_no`, `start_time`, `end_time`, `status`, `git_hash`, `git_branch`, `git_repo`, and the unique constraint on `(pipeline, run_no)`.
 4. (Optional) From the host with `psql` and `DATABASE_URL` set:

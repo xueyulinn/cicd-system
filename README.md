@@ -34,11 +34,11 @@ The repository supports Kubernetes deployment for all current stateless services
 
 | Component | Type | K8s Enabled | Notes |
 |-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deployable via raw manifests in `k8s/` or Helm chart in `charts/e-team/` |
-| Validation Service | Stateless | Yes | Deployable via raw manifests or Helm |
-| Execution Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) or rendered manifests in `k8s/helm-rendered/` |
+| Validation Service | Stateless | Yes | Same as API Gateway |
+| Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
-| Reporting Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| Reporting Service | Stateless | Yes | Same as API Gateway |
 | PostgreSQL report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
 
 ### Kubernetes Deployment Modes
@@ -55,6 +55,8 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `DATABASE_URL`
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
+
+**Single source of truth:** application images and default DB credentials for local Compose are generated from `charts/e-team/values.yaml` into `compose.values.env` (`ruby scripts/gen-compose-env-from-values.rb`). Raw `kubectl` manifests under `k8s/helm-rendered/` are produced with `./scripts/render-k8s-manifests.sh` — do not edit them by hand.
 
 ## Observability
 
@@ -104,7 +106,7 @@ The `trace-id` is persisted in the report database and included in `report --run
 
 ### Accessing the Observability Stack
 
-After `docker compose up -d`:
+After `docker compose --env-file compose.values.env up -d`:
 
 | Tool | URL | Credentials |
 |------|-----|-------------|
@@ -448,21 +450,24 @@ deploy:
 The recommended way to run everything locally — all services, database, migrations, and the observability stack:
 
 ```bash
+# Align image tags and DB defaults with charts/e-team/values.yaml (committed compose.values.env)
+ruby scripts/gen-compose-env-from-values.rb
+
 # Start all containers (builds services from local source via docker-compose.override.yaml)
-docker compose up -d
+docker compose --env-file compose.values.env up -d
 
 # Verify everything is running
-docker compose ps
+docker compose --env-file compose.values.env ps
 
 # View logs
-docker compose logs -f execution-service worker-service
+docker compose --env-file compose.values.env logs -f execution-service worker-service
 ```
 
-`docker-compose.yaml` defines the baseline configuration with registry images. `docker-compose.override.yaml` (automatically loaded) adds `build:` directives so services are built from local source code. This means:
+`docker-compose.yaml` uses `${...}` values from `compose.values.env`. `docker-compose.override.yaml` (automatically loaded) adds `build:` directives so services are built from local source code. This means:
 
-- `docker compose up -d` — builds from local source (development)
-- `docker compose up -d --build` — forces a rebuild after code changes
-- `docker compose -f docker-compose.yaml up -d` — uses registry images only (CI/production)
+- `docker compose --env-file compose.values.env up -d` — builds from local source (development)
+- `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
+- `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
 
 ### Running services without Docker
 
@@ -479,7 +484,7 @@ Use another terminal for CLI commands. To point the CLI at a different Execution
 For the `report` subcommand, execution and report services need a PostgreSQL database. With Docker Compose this is handled automatically (Postgres + migrations start together). For manual setup:
 
 ```bash
-docker compose up -d postgres db-migrate
+docker compose --env-file compose.values.env up -d postgres db-migrate
 export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
 ```
 
@@ -509,10 +514,11 @@ e-team/
 │   ├── tempo/                    # Tempo tracing config
 │   ├── otel-collector/           # OpenTelemetry Collector pipeline config
 │   └── grafana/                  # Grafana provisioning and dashboards
-├── charts/e-team/                # Helm chart for Kubernetes deployment
-├── k8s/                          # Raw Kubernetes manifests
-├── scripts/                      # Dev scripts (start services, verify DB)
+├── charts/e-team/                # Helm chart for Kubernetes deployment (canonical)
+├── k8s/helm-rendered/            # kubectl-friendly YAML from helm template (regenerated)
+├── scripts/                      # Dev scripts (start services, verify DB, render manifests)
 ├── .pipelines/                   # Pipeline configurations
+├── compose.values.env            # Compose image/DB vars (generated from chart values)
 ├── docker-compose.yaml           # Full stack (services + observability)
 ├── docker-compose.override.yaml  # Local dev overrides (build from source)
 └── Makefile                      # Build automation

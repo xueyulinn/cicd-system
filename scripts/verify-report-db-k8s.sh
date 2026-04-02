@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 # Verify report store DB inside Kubernetes (Postgres + migrations in namespace e-team).
-# Prerequisites: kubectl configured; k8s/postgres applied; migrate image built/loaded.
+# Expects manifests from the Helm chart (see k8s/helm-rendered/e-team.yaml) or an equivalent Helm install.
+# Prerequisites: kubectl configured; stack applied; migrate image pullable.
 # Run from repo root. Exit 0 if checks pass.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 NS="${K8S_NAMESPACE:-e-team}"
+MIGRATE_JOB="${MIGRATE_JOB_NAME:-e-team-report-db-migrate}"
 
 echo "=== Namespace: $NS ==="
 
 echo "=== Waiting for Postgres pod ==="
-kubectl -n "$NS" wait pod -l app.kubernetes.io/name=postgres --for=condition=Ready --timeout=180s
+kubectl -n "$NS" wait pod -l app.kubernetes.io/component=postgres,app.kubernetes.io/name=e-team --for=condition=Ready --timeout=180s
 
 echo "=== Waiting for migration Job ==="
-if ! kubectl -n "$NS" get job report-db-migrate >/dev/null 2>&1; then
-  echo "Job report-db-migrate not found. Apply k8s/postgres/ first."
+if ! kubectl -n "$NS" get "job/${MIGRATE_JOB}" >/dev/null 2>&1; then
+  echo "Job ${MIGRATE_JOB} not found. Apply k8s/helm-rendered/e-team.yaml (or helm install) first."
   exit 1
 fi
-kubectl -n "$NS" wait job/report-db-migrate --for=condition=complete --timeout=300s
+kubectl -n "$NS" wait "job/${MIGRATE_JOB}" --for=condition=complete --timeout=300s
 
-PGPOD=$(kubectl -n "$NS" get pod -l app.kubernetes.io/name=postgres -o jsonpath='{.items[0].metadata.name}')
+PGPOD=$(kubectl -n "$NS" get pod -l app.kubernetes.io/component=postgres,app.kubernetes.io/name=e-team -o jsonpath='{.items[0].metadata.name}')
 if [[ -z "$PGPOD" ]]; then
   echo "Could not find postgres pod."
   exit 1
