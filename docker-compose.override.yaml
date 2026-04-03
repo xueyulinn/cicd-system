@@ -1,6 +1,7 @@
 # Local development overrides — automatically loaded by `docker compose up`.
 # Builds service images from source instead of pulling from the registry.
-# To use registry images only: docker compose -f docker-compose.yaml up -d
+# Use chart-aligned env: docker compose --env-file compose.values.env up -d
+# Registry-only: docker compose --env-file compose.values.env -f docker-compose.yaml up -d
 
 services:
   api-gateway:

@@ -1,11 +1,13 @@
 # PostgreSQL for report store (development).
-# Start: docker compose up -d
-# Stop:  docker compose down
+# Image tags and DB defaults match charts/e-team/values.yaml via compose.values.env (generated).
+# Regenerate: ruby scripts/gen-compose-env-from-values.rb
+# Start: docker compose --env-file compose.values.env up -d
+# Stop:  docker compose --env-file compose.values.env down
 # Connection: see dev-docs/report-db-setup.md and use DATABASE_URL or REPORT_DB_URL
 
 services:
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: ${RABBITMQ_IMAGE}
     container_name: e-team-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: guest
@@ -20,16 +22,16 @@ services:
       retries: 10
 
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE}
     container_name: e-team-postgres
     environment:
-      POSTGRES_USER: cicd
-      POSTGRES_PASSWORD: cicd
-      POSTGRES_DB: reportstore
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cicd -d reportstore"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,22 +40,22 @@ services:
     build:
       context: .
       dockerfile: migrations/Dockerfile
-    image: yulinxue/cicd-db-migrate:latest
+    image: ${MIGRATION_IMAGE}
     container_name: e-team-db-migrate
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PGPASSWORD: cicd
+      PGPASSWORD: ${POSTGRES_PASSWORD}
       DB_HOST: postgres
       DB_PORT: "5432"
-      DB_USER: cicd
-      DB_NAME: reportstore
+      DB_USER: ${POSTGRES_USER}
+      DB_NAME: ${POSTGRES_DB}
     restart: "no"
 
   api-gateway:
     container_name: e-team-api-gateway
-    image: yulinxue/cicd-api-gateway:latest
+    image: ${API_GATEWAY_IMAGE}
     environment:
       PORT: "8000"
       VALIDATION_URL: http://validation-service:8001
@@ -71,10 +73,10 @@ services:
 
   execution-service:
     container_name: e-team-execution-service
-    image: yulinxue/cicd-execution-service:latest
+    image: ${EXECUTION_SERVICE_IMAGE}
     environment:
       PORT: "8002"
-      DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       VALIDATION_URL: http://validation-service:8001
       WORKER_URL: http://worker-service:8003
@@ -95,7 +97,7 @@ services:
 
   validation-service:
     container_name: e-team-validation-service
-    image: yulinxue/cicd-validation-service:latest
+    image: ${VALIDATION_SERVICE_IMAGE}
     environment:
       PORT: "8001"
       SERVICE_NAME: validation-service
@@ -106,7 +108,7 @@ services:
 
   worker-service:
     container_name: e-team-worker-service
-    image: yulinxue/cicd-worker-service:latest
+    image: ${WORKER_SERVICE_IMAGE}
     # Local-dev friendly: run as root so docker.sock works out of the box.
     user: "0:0"
     environment:
@@ -125,10 +127,10 @@ services:
 
   reporting-service:
     container_name: e-team-reporting-service
-    image: yulinxue/cicd-reporting-service:latest
+    image: ${REPORTING_SERVICE_IMAGE}
     environment:
       PORT: "8004"
-      DATABASE_URL: postgres://cicd:cicd@postgres:5432/reportstore?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       SERVICE_NAME: reporting-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -139,7 +141,7 @@ services:
       - "8004:8004"
 
   prometheus:
-    image: prom/prometheus:v3.7.2
+    image: ${PROMETHEUS_IMAGE}
     container_name: e-team-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -152,7 +154,7 @@ services:
       - "9090:9090"
 
   loki:
-    image: grafana/loki:3.5.7
+    image: ${LOKI_IMAGE}
     container_name: e-team-loki
     command:
       - -config.file=/etc/loki/loki-config.yml
@@ -163,7 +165,7 @@ services:
       - "3100:3100"
 
   tempo:
-    image: grafana/tempo:2.8.2
+    image: ${TEMPO_IMAGE}
     container_name: e-team-tempo
     command:
       - -config.file=/etc/tempo/tempo.yml
@@ -176,7 +178,7 @@ services:
       - "4318:4318"
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.128.0
+    image: ${OTEL_COLLECTOR_IMAGE}
     container_name: e-team-otel-collector
     command:
       - --config=/etc/otelcol-contrib/config.yml
@@ -191,7 +193,7 @@ services:
       - "8890:8889"
 
   promtail:
-    image: grafana/promtail:3.5.7
+    image: ${PROMTAIL_IMAGE}
     container_name: e-team-promtail
     command:
       - -config.file=/etc/promtail/promtail-config.yml
@@ -202,7 +204,7 @@ services:
       - loki
 
   grafana:
-    image: grafana/grafana:12.0.2
+    image: ${GRAFANA_IMAGE}
     container_name: e-team-grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
