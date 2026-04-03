@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify report store DB inside Kubernetes (Postgres + migrations in namespace e-team).
-# Expects manifests from the Helm chart (see k8s/helm-rendered/e-team.yaml) or an equivalent Helm install.
+# Expects a cluster deployed from the Helm chart (charts/e-team/) or equivalent manifests.
 # Prerequisites: kubectl configured; stack applied; migrate image pullable.
 # Run from repo root. Exit 0 if checks pass.
 
@@ -17,7 +17,7 @@ kubectl -n "$NS" wait pod -l app.kubernetes.io/component=postgres,app.kubernetes
 
 echo "=== Waiting for migration Job ==="
 if ! kubectl -n "$NS" get "job/${MIGRATE_JOB}" >/dev/null 2>&1; then
-  echo "Job ${MIGRATE_JOB} not found. Apply k8s/helm-rendered/e-team.yaml (or helm install) first."
+  echo "Job ${MIGRATE_JOB} not found. Install the chart (helm install) or apply equivalent manifests first."
   exit 1
 fi
 kubectl -n "$NS" wait "job/${MIGRATE_JOB}" --for=condition=complete --timeout=300s
