@@ -9,8 +9,8 @@
   "panels": [
     {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {},
@@ -50,7 +50,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (status) (count_over_time({namespace=\"e-team\", container=\"execution-service\"} | json | line_format \"{{.log}}\" | json | event=\"pipeline-run\" | status=~\"success|failed\" | pipeline=~\"$pipeline\" [$__range]))",
+          "expr": "sum by (status) (increase(cicd_pipeline_runs_total{pipeline=~\"$pipeline\"}[$__range]))",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -61,8 +61,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -91,7 +91,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by (pipeline, run_no) (max_over_time({namespace=\"e-team\", container=\"execution-service\"} | json | line_format \"{{.log}}\" | json | event=\"pipeline-run\" | status=~\"success|failed\" | pipeline=~\"$pipeline\" | unwrap duration_s [$__interval]))",
+          "expr": "max by (pipeline, run_no) (cicd_pipeline_duration_seconds_sum{pipeline=~\"$pipeline\"} / clamp_min(cicd_pipeline_duration_seconds_count{pipeline=~\"$pipeline\"}, 1))",
           "legendFormat": "{{pipeline}} / run {{run_no}}",
           "range": true,
           "refId": "A"
@@ -102,8 +102,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {},
@@ -148,12 +148,12 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "loki"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "{namespace=\"e-team\", container=\"execution-service\"} | json | line_format \"{{.log}}\" | json | event=\"pipeline-run\" | status=~\"success|failed\" | pipeline=~\"$pipeline\"",
-          "queryType": "range",
+          "expr": "sum by (pipeline, run_no, status) (increase(cicd_pipeline_runs_total{pipeline=~\"$pipeline\"}[$__range]))",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -177,18 +177,21 @@
           "text": "All",
           "value": ".*"
         },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(cicd_pipeline_runs_total, pipeline)",
         "includeAll": true,
         "label": "Pipeline",
         "name": "pipeline",
-        "options": [
-          {
-            "selected": true,
-            "text": "All",
-            "value": ".*"
-          }
-        ],
-        "query": ".*",
-        "type": "custom"
+        "query": {
+          "qryType": 1,
+          "query": "label_values(cicd_pipeline_runs_total, pipeline)",
+          "refId": "Prometheus-pipeline"
+        },
+        "refresh": 1,
+        "type": "query"
       }
     ]
   },
