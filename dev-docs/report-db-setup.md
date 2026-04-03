@@ -33,18 +33,9 @@ Stop:
 docker compose --env-file compose.values.env down
 ```
 
-## Kubernetes (Helm chart or rendered manifests)
+## Kubernetes (Helm chart)
 
-Postgres, the migration Job, and app Deployments are defined in [`charts/e-team/`](../charts/e-team/). For `kubectl apply` without Helm, use the checked-in render:
-
-```bash
-kubectl create namespace e-team --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -f k8s/helm-rendered/e-team.yaml -n e-team
-```
-
-Regenerate that file after chart changes: `./scripts/render-k8s-manifests.sh`.
-
-See [`k8s/README.md`](../k8s/README.md) and [`charts/e-team/README.md`](../charts/e-team/README.md) for Helm installs and troubleshooting.
+Postgres, the migration Job, and app Deployments are defined in [`charts/e-team/`](../charts/e-team/). Install or upgrade with Helm — see [`charts/e-team/README.md`](../charts/e-team/README.md) and [`k8s/README.md`](../k8s/README.md).
 
 After Postgres and the migrate Job are up, you can verify tables/columns in-cluster with:
 
@@ -52,7 +43,7 @@ After Postgres and the migrate Job are up, you can verify tables/columns in-clus
 ./scripts/verify-report-db-k8s.sh
 ```
 
-Execution and reporting services resolve Postgres via the in-cluster Service from the chart (e.g. `e-team-postgres` when using `fullnameOverride=e-team` in the render script).
+Execution and reporting services resolve Postgres via the in-cluster Service from the chart (e.g. `e-team-postgres` when using `fullnameOverride=e-team` in `helm template` / values).
 
 ## Apply schema
 

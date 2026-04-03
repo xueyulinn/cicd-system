@@ -34,7 +34,7 @@ The repository supports Kubernetes deployment for all current stateless services
 
 | Component | Type | K8s Enabled | Notes |
 |-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) or rendered manifests in `k8s/helm-rendered/` |
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) |
 | Validation Service | Stateless | Yes | Same as API Gateway |
 | Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
@@ -56,7 +56,7 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
 
-**Single source of truth:** application images and default DB credentials for local Compose are generated from `charts/e-team/values.yaml` into `compose.values.env` (`ruby scripts/gen-compose-env-from-values.rb`). Raw `kubectl` manifests under `k8s/helm-rendered/` are produced with `./scripts/render-k8s-manifests.sh` — do not edit them by hand.
+**Single source of truth:** application images and default DB credentials for local Compose are generated from `charts/e-team/values.yaml` into `compose.values.env` (`ruby scripts/gen-compose-env-from-values.rb`). Cluster deployment uses Helm only (`charts/e-team/`); run `helm template` yourself if you need to inspect rendered YAML.
 
 ## Observability
 
@@ -515,8 +515,8 @@ e-team/
 │   ├── otel-collector/           # OpenTelemetry Collector pipeline config
 │   └── grafana/                  # Grafana provisioning and dashboards
 ├── charts/e-team/                # Helm chart for Kubernetes deployment (canonical)
-├── k8s/helm-rendered/            # kubectl-friendly YAML from helm template (regenerated)
-├── scripts/                      # Dev scripts (start services, verify DB, render manifests)
+├── k8s/                          # Notes for Kubernetes (see k8s/README.md)
+├── scripts/                      # Dev scripts (start services, verify DB)
 ├── .pipelines/                   # Pipeline configurations
 ├── compose.values.env            # Compose image/DB vars (generated from chart values)
 ├── docker-compose.yaml           # Full stack (services + observability)
