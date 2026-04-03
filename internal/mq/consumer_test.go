@@ -12,6 +12,8 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
+type consumerTestContextKey string
+
 type fakeRawConsumer struct {
 	consumeFn func(context.Context, string, func(context.Context, []byte) error) error
 	closeErr  error
@@ -69,7 +71,7 @@ func TestJobConsumerConsumeJob(t *testing.T) {
 		t.Fatalf("marshal expected message: %v", err)
 	}
 
-	handlerCtx := context.WithValue(context.Background(), "trace", "child")
+	handlerCtx := context.WithValue(context.Background(), consumerTestContextKey("trace"), "child")
 	var gotQueue string
 	var gotMsg messages.JobExecutionMessage
 	called := false
@@ -111,7 +113,8 @@ func TestJobConsumerConsumeJob(t *testing.T) {
 func TestJobConsumerConsumeJobValidation(t *testing.T) {
 	consumer := &JobConsumer{client: &fakeRawConsumer{}, queue: "jobs"}
 
-	err := consumer.ConsumeJob(nil, func(context.Context, messages.JobExecutionMessage) error { return nil })
+	var nilCtx context.Context
+	err := consumer.ConsumeJob(nilCtx, func(context.Context, messages.JobExecutionMessage) error { return nil })
 	if err == nil || !strings.Contains(err.Error(), "context is required") {
 		t.Fatalf("expected missing context error, got %v", err)
 	}

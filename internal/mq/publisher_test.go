@@ -12,6 +12,8 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 )
 
+type publisherTestContextKey string
+
 type fakeRawPublisher struct {
 	publishFn func(context.Context, string, []byte) error
 	closeErr  error
@@ -85,7 +87,7 @@ func TestJobPublisherPublishJob(t *testing.T) {
 		t.Fatalf("NewJobPublisher error: %v", err)
 	}
 
-	ctx := context.WithValue(context.Background(), "request_id", "req-1")
+	ctx := context.WithValue(context.Background(), publisherTestContextKey("request_id"), "req-1")
 	if err := publisher.PublishJob(ctx, msg); err != nil {
 		t.Fatalf("PublishJob returned error: %v", err)
 	}
