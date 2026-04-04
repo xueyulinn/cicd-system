@@ -31,7 +31,21 @@ type RunRequest struct {
 
 // RunResponse is the response for POST /run.
 type RunResponse struct {
-	Success bool     `json:"success"`
-	Errors  []string `json:"errors,omitempty"`
-	Message string   `json:"message,omitempty"`
+	Pipeline string   `json:"pipeline,omitempty"`
+	RunNo    int      `json:"run_no,omitempty"`
+	Status   string   `json:"status"`
+	Errors   []string `json:"errors,omitempty"`
+	Message  string   `json:"message,omitempty"`
+}
+
+// JobStatusCallbackRequest is sent by worker service to execution service to
+// report job lifecycle transitions.
+type JobStatusCallbackRequest struct {
+	Pipeline string `json:"pipeline"`
+	RunNo    int    `json:"run_no"`
+	Stage    string `json:"stage"`
+	Job      string `json:"job"`
+	Status   string `json:"status"`
+	Logs     string `json:"logs,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
