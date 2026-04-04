@@ -1,241 +1,305 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-	"net"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
+	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 	"github.com/moby/moby/client"
 )
 
 const (
 	defaultJobTimeout = 5 * time.Minute
+	defaultWorkerConcurrent = 1
 )
 
 // Server is the Worker Service HTTP server.
 type Server struct {
-	addr       string
-	docker     *client.Client
-	server     *http.Server
-	jobTimeout time.Duration
+	docker       *client.Client
+	jobTimeout   time.Duration
+	jobConsumers []mq.Consumer
+	executionURL string
+	httpClient   *http.Client
+	mqConfig     mq.Config
 }
 
-// NewServer creates a new Worker Service server listening on addr.
-func NewServer(addr string, docker *client.Client, jobTimeout time.Duration) *Server {
-	if addr == "" {
-		addr = ":" + config.DefaultWorkerPort
+var newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
+	mqClient, err := mq.NewRabbitClient(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	jobConsumer, err := mq.NewJobConsumer(mqClient, cfg)
+	if err != nil {
+		_ = mqClient.Close()
+		return nil, err
+	}
+	return jobConsumer, nil
+}
+
+// NewServer creates a worker server backed by Docker and RabbitMQ consumer groups.
+func NewServer(ctx context.Context, jobTimeout time.Duration) (*Server, error) {
 	if jobTimeout == 0 {
 		jobTimeout = defaultJobTimeout
 	}
-	s := &Server{addr: addr, docker: docker, jobTimeout: jobTimeout}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/execute", s.handleExecute)
-	mux.HandleFunc("/ready", s.handleReady)
-	mux.Handle("/metrics", observability.MetricsHandler())
 
-	wrapped := observability.HTTPMetricsMiddleware(
-		observability.TracingMiddleware("worker-service", mux))
-
-	s.server = &http.Server{
-		Addr:    addr,
-		Handler: wrapped,
-	}
-	return s
-}
-
-func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
+	docker, err := NewDockerClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create docker client: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
-	if err := pingDocker(ctx, s.docker); err != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable))
-		return
+	cfg := mq.LoadConfig()
+	concurrency := loadWorkerConcurrency()
+	jobConsumers, err := createJobConsumers(cfg, concurrency)
+	if err != nil {
+		_ = docker.Close()
+		return nil, err
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	return &Server{
+		docker:       docker,
+		jobTimeout:   jobTimeout,
+		jobConsumers: jobConsumers,
+		executionURL: config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
+		mqConfig:     cfg,
+		httpClient: &http.Client{
+			Timeout: 15 * time.Second,
+		},
+	}, nil
 }
 
-// Start starts the HTTP server. It blocks until the server is stopped.
-func (s *Server) Start() error {
-	return s.server.ListenAndServe()
-}
-
-// ServeListener runs the server on the given listener (tests).
-func (s *Server) ServeListener(l net.Listener) error {
-	return s.server.Serve(l)
-}
-
-// Shutdown gracefully shuts down the server.
-func (s *Server) Shutdown(ctx context.Context) error {
-	return s.server.Shutdown(ctx)
-}
-
-// Handler returns the HTTP handler for use in tests.
-func (s *Server) Handler() http.Handler {
-	return s.server.Handler
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
+func (s *Server) Close() error {
+	if s == nil {
+		return nil
 	}
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	for _, consumer := range s.jobConsumers {
+		if consumer != nil {
+			_ = consumer.Close()
+		}
+	}
+	if s.docker != nil {
+		_ = s.docker.Close()
+	}
+	return nil
 }
 
-// executeRequest is the JSON body for /execute.
-type executeRequest struct {
-	models.JobExecutionPlan
-	RepoURL       string `json:"repo_url,omitempty"`
-	Commit        string `json:"commit,omitempty"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
-	Pipeline      string `json:"pipeline,omitempty"`
-	RunNo         int    `json:"run_no,omitempty"`
-	Stage         string `json:"stage,omitempty"`
-}
-
-func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
+// Start blocks and consumes jobs from RabbitMQ until ctx is cancelled or consuming fails.
+func (s *Server) Start(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("worker server is nil")
 	}
 	if s.docker == nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "docker client not available")
-		return
+		return fmt.Errorf("docker client not available")
+	}
+	if len(s.jobConsumers) == 0 {
+		return fmt.Errorf("job consumer not available")
 	}
 
-	var req executeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		slog.Warn("invalid execute request", "error", err)
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	job := &models.JobExecutionPlan{Name: req.Name, Image: req.Image, Script: req.Script}
+	consumeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
+	errCh := make(chan error, len(s.jobConsumers))
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for i, consumer := range s.jobConsumers {
+		wg.Add(1)
+		go func(idx int, c mq.Consumer) {
+			defer wg.Done()
+			if err := c.ConsumeJob(consumeCtx, s.handleJobMessage); err != nil && consumeCtx.Err() == nil {
+				errCh <- fmt.Errorf("job consumer %d failed: %w", idx+1, err)
+			}
+		}(i, consumer)
+	}
+
+	// avoids blocking main goroutine
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	
+	// main goroutine listens here
+	select {
+	case err := <-errCh:
+		cancel()
+		<-done
+		return err
+	case <-ctx.Done():
+		cancel()
+		<-done
+		return ctx.Err()
+	case <-done:
+		return nil
+	}
+}
+
+// Ready reports whether the worker can reach its required dependencies.
+func (s *Server) Ready(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("worker server is nil")
+	}
+	if err := PingDocker(ctx, s.docker); err != nil {
+		return fmt.Errorf("docker not ready: %w", err)
+	}
+
+	rabbitClient, err := mq.NewRabbitClient(s.mqConfig)
+	if err != nil {
+		return fmt.Errorf("rabbitmq not ready: %w", err)
+	}
+	defer func() { _ = rabbitClient.Close() }()
+
+	return nil
+}
+
+func (s *Server) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	timeout := s.jobTimeout
+	jobCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	job := msg.Job
 	jobName := job.Name
 	if jobName == "" {
 		jobName = "unnamed"
 	}
 
-	// --- Job span (child of incoming trace from execution service) ---
-	tracer := observability.Tracer("worker")
-	ctx, jobSpan := tracer.Start(r.Context(), "job.run",
-		trace.WithAttributes(
-			attribute.String("pipeline", req.Pipeline),
-			attribute.Int("run_no", req.RunNo),
-			attribute.String("stage", req.Stage),
-			attribute.String("job", jobName),
-		),
-	)
-	defer jobSpan.End()
+	if err := s.callbackJobStarted(ctx, msg); err != nil {
+		return fmt.Errorf("callback job started: %w", err)
+	}
 
-	log := observability.WithTraceContext(ctx, slog.Default()).With(
-		"pipeline", req.Pipeline,
-		"run_no", req.RunNo,
-		"stage", req.Stage,
-		"job", jobName,
-	)
-
-	timeout := s.jobTimeout
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	runNoLabel := strconv.Itoa(req.RunNo)
-	log.Info("job started",
-		"event", "job-run",
-		"status", "running",
-		"source", "service",
-		"image", job.Image,
-	)
 	start := time.Now()
-	logs, err := ExecuteJob(ctx, s.docker, job, req.RepoURL, req.Commit, req.WorkspacePath)
-	elapsed := time.Since(start).Seconds()
+	logs, err := ExecuteJob(jobCtx, s.docker, &job, "", msg.Commit, msg.WorkspacePath)
+	duration := time.Since(start)
 
 	if err != nil {
-		jobSpan.SetStatus(codes.Error, err.Error())
-		observability.JobRunsTotal.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName, "failed").Inc()
-		observability.JobDurationSeconds.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName).Observe(elapsed)
-		log.Error("job failed",
-			"event", "job-run",
-			"status", "failed",
-			"source", "service",
-			"duration_s", elapsed,
-			"error", err,
-		)
-
-		emitJobContainerLogs(log, logs)
-
-		api.WriteJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	jobSpan.SetStatus(codes.Ok, "")
-	observability.JobRunsTotal.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName, "success").Inc()
-	observability.JobDurationSeconds.WithLabelValues(req.Pipeline, runNoLabel, req.Stage, jobName).Observe(elapsed)
-	log.Info("job completed",
-		"event", "job-run",
-		"status", "success",
-		"source", "service",
-		"duration_s", elapsed,
-	)
-
-	emitJobContainerLogs(log, logs)
-
-	api.WriteJSON(w, http.StatusOK, map[string]string{"logs": logs})
-}
-
-// emitJobContainerLogs writes container stdout/stderr as structured log lines
-// labeled with the parent logger's pipeline/run_no/stage/job context.
-func emitJobContainerLogs(log *slog.Logger, rawLogs string) {
-	if strings.TrimSpace(rawLogs) == "" {
-		return
-	}
-	for _, line := range strings.Split(rawLogs, "\n") {
-		if line == "" {
-			continue
+		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", err.Error()); callbackErr != nil {
+			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, callbackErr)
+			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
-		log.Info(line, "source", "job-container")
+		log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v error=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, err)
+		// Execution-level failures are terminal for this job message once status
+		// has been reported back; return nil so MQ ack does not requeue forever.
+		return nil
 	}
+
+	if err := s.callbackJobFinished(ctx, msg, store.StatusSuccess, logs, ""); err != nil {
+		return fmt.Errorf("callback job finished: %w", err)
+	}
+
+	log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v ok logs=%q", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, logs)
+	return nil
 }
 
-// Run runs the Worker Service until ctx is cancelled.
-func Run(ctx context.Context, addr string) error {
-	dockerCli, err := NewDockerClient(ctx)
+// Run starts the worker consumer until ctx is cancelled.
+func Run(ctx context.Context) error {
+	srv, err := NewServer(ctx, 0)
 	if err != nil {
-		return fmt.Errorf("docker client: %w", err)
+		return fmt.Errorf("create worker server: %w", err)
 	}
-	defer func() { _ = dockerCli.Close() }()
+	defer func() { _ = srv.Close() }()
 
-	srv := NewServer(addr, dockerCli, 0)
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-	}()
-	if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+	if err := srv.Start(ctx); err != nil && ctx.Err() == nil {
 		return err
 	}
 	return nil
 }
+
+func (s *Server) callbackJobStarted(ctx context.Context, msg messages.JobExecutionMessage) error {
+	return s.postJobCallback(ctx, "/callbacks/job-started", api.JobStatusCallbackRequest{
+		Pipeline: msg.Pipeline,
+		RunNo:    msg.RunNo,
+		Stage:    msg.Stage,
+		Job:      msg.Job.Name,
+		Status:   "started",
+	})
+}
+
+func (s *Server) callbackJobFinished(ctx context.Context, msg messages.JobExecutionMessage, status string, logs string, errMsg string) error {
+	return s.postJobCallback(ctx, "/callbacks/job-finished", api.JobStatusCallbackRequest{
+		Pipeline: msg.Pipeline,
+		RunNo:    msg.RunNo,
+		Stage:    msg.Stage,
+		Job:      msg.Job.Name,
+		Status:   status,
+		Logs:     logs,
+		Error:    errMsg,
+	})
+}
+
+func (s *Server) postJobCallback(ctx context.Context, path string, payload api.JobStatusCallbackRequest) error {
+	if s.httpClient == nil {
+		return fmt.Errorf("http client is not initialized")
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal callback payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.executionURL+path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create callback request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send callback request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("callback returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// returns worker pool
+func createJobConsumers(cfg mq.Config, count int) ([]mq.Consumer, error) {
+	if count < 1 {
+		return nil, fmt.Errorf("worker concurrency must be >= 1")
+	}
+
+	consumers := make([]mq.Consumer, 0, count)
+	for i := 0; i < count; i++ {
+		consumer, err := newJobConsumer(cfg)
+		if err != nil {
+			for _, c := range consumers {
+				_ = c.Close()
+			}
+			return nil, fmt.Errorf("initialize job consumer %d/%d: %w", i+1, count, err)
+		}
+		consumers = append(consumers, consumer)
+	}
+	return consumers, nil
+}
+
+func loadWorkerConcurrency() int {
+	raw := strings.TrimSpace(os.Getenv("WORKER_CONCURRENCY"))
+	if raw == "" {
+		return defaultWorkerConcurrent
+	}
+
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 1 {
+		log.Printf("[worker] invalid WORKER_CONCURRENCY=%q, fallback=%d", raw, defaultWorkerConcurrent)
+		return defaultWorkerConcurrent
+	}
+	return v
+}
+

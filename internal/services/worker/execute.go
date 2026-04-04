@@ -10,11 +10,12 @@ import (
 	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/moby/moby/api/pkg/stdcopy"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/client"
 )
 
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
@@ -56,15 +57,23 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 		_ = removeContainer(context.Background(), cli, containerID)
 	}()
 
-	// 3. Wait for container to exit
-	if err := waitContainer(ctx, cli, containerID); err != nil {
-		return "", fmt.Errorf("wait container: %w", err)
-	}
+	// 3. Wait for container to exit, then always attempt to collect logs so
+	// failed jobs expose stderr/stdout to callbacks and debugging output.
+	waitErr := waitContainer(ctx, cli, containerID)
 
 	// 4. Get logs (stdout/stderr)
-	logs, err = getLogs(ctx, cli, containerID)
-	if err != nil {
-		return "", fmt.Errorf("get logs: %w", err)
+	logs, logsErr := getLogs(ctx, cli, containerID)
+	if logsErr != nil {
+		if waitErr != nil {
+			return "", fmt.Errorf("wait container: %w; get logs: %v", waitErr, logsErr)
+		}
+		return "", fmt.Errorf("get logs: %w", logsErr)
+	}
+	if waitErr != nil {
+		if strings.TrimSpace(logs) != "" {
+			return logs, fmt.Errorf("wait container: %w\nlogs:\n%s", waitErr, logs)
+		}
+		return logs, fmt.Errorf("wait container: %w", waitErr)
 	}
 
 	return logs, nil
@@ -145,7 +154,13 @@ func runContainer(ctx context.Context, cli *client.Client, image string, script 
 	opts := client.ContainerCreateOptions{Config: cfg}
 	if workspacePath != "" {
 		opts.HostConfig = &container.HostConfig{
-			Binds: []string{workspacePath + ":/workspace"},
+			Mounts: []mount.Mount{
+				{
+					Type:   mount.TypeBind,
+					Source: workspacePath,
+					Target: "/workspace",
+				},
+			},
 		}
 	}
 	createResp, err := cli.ContainerCreate(ctx, opts)
