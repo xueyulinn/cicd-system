@@ -11,6 +11,18 @@ type StageExecutionPlan struct {
 	Jobs []JobExecutionPlan `json:"jobs" yaml:"jobs"`
 }
 
+// StagePlan captures the static dependency graph for a single stage.
+// Execution services can use it to decide which jobs are initially ready
+// and which downstream jobs are released after a dependency succeeds.
+type StagePlan struct {
+	Name       string                      `json:"name" yaml:"name"`
+	Jobs       []JobExecutionPlan          `json:"jobs" yaml:"jobs"`
+	Needs      map[string][]string         `json:"needs" yaml:"needs"`
+	Dependents map[string][]string         `json:"dependents" yaml:"dependents"`
+	InDegree   map[string]int              `json:"in_degree" yaml:"in_degree"`
+	JobByName  map[string]JobExecutionPlan `json:"-" yaml:"-"`
+}
+
 // JobExecutionPlan represents a job in execution order with image and script.
 type JobExecutionPlan struct {
 	Name   string   `json:"name" yaml:"name"`

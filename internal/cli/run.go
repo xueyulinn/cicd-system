@@ -95,7 +95,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("run failed")
 	}
 
-	if !response.Success {
+	if strings.EqualFold(response.Status, "failed") {
 		for _, errMsg := range response.Errors {
 			fmt.Fprintln(os.Stderr, errMsg)
 		}
