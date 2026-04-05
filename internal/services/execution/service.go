@@ -19,18 +19,22 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
 
 // struct called by execution handler
+const executionClientName = "execution-service"
+
 type Service struct {
-	workerURL     string
-	validationURL string
-	httpClient    *http.Client
-	store         *store.Store
-	jobPublisher  mq.Publisher
-	runtimeMu     sync.Mutex
-	runtimes      map[string]*pipelineRuntime // isolate pipeline runs on parallel
+	workerURL       string
+	validationURL   string
+	httpValidation  *http.Client
+	httpWorker      *http.Client
+	store           *store.Store
+	jobPublisher    mq.Publisher
+	runtimeMu       sync.Mutex
+	runtimes        map[string]*pipelineRuntime // isolate pipeline runs on parallel
 }
 
 // job identifier
@@ -111,15 +115,14 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	return &Service{
-		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
+		workerURL:       config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		httpClient: &http.Client{
-			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
-			Timeout: 10 * time.Minute,
-		},
-		store:        st,
-		jobPublisher: jobPublisher,
-		runtimes:     make(map[string]*pipelineRuntime),
+		// Validation calls are typically short; worker readiness and future HTTP paths may be long.
+		httpValidation: observability.NewInstrumentedHTTPClient(executionClientName, "validation", 2*time.Minute),
+		httpWorker:     observability.NewInstrumentedHTTPClient(executionClientName, "worker", 10*time.Minute),
+		store:          st,
+		jobPublisher:   jobPublisher,
+		runtimes:       make(map[string]*pipelineRuntime),
 	}, nil
 }
 
@@ -155,7 +158,7 @@ func (s *Service) Ready(ctx context.Context) error {
 		return fmt.Errorf("report store is not ready: %w", err)
 	}
 
-	resp, err := s.httpClient.Get(s.workerURL + "/ready")
+	resp, err := s.httpWorker.Get(s.workerURL + "/ready")
 	if err != nil {
 		return fmt.Errorf("worker service is not ready: %w", err)
 	}
@@ -613,7 +616,7 @@ func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, e
 		return nil, fmt.Errorf("failed to marshal validation request: %w", err)
 	}
 
-	resp, err := s.httpClient.Post(s.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := s.httpValidation.Post(s.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
