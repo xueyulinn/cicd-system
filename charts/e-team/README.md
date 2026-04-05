@@ -151,6 +151,8 @@ It also provisions these dashboards from config committed to the repository:
 - `Stage and Job Breakdown`
 - `Logs Viewer`
 - `Trace Explorer`
+- `HTTP Latency (Server & Client)`
+- `Parallel execution & RabbitMQ`
 
 This deployment uses Prometheus direct scraping for `/metrics`, Promtail for pod log shipping to Loki, and the OTel Collector for traces. That is the documented substitution for the recommended “single ingestion point” design, chosen so service logs and worker-managed job-container logs are both queryable without modifying pipeline job images.
 
