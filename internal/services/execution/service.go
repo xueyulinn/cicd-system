@@ -143,7 +143,6 @@ func (s *Service) Close() {
 
 // Ready reports whether the execution service can serve requests.
 // The service depends on the report store and the worker service.
-// TODO check the readiness of MQ
 func (s *Service) Ready(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("execution service is not initialized")
@@ -168,6 +167,12 @@ func (s *Service) Ready(ctx context.Context) error {
 		}
 		return fmt.Errorf("worker service readiness returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
+
+	timedoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := mq.PingMQ(timedoutCtx, mq.LoadConfig()); err != nil {
+		return fmt.Errorf("mq is not ready: %w", err)
+	} 
 
 	return nil
 }
