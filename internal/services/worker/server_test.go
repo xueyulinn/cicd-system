@@ -1,54 +1,115 @@
 package worker
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"context"
+	"errors"
+	"os"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
+	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
+	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
 )
 
-func TestHandleHealth_GET_returnsOK(t *testing.T) {
-	srv := NewServer("", nil, 0)
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
+type fakeConsumer struct {
+	closed bool
+}
 
-	srv.Handler().ServeHTTP(rec, req)
+func (f *fakeConsumer) ConsumeJob(context.Context, func(context.Context, messages.JobExecutionMessage) error) error {
+	return nil
+}
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("GET /health: status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Errorf("GET /health: Content-Type = %q, want %q", ct, "application/json")
-	}
-	var body map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("GET /health: decode body: %v", err)
-	}
-	if body["status"] != "healthy" {
-		t.Errorf("GET /health: status body = %q, want %q", body["status"], "healthy")
+func (f *fakeConsumer) Close() error {
+	f.closed = true
+	return nil
+}
+
+func TestLoadWorkerConcurrency_DefaultWhenUnset(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "")
+
+	got := loadWorkerConcurrency()
+	if got != defaultWorkerConcurrent {
+		t.Fatalf("loadWorkerConcurrency() = %d, want %d", got, defaultWorkerConcurrent)
 	}
 }
 
-func TestHandleHealth_nonGET_returnsMethodNotAllowed(t *testing.T) {
-	srv := NewServer("", nil, 0)
-	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
+func TestLoadWorkerConcurrency_ValidValue(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "3")
 
-	for _, method := range methods {
-		req := httptest.NewRequest(method, "/health", nil)
-		rec := httptest.NewRecorder()
-		srv.Handler().ServeHTTP(rec, req)
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("%s /health: status = %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
+	got := loadWorkerConcurrency()
+	if got != 3 {
+		t.Fatalf("loadWorkerConcurrency() = %d, want 3", got)
+	}
+}
+
+func TestLoadWorkerConcurrency_InvalidFallsBack(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "abc")
+
+	got := loadWorkerConcurrency()
+	if got != defaultWorkerConcurrent {
+		t.Fatalf("loadWorkerConcurrency() = %d, want %d", got, defaultWorkerConcurrent)
+	}
+}
+
+func TestCreateJobConsumers_CreatesRequestedCount(t *testing.T) {
+	originalFactory := newJobConsumer
+	defer func() { newJobConsumer = originalFactory }()
+
+	created := 0
+	newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
+		created++
+		return &fakeConsumer{}, nil
+	}
+
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 2)
+	if err != nil {
+		t.Fatalf("createJobConsumers returned error: %v", err)
+	}
+	if len(consumers) != 2 {
+		t.Fatalf("len(consumers) = %d, want 2", len(consumers))
+	}
+	if created != 2 {
+		t.Fatalf("created = %d, want 2", created)
+	}
+}
+
+func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
+	originalFactory := newJobConsumer
+	defer func() { newJobConsumer = originalFactory }()
+
+	first := &fakeConsumer{}
+	call := 0
+	newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
+		call++
+		if call == 1 {
+			return first, nil
 		}
+		return nil, errors.New("boom")
+	}
+
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 2)
+	if err == nil {
+		t.Fatal("createJobConsumers error = nil, want non-nil")
+	}
+	if consumers != nil {
+		t.Fatalf("consumers = %v, want nil", consumers)
+	}
+	if !first.closed {
+		t.Fatal("expected first consumer to be closed on initialization failure")
 	}
 }
 
-func TestNewServer_emptyAddr_usesDefault(t *testing.T) {
-	srv := NewServer("", nil, 0)
-	want := ":" + config.DefaultWorkerPort
-	if srv.addr != want {
-		t.Errorf("NewServer(``, nil, 0): addr = %q, want %q", srv.addr, want)
+func TestCreateJobConsumers_InvalidCount(t *testing.T) {
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 0)
+	if err == nil {
+		t.Fatal("createJobConsumers error = nil, want non-nil")
 	}
+	if consumers != nil {
+		t.Fatalf("consumers = %v, want nil", consumers)
+	}
+}
+
+func TestMain(m *testing.M) {
+	// Ensure this package test process does not inherit accidental concurrency overrides.
+	_ = os.Unsetenv("WORKER_CONCURRENCY")
+	os.Exit(m.Run())
 }

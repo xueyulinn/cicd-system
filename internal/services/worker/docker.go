@@ -23,7 +23,7 @@ func NewDockerClient(ctx context.Context) (*client.Client, error) {
 	return cli, nil
 }
 
-func pingDocker(ctx context.Context, cli *client.Client) error {
+func PingDocker(ctx context.Context, cli *client.Client) error {
 	if cli == nil {
 		return fmt.Errorf("docker client not available")
 	}
