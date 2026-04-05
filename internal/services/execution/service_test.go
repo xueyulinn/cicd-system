@@ -18,19 +18,19 @@ func TestBuildJobConfigs(t *testing.T) {
 
 	jobConfigs := buildJobConfigs(pipeline)
 
-	if jobConfigs[jobKey{stage: "build", name: "compile"}].failures {
+	if jobConfigs[jobKey{stage: "build", name: "compile"}].allowFailures {
 		t.Fatalf("expected compile to require success")
 	}
 
 	lintConfig := jobConfigs[jobKey{stage: "build", name: "lint"}]
-	if !lintConfig.failures {
+	if !lintConfig.allowFailures {
 		t.Fatalf("expected lint to allow failure")
 	}
 	if !reflect.DeepEqual(lintConfig.needs, []string{"compile"}) {
 		t.Fatalf("expected lint needs [compile], got %v", lintConfig.needs)
 	}
 
-	if jobConfigs[jobKey{stage: "release", name: "deploy"}].failures {
+	if jobConfigs[jobKey{stage: "release", name: "deploy"}].allowFailures {
 		t.Fatalf("expected deploy to require success")
 	}
 }

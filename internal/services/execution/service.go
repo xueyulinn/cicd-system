@@ -6,44 +6,83 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
+	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
 
+// struct called by execution handler
 type Service struct {
 	workerURL     string
 	validationURL string
 	httpClient    *http.Client
 	store         *store.Store
+	jobPublisher  mq.Publisher
+	runtimeMu     sync.Mutex
+	runtimes      map[string]*pipelineRuntime // isolate pipeline runs on parallel
 }
 
+// job identifier
 type jobKey struct {
 	stage string
 	name  string
 }
 
+// metadata for each job
 type jobConfig struct {
-	failures bool
-	needs    []string
+	allowFailures bool
+	needs         []string
 }
 
+// PreparedRun contains the validated pipeline and derived execution plan.
+// Callers can persist or dispatch the returned plan without re-parsing YAML.
+type PreparedRun struct {
+	Pipeline      *models.Pipeline
+	ExecutionPlan *models.ExecutionPlan
+}
+
+// context for this pipeline run
+type runInfo struct {
+	Branch        string
+	Commit        string
+	WorkspacePath string
+}
+
+type stageState struct {
+	plan           models.StagePlan
+	remainingNeeds map[string]int
+	queued         map[string]bool
+	completed      map[string]bool
+	jobConfigs     map[string]jobConfig
+}
+
+type initializedRun struct {
+	runNo   int
+	runtime *pipelineRuntime
+}
+
+type pipelineRuntime struct {
+	pipeline    string
+	runNo       int
+	stageOrder  []string
+	stageStates map[string]*stageState
+	runInfo     runInfo
+}
+
+// service constructor
 func NewService(ctx context.Context) (*Service, error) {
+	// create DB client
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
 		connURL = strings.TrimSpace(os.Getenv("REPORT_DB_URL"))
@@ -57,18 +96,46 @@ func NewService(ctx context.Context) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect report store: %w", err)
 	}
 
-	traced := observability.NewHTTPClient()
-	traced.Timeout = 10 * time.Minute
+	// create MQ client
+	cfg := mq.LoadConfig()
+	mqClient, err := mq.NewRabbitClient(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("fail to create RabbitMQ client: %w", err)
+	}
+
+	jobPublisher, err := mq.NewJobPublisher(mqClient, cfg)
+	if err != nil {
+		_ = mqClient.Close()
+		st.Close()
+		return nil, fmt.Errorf("fail to initialize job publisher: %w", err)
+	}
 
 	return &Service{
 		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		httpClient:    traced,
-		store:         st,
+		httpClient: &http.Client{
+			// Allow enough time for each job (pull image, build, test); worker uses 5m per job.
+			Timeout: 10 * time.Minute,
+		},
+		store:        st,
+		jobPublisher: jobPublisher,
+		runtimes:     make(map[string]*pipelineRuntime),
 	}, nil
 }
 
+func newRunInfo(req api.RunRequest) runInfo {
+	return runInfo{
+		Branch:        req.Branch,
+		Commit:        req.Commit,
+		WorkspacePath: req.WorkspacePath,
+	}
+}
+
+// close dependent resources: DB client and MQ client
 func (s *Service) Close() {
+	if s.jobPublisher != nil {
+		_ = s.jobPublisher.Close()
+	}
 	if s.store != nil {
 		s.store.Close()
 	}
@@ -76,6 +143,7 @@ func (s *Service) Close() {
 
 // Ready reports whether the execution service can serve requests.
 // The service depends on the report store and the worker service.
+// TODO check the readiness of MQ
 func (s *Service) Ready(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("execution service is not initialized")
@@ -104,257 +172,359 @@ func (s *Service) Ready(ctx context.Context) error {
 	return nil
 }
 
-// Run validates the pipeline before execution.
-func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
+// PrepareRun validates the incoming YAML and returns static execution plan and pipeline dto.
+func (s *Service) prepareRun(req api.RunRequest) (*PreparedRun, *api.RunResponse, error) {
 	if strings.TrimSpace(req.YAMLContent) == "" {
-		return &api.RunResponse{
-			Success: false,
-			Errors:  []string{"yaml_content is required"},
+		return nil, &api.RunResponse{
+			Pipeline: "",
+			Status:   "failed",
+			Errors:   []string{"yaml_content is required"},
 		}, nil
 	}
 
 	validationResp, err := s.validatePipeline(req.YAMLContent)
 	if err != nil {
-		return nil, fmt.Errorf("run pipeline: %w", err)
+		return nil, nil, fmt.Errorf("run pipeline: %w", err)
 	}
 
 	if !validationResp.Valid {
-		return &api.RunResponse{
-			Success: false,
-			Errors:  validationResp.Errors,
+		return nil, &api.RunResponse{
+			Pipeline: "",
+			Status:   "failed",
+			Errors:   validationResp.Errors,
 		}, nil
 	}
 
 	p := parser.NewParserFromContent(req.YAMLContent)
 	pipeline, _, err := p.Parse()
 	if err != nil {
-		return &api.RunResponse{
-			Success: false,
-			Errors:  []string{fmt.Sprintf("pipeline parse failed: %v", err)},
+		return nil, &api.RunResponse{
+			Pipeline: "",
+			Status:   "failed",
+			Errors:   []string{fmt.Sprintf("pipeline parse failed: %v", err)},
 		}, nil
 	}
 
-	// --- Root span: full pipeline execution ---
-	tracer := observability.Tracer("execution")
-	ctx, rootSpan := tracer.Start(ctx, "pipeline.run",
-		trace.WithAttributes(
-			attribute.String("pipeline", pipeline.Name),
-		),
-	)
-	defer rootSpan.End()
-	pipelineStart := time.Now()
-
-	runNo, err := s.startRun(ctx, pipeline.Name, req)
-	if err != nil {
-		rootSpan.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("create run record: %w", err)
-	}
-
-	rootSpan.SetAttributes(attribute.Int("run_no", runNo))
-	log := observability.WithTraceContext(ctx,
-		observability.WithPipelineContext(slog.Default(), pipeline.Name, runNo)).
-		With("git_branch", req.Branch, "git_hash", req.Commit)
-	log.Info("pipeline run started",
-		"event", "pipeline-run",
-		"status", store.StatusRunning,
-		"source", "service",
-	)
-
+	// generate static executionPlan for current pipeline run
 	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
 	if err != nil {
-		s.recordPipelineFailure(ctx, rootSpan, log, pipeline.Name, runNo, pipelineStart)
-		return &api.RunResponse{
-			Success: false,
-			Errors:  []string{fmt.Sprintf("generate execution plan failed: %v", err)},
+		return nil, &api.RunResponse{
+			Pipeline: pipeline.Name,
+			Status:   "failed",
+			Errors:   []string{fmt.Sprintf("generate execution plan failed: %v", err)},
 		}, nil
 	}
 
-	jobConfigs := buildJobConfigs(pipeline)
-	var logsByJob []string
-	for _, stage := range executionPlan.Stages {
-		stageResult, stageLogs, resp := s.runStage(ctx, tracer, log, pipeline.Name, runNo, stage, jobConfigs, req)
-		logsByJob = append(logsByJob, stageLogs...)
-		if resp != nil {
-			s.recordPipelineFailure(ctx, rootSpan, log, pipeline.Name, runNo, pipelineStart)
-			return resp, nil
-		}
-		if stageResult == store.StatusFailed {
-			s.recordPipelineFailure(ctx, rootSpan, log, pipeline.Name, runNo, pipelineStart)
-			return nil, fmt.Errorf("stage %q failed", stage.Name)
-		}
-	}
-
-	if err := s.finishRun(ctx, pipeline.Name, runNo, store.StatusSuccess); err != nil {
-		rootSpan.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("update run record failed: %w", err)
-	}
-
-	elapsed := time.Since(pipelineStart).Seconds()
-	runNoLabel := strconv.Itoa(runNo)
-	observability.PipelineRunsTotal.WithLabelValues(pipeline.Name, runNoLabel, store.StatusSuccess).Inc()
-	observability.PipelineDurationSeconds.WithLabelValues(pipeline.Name, runNoLabel).Observe(elapsed)
-	rootSpan.SetStatus(codes.Ok, "")
-	log.Info("pipeline run completed",
-		"event", "pipeline-run",
-		"status", store.StatusSuccess,
-		"source", "service",
-		"duration_s", elapsed,
-	)
-
-	return &api.RunResponse{
-		Success: true,
-		Message: strings.Join(logsByJob, "\n\n"),
-	}, nil
+	return &PreparedRun{
+		Pipeline:      pipeline,
+		ExecutionPlan: executionPlan,
+	}, nil, nil
 }
 
-// runStage executes all jobs in a stage within a child span.
-// Returns the stage status, accumulated job logs, and an optional early-return RunResponse (on hard failure).
-func (s *Service) runStage(
-	ctx context.Context,
-	tracer trace.Tracer,
-	parentLog *slog.Logger,
-	pipelineName string,
-	runNo int,
-	stage models.StageExecutionPlan,
-	jobConfigs map[jobKey]jobConfig,
-	req api.RunRequest,
-) (string, []string, *api.RunResponse) {
-	ctx, stageSpan := tracer.Start(ctx, "stage.run",
-		trace.WithAttributes(
-			attribute.String("pipeline", pipelineName),
-			attribute.String("stage", stage.Name),
-			attribute.Int("run_no", runNo),
-		),
-	)
-	defer stageSpan.End()
-	stageStart := time.Now()
+// buildJobExecutionMessage constructs the MQ payload for a single job in a pipeline run.
+func (s *Service) buildJobExecutionMessage(runNo int, pipeline, stage string, job models.JobExecutionPlan, runInfo runInfo) messages.JobExecutionMessage {
+	return messages.JobExecutionMessage{
+		RunNo:         runNo,
+		Pipeline:      pipeline,
+		Stage:         stage,
+		Branch:        runInfo.Branch,
+		Commit:        runInfo.Commit,
+		WorkspacePath: runInfo.WorkspacePath,
+		Job:           job,
+	}
+}
 
-	log := parentLog.With("stage", stage.Name)
-
-	if err := s.startStage(ctx, pipelineName, runNo, stage.Name); err != nil {
-		stageSpan.SetStatus(codes.Error, err.Error())
-		if finishErr := s.finishRun(ctx, pipelineName, runNo, store.StatusFailed); finishErr != nil {
-			return store.StatusFailed, nil, nil
-		}
-		return store.StatusFailed, nil, nil
+// publish job into mq using jobPublisher
+func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessage) error {
+	if s.jobPublisher == nil {
+		return fmt.Errorf("job publisher is not initialized")
 	}
 
-	log.Info("stage started",
-		"event", "stage-run",
-		"status", store.StatusRunning,
-		"source", "service",
-	)
-	var logsByJob []string
+	publishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 
-	for _, job := range stage.Jobs {
-		key := jobKey{stage: stage.Name, name: job.Name}
-		cfg := jobConfigs[key]
-		allowFailure := cfg.failures
+	if err := s.jobPublisher.PublishJob(publishCtx, msg); err != nil {
+		return err
+	}
+	return nil
+}
 
-		if err := s.startJob(ctx, pipelineName, runNo, stage.Name, job.Name, allowFailure); err != nil {
-			stageSpan.SetStatus(codes.Error, err.Error())
-			_ = s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusFailed)
-			_ = s.finishRun(ctx, pipelineName, runNo, store.StatusFailed)
-			return store.StatusFailed, logsByJob, nil
+// constructor for stageState
+func newStageState(stagePlan models.StagePlan) *stageState {
+	remaining := make(map[string]int, len(stagePlan.InDegree))
+	for name, degree := range stagePlan.InDegree {
+		remaining[name] = degree
+	}
+
+	return &stageState{
+		plan:           stagePlan,
+		remainingNeeds: remaining,
+		queued:         make(map[string]bool, len(stagePlan.JobByName)),
+		completed:      make(map[string]bool, len(stagePlan.JobByName)),
+		jobConfigs:     make(map[string]jobConfig, len(stagePlan.JobByName)),
+	}
+}
+
+func (s *stageState) markQueued(jobName string) {
+	s.queued[jobName] = true
+}
+
+func (s *stageState) markJobTerminal(jobName string) {
+	s.completed[jobName] = true
+}
+
+// get ready jobs for a stage
+func (s *stageState) getReadyJobs() []models.JobExecutionPlan {
+	ready := make([]models.JobExecutionPlan, 0)
+	for _, job := range s.plan.Jobs {
+		if s.remainingNeeds[job.Name] == 0 && !s.queued[job.Name] && !s.completed[job.Name] {
+			s.markQueued(job.Name)
+			ready = append(ready, job)
+		}
+	}
+	return ready
+}
+
+// finish job and return newly ready jobs
+func (s *stageState) markJobSucceeded(jobName string) []models.JobExecutionPlan {
+	if s.completed[jobName] {
+		return nil
+	}
+	s.markJobTerminal(jobName)
+
+	newlyReady := make([]models.JobExecutionPlan, 0)
+	// decrement the indegrees for job's dependent
+	for _, dependent := range s.plan.Dependents[jobName] {
+		if s.remainingNeeds[dependent] > 0 {
+			s.remainingNeeds[dependent]--
+		}
+		if s.remainingNeeds[dependent] == 0 && !s.queued[dependent] && !s.completed[dependent] {
+			s.markQueued(dependent)
+			newlyReady = append(newlyReady, s.plan.JobByName[dependent])
+		}
+	}
+	return newlyReady
+}
+
+func (s *stageState) isStageComplete() bool {
+	return len(s.completed) == len(s.plan.JobByName)
+}
+
+// publish msg to the queue
+func (s *Service) enqueueReadyJobs(ctx context.Context, pipelineName, stageName string, runNo int, jobs []models.JobExecutionPlan, runInfo runInfo) error {
+	for _, job := range jobs {
+		msg := s.buildJobExecutionMessage(runNo, pipelineName, stageName, job, runInfo)
+		if err := s.enqueueJob(ctx, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// serial execute stages
+func (s *Service) enqueueInitialReadyJobs(ctx context.Context, pipelineName string, runNo int, stages []models.StageExecutionPlan, stageStates map[string]*stageState, runInfo runInfo) error {
+	for _, stage := range stages {
+		state := stageStates[stage.Name]
+		if state == nil {
+			continue
 		}
 
-		logs, jobErr := s.executeJob(ctx, job, req.WorkspacePath, req, pipelineName, runNo, stage.Name)
-		if jobErr != nil {
-			_ = s.finishJob(ctx, pipelineName, runNo, stage.Name, job.Name, store.StatusFailed)
-			if allowFailure {
-				log.Warn("job allowed failure",
-					"event", "job-run",
-					"status", store.StatusFailed,
-					"source", "service",
-					"job", job.Name,
-					"error", jobErr,
-				)
-				logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\nallowed failure: %v", stage.Name, job.Name, jobErr))
+		readyJobs := state.getReadyJobs()
+		if len(readyJobs) == 0 {
+			// Empty stages can be completed immediately so dispatch can advance.
+			if len(stage.Jobs) == 0 {
+				if err := s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusSuccess); err != nil {
+					return fmt.Errorf("finish empty stage %q: %w", stage.Name, err)
+				}
 				continue
 			}
 
-			stageSpan.SetStatus(codes.Error, jobErr.Error())
-			log.Error("job failed",
-				"event", "job-run",
-				"status", store.StatusFailed,
-				"source", "service",
-				"job", job.Name,
-				"error", jobErr,
-			)
-			_ = s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusFailed)
-			_ = s.finishRun(ctx, pipelineName, runNo, store.StatusFailed)
-
-			elapsed := time.Since(stageStart).Seconds()
-				observability.StageDurationSeconds.WithLabelValues(pipelineName, strconv.Itoa(runNo), stage.Name).Observe(elapsed)
-
-			return store.StatusFailed, logsByJob, &api.RunResponse{
-				Success: false,
-				Errors:  []string{fmt.Sprintf("job %q in stage %q failed: %v", job.Name, stage.Name, jobErr)},
-			}
+			// Non-empty stages with no ready jobs should not happen for a valid first runnable stage,
+			// but we continue scanning to avoid hard-coding a single stage name.
+			continue
 		}
 
-		_ = s.finishJob(ctx, pipelineName, runNo, stage.Name, job.Name, store.StatusSuccess)
-		logsByJob = append(logsByJob, fmt.Sprintf("[%s/%s]\n%s", stage.Name, job.Name, logs))
+		if err := s.enqueueReadyJobs(ctx, pipelineName, stage.Name, runNo, readyJobs, runInfo); err != nil {
+			return fmt.Errorf("enqueue ready jobs for stage %q: %w", stage.Name, err)
+		}
+
+		// stops when ready-jobs are found for a stage
+		return nil
 	}
 
-	if err := s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusSuccess); err != nil {
-		stageSpan.SetStatus(codes.Error, err.Error())
-		_ = s.finishRun(ctx, pipelineName, runNo, store.StatusFailed)
-		return store.StatusFailed, logsByJob, nil
+	return nil
+}
+
+// build pipeline identifier
+func runtimeKey(pipeline string, runNo int) string {
+	return fmt.Sprintf("%s:%d", pipeline, runNo)
+}
+
+func (s *Service) putRuntime(rt *pipelineRuntime) {
+	if rt == nil {
+		return
+	}
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	s.runtimes[runtimeKey(rt.pipeline, rt.runNo)] = rt
+}
+
+func (s *Service) getPipelineRuntime(pipeline string, runNo int) *pipelineRuntime {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	return s.runtimes[runtimeKey(pipeline, runNo)]
+}
+
+func (s *Service) deleteRuntime(pipeline string, runNo int) {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	delete(s.runtimes, runtimeKey(pipeline, runNo))
+}
+
+func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
+	for idx, name := range rt.stageOrder {
+		if name == current && idx+1 < len(rt.stageOrder) {
+			return rt.stageOrder[idx+1], true
+		}
+	}
+	return "", false
+}
+
+// initialize pipeline runtime
+func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo) (*initializedRun, error) {
+	pipeline := prepared.Pipeline
+	executionPlan := prepared.ExecutionPlan
+	runNo, err := s.startPipelineRun(ctx, pipeline.Name, runInfo)
+
+	if err != nil {
+		return nil, fmt.Errorf("create pipeline run record: %w", err)
 	}
 
-	elapsed := time.Since(stageStart).Seconds()
-	observability.StageDurationSeconds.WithLabelValues(pipelineName, strconv.Itoa(runNo), stage.Name).Observe(elapsed)
-	stageSpan.SetStatus(codes.Ok, "")
-	log.Info("stage completed",
-		"event", "stage-run",
-		"status", store.StatusSuccess,
-		"source", "service",
-		"duration_s", elapsed,
-	)
+	stageStates := make(map[string]*stageState, len(executionPlan.Stages))
+	stageOrder := make([]string, 0, len(executionPlan.Stages))
 
-	return store.StatusSuccess, logsByJob, nil
+	// Persist stage/job rows up front in queued state. Only the first stage's
+	// initial ready jobs are dispatched here; later releases happen on job-success events.
+	for _, stage := range executionPlan.Stages {
+		if err := s.startStage(ctx, pipeline.Name, runNo, stage.Name); err != nil {
+			_ = s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusFailed)
+			return nil, fmt.Errorf("create stage record failed: %w", err)
+		}
+
+		// generates static execution plan for current stage
+		stagePlan := planner.BuildStagePlan(stage.Name, pipeline)
+
+		// maintain current running stage state
+		stageStates[stage.Name] = newStageState(stagePlan)
+		stageOrder = append(stageOrder, stage.Name)
+
+		for _, job := range stage.Jobs {
+			key := jobKey{stage: stage.Name, name: job.Name}
+			cfg := jobConfigs[key]
+			stageStates[stage.Name].jobConfigs[job.Name] = cfg
+			allowFailure := cfg.allowFailures
+			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, allowFailure); err != nil {
+				_ = s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed)
+				_ = s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusFailed)
+				return nil, fmt.Errorf("create job record failed: %w", err)
+			}
+		}
+	}
+
+	runtime := &pipelineRuntime{
+		pipeline:    pipeline.Name,
+		runNo:       runNo,
+		stageOrder:  stageOrder,
+		stageStates: stageStates,
+		runInfo:     runInfo,
+	}
+
+	// no stages found
+	if len(executionPlan.Stages) == 0 {
+		if err := s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusSuccess); err != nil {
+			return nil, fmt.Errorf("finish empty pipeline run: %w", err)
+		}
+		return &initializedRun{
+			runNo:   runNo,
+			runtime: runtime,
+		}, nil
+	}
+
+	return &initializedRun{
+		runNo:   runNo,
+		runtime: runtime,
+	}, nil
 }
 
-// recordPipelineFailure records failure metrics/span status and persists the failed run.
-func (s *Service) recordPipelineFailure(ctx context.Context, span trace.Span, log *slog.Logger, pipeline string, runNo int, start time.Time) {
-	elapsed := time.Since(start).Seconds()
-	runNoLabel := strconv.Itoa(runNo)
-	observability.PipelineRunsTotal.WithLabelValues(pipeline, runNoLabel, store.StatusFailed).Inc()
-	observability.PipelineDurationSeconds.WithLabelValues(pipeline, runNoLabel).Observe(elapsed)
-	span.SetStatus(codes.Error, "pipeline failed")
-	log.Error("pipeline run failed",
-		"event", "pipeline-run",
-		"status", store.StatusFailed,
-		"source", "service",
-		"duration_s", elapsed,
-	)
-	_ = s.finishRun(ctx, pipeline, runNo, store.StatusFailed)
+func (s *Service) dispatchInitialReadyJobs(ctx context.Context, prepared PreparedRun, initialized *initializedRun) error {
+	if initialized == nil || initialized.runtime == nil {
+		return fmt.Errorf("initialized run is required")
+	}
+
+	pipeline := prepared.Pipeline
+	executionPlan := prepared.ExecutionPlan
+	if err := s.enqueueInitialReadyJobs(ctx, pipeline.Name, initialized.runNo, executionPlan.Stages, initialized.runtime.stageStates, initialized.runtime.runInfo); err != nil {
+		_ = s.finishPipelineRun(ctx, pipeline.Name, initialized.runNo, store.StatusFailed)
+		s.deleteRuntime(pipeline.Name, initialized.runNo)
+		return err
+	}
+
+	return nil
 }
 
-// startRun inserts a new pipeline run in running state and returns run_no.
-func (s *Service) startRun(ctx context.Context, pipeline string, req api.RunRequest) (int, error) {
+// validate pipeline, dispatch jobs concurrently and retutrn right away
+func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
+	// validate pipeline file and generate execution plan
+	prepared, runResp, err := s.prepareRun(req)
+	if runResp != nil {
+		return runResp, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// {branch, commit, repo}
+	info := newRunInfo(req)
+	jobConfigs := buildJobConfigs(prepared.Pipeline)
+
+	initialized, err := s.initializePipelineRun(ctx, *prepared, jobConfigs, info)
+	if err != nil {
+		return nil, err
+	}
+	s.putRuntime(initialized.runtime)
+
+	// multi-thread run
+	go func(prepared PreparedRun, initialized *initializedRun) {
+		dispatchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.dispatchInitialReadyJobs(dispatchCtx, prepared, initialized); err != nil {
+			fmt.Fprintf(os.Stderr, "dispatch initial ready jobs failed for run %d: %v\n", initialized.runNo, err)
+		}
+	}(*prepared, initialized)
+
+	return &api.RunResponse{
+		Pipeline: prepared.Pipeline.Name,
+		RunNo:    initialized.runNo,
+		Status:   store.StatusQueued,
+	}, nil
+}
+
+// startPipelineRun inserts a new pipeline run in queued state and returns run_no.
+func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo runInfo) (int, error) {
 	now := time.Now().UTC()
-
-	var traceID string
-	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.HasTraceID() {
-		traceID = sc.TraceID().String()
-	}
-
 	in := store.CreateRunInput{
 		Pipeline:  pipeline,
 		StartTime: now,
-		Status:    store.StatusRunning,
-		GitBranch: req.Branch,
-		GitHash:   req.Commit,
-		GitRepo:   firstNonEmpty(req.RepoURL, req.WorkspacePath),
-		TraceID:   traceID,
+		Status:    store.StatusQueued,
+		GitBranch: runInfo.Branch,
+		GitHash:   runInfo.Commit,
+		GitRepo:   runInfo.WorkspacePath,
 	}
 	return s.store.CreateRun(ctx, in)
 }
 
 // finishRun records terminal run status and end_time.
-func (s *Service) finishRun(ctx context.Context, pipeline string, runNo int, status string) error {
+func (s *Service) finishPipelineRun(ctx context.Context, pipeline string, runNo int, status string) error {
 	now := time.Now().UTC()
 	update := store.UpdateRunInput{
 		EndTime: &now,
@@ -363,7 +533,7 @@ func (s *Service) finishRun(ctx context.Context, pipeline string, runNo int, sta
 	return s.store.UpdateRun(ctx, pipeline, runNo, update)
 }
 
-// startStage inserts a stage row in running state for the given run.
+// startStage inserts a stage row in queued state for the given run.
 func (s *Service) startStage(ctx context.Context, pipeline string, runNo int, stage string) error {
 	now := time.Now().UTC()
 	in := store.CreateStageInput{
@@ -371,7 +541,7 @@ func (s *Service) startStage(ctx context.Context, pipeline string, runNo int, st
 		RunNo:     runNo,
 		StartTime: now,
 		Stage:     stage,
-		Status:    store.StatusRunning,
+		Status:    store.StatusQueued,
 	}
 	return s.store.CreateStage(ctx, in)
 }
@@ -386,7 +556,7 @@ func (s *Service) finishStage(ctx context.Context, pipeline string, runNo int, s
 	return s.store.UpdateStage(ctx, pipeline, runNo, stage, update)
 }
 
-// startJob inserts a job row in running state before worker execution.
+// startJob inserts a job row in queued state before worker execution.
 // failures: when true, job is allowed to fail and does not affect stage status (Track B will set from plan).
 func (s *Service) startJob(ctx context.Context, pipeline string, runNo int, stage string, job string, failures bool) error {
 	now := time.Now().UTC()
@@ -396,7 +566,7 @@ func (s *Service) startJob(ctx context.Context, pipeline string, runNo int, stag
 		Stage:     stage,
 		Job:       job,
 		StartTime: now,
-		Status:    store.StatusRunning,
+		Status:    store.StatusQueued,
 		Failures:  failures,
 	}
 	return s.store.CreateJob(ctx, in)
@@ -412,6 +582,8 @@ func (s *Service) finishJob(ctx context.Context, pipeline string, runNo int, sta
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
 }
 
+// buildJobConfigs returns a lookup table keyed by {stage, job name}.
+// Each entry stores execution-related job metadata such as allow-failures and needs dependencies.
 func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	if pipeline == nil {
 		return map[jobKey]jobConfig{}
@@ -420,81 +592,15 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	jobConfigs := make(map[jobKey]jobConfig, len(pipeline.Jobs))
 	for _, job := range pipeline.Jobs {
 		jobConfigs[jobKey{stage: job.Stage, name: job.Name}] = jobConfig{
-			failures: job.Failures,
-			needs:    append([]string(nil), job.Needs...),
+			allowFailures: job.Failures,
+			needs:         append([]string(nil), job.Needs...),
 		}
 	}
 
 	return jobConfigs
 }
 
-// workerExecuteBody is the request body for worker /execute (job + optional workspace + pipeline context).
-type workerExecuteBody struct {
-	models.JobExecutionPlan
-	RepoURL       string `json:"repo_url,omitempty"`
-	Commit        string `json:"commit,omitempty"`
-	WorkspacePath string `json:"workspace_path,omitempty"`
-	Pipeline      string `json:"pipeline,omitempty"`
-	RunNo         int    `json:"run_no,omitempty"`
-	Stage         string `json:"stage,omitempty"`
-}
 
-func (s *Service) executeJob(ctx context.Context, job models.JobExecutionPlan, workspacePath string, req api.RunRequest, pipeline string, runNo int, stage string) (string, error) {
-	body, err := json.Marshal(workerExecuteBody{
-		JobExecutionPlan: job,
-		RepoURL:          req.RepoURL,
-		Commit:           req.Commit,
-		WorkspacePath:    workspacePath,
-		Pipeline:         pipeline,
-		RunNo:            runNo,
-		Stage:            stage,
-	})
-	if err != nil {
-		return "", fmt.Errorf("marshal worker request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.workerURL+"/execute", bytes.NewBuffer(body))
-	if err != nil {
-		return "", fmt.Errorf("create worker request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return "", fmt.Errorf("call worker service: %w", err)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-
-	if err != nil {
-		return "", fmt.Errorf("read worker response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var e workerErrorResponse
-		if json.Unmarshal(respBody, &e) == nil && e.Error != "" {
-			return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, e.Error)
-		}
-		return "", fmt.Errorf("worker returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var ok workerExecuteResponse
-	if err := json.Unmarshal(respBody, &ok); err != nil {
-		return "", fmt.Errorf("unmarshal worker response: %w", err)
-	}
-	return ok.Logs, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
 
 // validatePipeline calls validation service and returns validation result.
 func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, error) {
@@ -536,10 +642,111 @@ func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, e
 	return &validationResp, nil
 }
 
-type workerExecuteResponse struct {
-	Logs string `json:"logs"`
+// callback used to update job status from queued to running
+func (s *Service) HandleJobStarted(ctx context.Context, req api.JobStatusCallbackRequest) error {
+	if strings.TrimSpace(req.Pipeline) == "" || strings.TrimSpace(req.Stage) == "" || strings.TrimSpace(req.Job) == "" || req.RunNo == 0 {
+		return fmt.Errorf("pipeline, run_no, stage, and job are required")
+	}
+	return s.markJobRunning(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job)
 }
 
-type workerErrorResponse struct {
-	Error string `json:"error"`
+func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallbackRequest) error {
+	if strings.TrimSpace(req.Pipeline) == "" || strings.TrimSpace(req.Stage) == "" || strings.TrimSpace(req.Job) == "" || req.RunNo == 0 {
+		return fmt.Errorf("pipeline, run_no, stage, and job are required")
+	}
+
+	status := strings.TrimSpace(req.Status)
+	switch status {
+	case store.StatusSuccess, store.StatusFailed:
+	default:
+		return fmt.Errorf("invalid finished status %q", req.Status)
+	}
+
+	// update DB job status
+	if err := s.finishJob(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job, status); err != nil {
+		return err
+	}
+
+	rt := s.getPipelineRuntime(req.Pipeline, req.RunNo)
+	if rt == nil {
+		return nil
+	}
+
+	stage := rt.stageStates[req.Stage]
+	if stage == nil {
+		return nil
+	}
+
+	jobCfg := stage.jobConfigs[req.Job]
+	allowFailure := jobCfg.allowFailures
+
+	if status == store.StatusFailed {
+		if allowFailure {
+			newlyReady := stage.markJobSucceeded(req.Job)
+			if err := s.enqueueReadyJobs(ctx, req.Pipeline, req.Stage, req.RunNo, newlyReady, rt.runInfo); err != nil {
+				return err
+			}
+		} else {
+			stage.markJobTerminal(req.Job)
+			if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusFailed); err != nil {
+				return err
+			}
+			if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusFailed); err != nil {
+				return err
+			}
+			s.deleteRuntime(req.Pipeline, req.RunNo)
+			return nil
+		}
+	} else {
+		newlyReady := stage.markJobSucceeded(req.Job)
+		if err := s.enqueueReadyJobs(ctx, req.Pipeline, req.Stage, req.RunNo, newlyReady, rt.runInfo); err != nil {
+			return err
+		}
+	}
+
+	// adjust the current stage
+	if !stage.isStageComplete() {
+		return nil
+	}
+
+	if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusSuccess); err != nil {
+		return err
+	}
+
+	nextStageName, ok := rt.nextStageName(req.Stage)
+
+	if !ok {
+		if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusSuccess); err != nil {
+			return err
+		}
+		s.deleteRuntime(req.Pipeline, req.RunNo)
+		return nil
+	}
+
+	nextStage := rt.stageStates[nextStageName]
+	if nextStage == nil {
+		return nil
+	}
+
+	readyJobs := nextStage.getReadyJobs()
+	if err := s.enqueueReadyJobs(ctx, req.Pipeline, nextStageName, req.RunNo, readyJobs, rt.runInfo); err != nil {
+		return err
+	}
+
+	if nextStage.isStageComplete() {
+		if err := s.finishStage(ctx, req.Pipeline, req.RunNo, nextStageName, store.StatusSuccess); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+// update job status as running
+func (s *Service) markJobRunning(ctx context.Context, pipeline string, runNo int, stage string, job string) error {
+	update := store.UpdateJobInput{
+		EndTime: nil,
+		Status:  store.StatusRunning,
+	}
+	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
+}
+

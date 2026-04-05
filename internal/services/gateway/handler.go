@@ -188,12 +188,12 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if response.Success {
-		log.Info("run completed", "message", response.Message)
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
+	if strings.EqualFold(response.Status, "failed") {
 		log.Warn("run failed", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
+	} else {
+		log.Info("run completed", "message", response.Message, "status", response.Status)
+		api.WriteJSON(w, http.StatusOK, response)
 	}
 }
 

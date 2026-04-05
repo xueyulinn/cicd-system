@@ -4,6 +4,7 @@ import "time"
 
 // Status values for pipeline run, stage, and job.
 const (
+	StatusQueued = "queued"
 	StatusRunning = "running"
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
