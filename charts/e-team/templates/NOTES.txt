@@ -15,6 +15,11 @@
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.executionServiceName" . }}
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.reportingServiceName" . }}
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.workerServiceName" . }}
+{{- if .Values.rabbitmq.enabled }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "e-team.rabbitmqName" . }}
+  # RabbitMQ management UI (optional):
+  # kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "e-team.rabbitmqName" . }} 15672:15672
+{{- end }}
 {{- if and .Values.postgres.enabled .Values.migration.enabled }}
   kubectl -n {{ .Release.Namespace }} logs job/{{ include "e-team.migrationJobName" . }}
 {{- end }}
