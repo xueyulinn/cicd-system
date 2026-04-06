@@ -43,6 +43,7 @@ func NewRabbitClient(cfg Config) (*RabbitClient, error) {
 	return client, nil
 }
 
+// create queue if not exists
 func (c *RabbitClient) ensureQueue(queue string) error {
 	if c == nil {
 		return fmt.Errorf("rabbit client is nil")
@@ -143,6 +144,36 @@ func (c *RabbitClient) Close() error {
 
 	if c.conn != nil {
 		_ = c.conn.Close()
+	}
+	return nil
+}
+
+// Check if mq is ready
+func PingMQ(ctx context.Context, cfg Config) error{
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("mq config is invalid: %w", err)
+	}
+	
+	conn, err := amqp.Dial(cfg.URL)
+	
+	if err != nil {
+		return fmt.Errorf("failed to connect with mq instance: %w", err)
+	}
+
+	defer func() { _ = conn.Close() }()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("failed to open channel: %w", err)
+	}
+
+	defer func() { _ = ch.Close() }()
+
+	 _, err = ch.QueueDeclarePassive(cfg.JobQueue, true, false, false, false, nil)
+
+	if err != nil {
+		return fmt.Errorf("queue %q not ready: %w", cfg.JobQueue, err)
 	}
 	return nil
 }
