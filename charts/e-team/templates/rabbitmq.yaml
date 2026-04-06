@@ -1,0 +1,131 @@
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "e-team.rabbitmqSecretName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+type: Opaque
+stringData:
+  RABBITMQ_DEFAULT_USER: {{ .Values.rabbitmq.auth.username | quote }}
+  RABBITMQ_DEFAULT_PASS: {{ .Values.rabbitmq.auth.password | quote }}
+  RABBITMQ_URL: {{ include "e-team.rabbitmqAmqpURL" . | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.rabbitmqName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "rabbitmq") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "rabbitmq") | nindent 8 }}
+      {{- with .Values.global.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          ports:
+            - name: amqp
+              containerPort: {{ .Values.rabbitmq.service.amqpPort }}
+            - name: management
+              containerPort: {{ .Values.rabbitmq.service.managementPort }}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.rabbitmqSecretName" . }}
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.rabbitmqSecretName" . }}
+                  key: RABBITMQ_DEFAULT_PASS
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+          readinessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - -q
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - -q
+                - ping
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.rabbitmq.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "e-team.rabbitmqName" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.rabbitmqName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "rabbitmq") | nindent 4 }}
+  ports:
+    - name: amqp
+      port: {{ .Values.rabbitmq.service.amqpPort }}
+      targetPort: amqp
+    - name: management
+      port: {{ .Values.rabbitmq.service.managementPort }}
+      targetPort: management
+{{- if .Values.rabbitmq.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "e-team.rabbitmqName" . }}-data
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+spec:
+  accessModes:
+    {{- toYaml .Values.rabbitmq.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.rabbitmq.persistence.size }}
+  {{- if .Values.rabbitmq.persistence.storageClassName }}
+  storageClassName: {{ .Values.rabbitmq.persistence.storageClassName | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
