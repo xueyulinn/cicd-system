@@ -6,3 +6,5 @@ Current dashboards:
 - `stage-job-breakdown.json`
 - `logs-viewer.json`
 - `trace-explorer.json`
+- `http-latency.json`
+- `parallel-mq.json`

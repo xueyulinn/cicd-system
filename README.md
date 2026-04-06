@@ -85,12 +85,16 @@ Every service exposes a `/metrics` endpoint scraped by Prometheus. The following
 | `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` (+ `run_no`) | Execution Service |
 | `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
 | `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
+| `cicd_mq_jobs_published_total` | Counter | `queue`, `outcome` (`success` / `failure`) | Execution Service (via MQ publisher) |
+| `cicd_mq_delivery_outcomes_total` | Counter | `queue`, `outcome` (`acked`, `nack_requeue`, `ack_error`) | Worker Service (RabbitMQ consumer) |
+| `cicd_execution_ready_batch_size` | Histogram | — | Execution Service (batch of parallel-ready jobs per dispatch) |
+| `cicd_execution_jobs_enqueued_total` | Counter | `pipeline`, `stage` | Execution Service |
 
-Inbound HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware. Outbound calls from the API Gateway and Execution Service use `http_client_requests_total` and `http_client_request_duration_seconds` (labels `client`, `upstream`, and `code` for the counter). The Grafana dashboard **HTTP Latency (Server & Client)** (`observability/grafana/dashboards/http-latency.json`) charts both.
+Inbound HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware. Outbound calls from the API Gateway and Execution Service use `http_client_requests_total` and `http_client_request_duration_seconds` (labels `client`, `upstream`, and `code` for the counter). The Grafana dashboard **HTTP Latency (Server & Client)** (`observability/grafana/dashboards/http-latency.json`) charts both. Async pipeline execution (RabbitMQ and parallel-ready job batches) is covered by **Parallel execution & RabbitMQ** (`observability/grafana/dashboards/parallel-mq.json`).
 
 ### Structured Logs
 
-All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
+All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. When the execution service dispatches more than one parallel-ready job in a single batch, it logs `event: "mq-dispatch-batch"` with `batch_size`. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
 
 ### Distributed Tracing
 
@@ -99,6 +103,8 @@ Services use OpenTelemetry SDK with W3C Trace Context propagation. The following
 - **`pipeline.run`** (root span) — full pipeline execution, with `pipeline` and `run_no` attributes
 - **`stage.run`** (child) — per-stage execution
 - **`job.run`** (child) — per-job execution in the Worker
+- **`mq.job.publish`** — execution service publishes one job message to the queue (`pipeline`, `run_no`, `stage`, `job`)
+- **`mq.job.consume`** — worker handles one delivery (`pipeline`, `run_no`, `stage`, `job`)
 
 Outbound HTTP calls between services automatically propagate trace context.
 
@@ -123,6 +129,7 @@ The following dashboards are provisioned from files committed to the repository:
 - `Stage and Job Breakdown`
 - `Logs Viewer`
 - `Trace Explorer`
+- `Parallel execution & RabbitMQ`
 
 `Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
 

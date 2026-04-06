@@ -6,6 +6,8 @@ import (
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
 // RabbitClient is the low-level RabbitMQ transport used by higher-level
@@ -97,13 +99,16 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 			}
 			
 			if err := handler(ctx, delivery.Body); err != nil {
+				observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
 				_ = delivery.Nack(false, true)
 				log.Printf("[mq] nack delivery from queue=%s err=%v", queue, err)
 				continue
 			}
 			if err := delivery.Ack(false); err != nil {
+				observability.RecordMQDeliveryOutcome(queue, "ack_error")
 				return fmt.Errorf("ack delivery from queue %q: %w", queue, err)
 			}
+			observability.RecordMQDeliveryOutcome(queue, "acked")
 		}
 	}
 }

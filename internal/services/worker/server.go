@@ -17,13 +17,19 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 	"github.com/moby/moby/client"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	defaultJobTimeout = 5 * time.Minute
 	defaultWorkerConcurrent = 1
+
+	workerTracerName = "worker-service"
 )
 
 // Server is the Worker Service HTTP server.
@@ -163,7 +169,23 @@ func (s *Server) Ready(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) error {
+func (s *Server) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) (err error) {
+	tracer := observability.Tracer(workerTracerName)
+	ctx, span := tracer.Start(ctx, "mq.job.consume",
+		trace.WithAttributes(
+			attribute.String("pipeline", msg.Pipeline),
+			attribute.Int("run_no", msg.RunNo),
+			attribute.String("stage", msg.Stage),
+			attribute.String("job", msg.Job.Name),
+		))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	if s.docker == nil {
 		return fmt.Errorf("docker client not available")
 	}
@@ -183,15 +205,15 @@ func (s *Server) handleJobMessage(ctx context.Context, msg messages.JobExecution
 	}
 
 	start := time.Now()
-	logs, err := ExecuteJob(jobCtx, s.docker, &job, "", msg.Commit, msg.WorkspacePath)
+	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, "", msg.Commit, msg.WorkspacePath)
 	duration := time.Since(start)
 
-	if err != nil {
-		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", err.Error()); callbackErr != nil {
+	if execErr != nil {
+		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
 			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, callbackErr)
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
-		log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v error=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, err)
+		log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v error=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, execErr)
 		// Execution-level failures are terminal for this job message once status
 		// has been reported back; return nil so MQ ack does not requeue forever.
 		return nil

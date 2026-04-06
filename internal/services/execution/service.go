@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +22,9 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // struct called by execution handler
@@ -243,12 +247,25 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		return fmt.Errorf("job publisher is not initialized")
 	}
 
+	tracer := observability.Tracer(executionClientName)
+	ctx, span := tracer.Start(ctx, "mq.job.publish",
+		trace.WithAttributes(
+			attribute.String("pipeline", msg.Pipeline),
+			attribute.Int("run_no", msg.RunNo),
+			attribute.String("stage", msg.Stage),
+			attribute.String("job", msg.Job.Name),
+		))
+	defer span.End()
+
 	publishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	if err := s.jobPublisher.PublishJob(publishCtx, msg); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	observability.RecordExecutionJobEnqueued(msg.Pipeline, msg.Stage)
 	return nil
 }
 
@@ -315,6 +332,16 @@ func (s *stageState) isStageComplete() bool {
 
 // publish msg to the queue
 func (s *Service) enqueueReadyJobs(ctx context.Context, pipelineName, stageName string, runNo int, jobs []models.JobExecutionPlan, runInfo runInfo) error {
+	observability.RecordExecutionReadyBatchSize(len(jobs))
+	if len(jobs) > 1 {
+		slog.Default().Info("mq dispatch batch",
+			"event", "mq-dispatch-batch",
+			"pipeline", pipelineName,
+			"stage", stageName,
+			"run_no", runNo,
+			"batch_size", len(jobs),
+		)
+	}
 	for _, job := range jobs {
 		msg := s.buildJobExecutionMessage(runNo, pipelineName, stageName, job, runInfo)
 		if err := s.enqueueJob(ctx, msg); err != nil {
