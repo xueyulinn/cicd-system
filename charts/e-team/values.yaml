@@ -71,10 +71,18 @@ executionService:
       repository: postgres
       tag: 16-alpine
       pullPolicy: IfNotPresent
+  waitForRabbitmq:
+    enabled: true
+    image:
+      repository: busybox
+      tag: "1.36"
+      pullPolicy: IfNotPresent
 
 workerService:
   enabled: true
   replicaCount: 1
+  # RabbitMQ consumers per worker Pod (parallel-ready jobs within a stage).
+  concurrency: 2
   image:
     repository: yulinxue/cicd-worker-service
     tag: latest
@@ -87,6 +95,12 @@ workerService:
   securityContext:
     runAsUser: 0
     runAsGroup: 0
+  waitForRabbitmq:
+    enabled: true
+    image:
+      repository: busybox
+      tag: "1.36"
+      pullPolicy: IfNotPresent
   resources:
     requests:
       cpu: 100m
@@ -150,6 +164,33 @@ externalDatabase:
   username: ""
   password: ""
   database: ""
+
+# In-cluster RabbitMQ (same role as docker-compose rabbitmq service).
+rabbitmq:
+  enabled: true
+  image:
+    repository: rabbitmq
+    tag: 3-management-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    username: guest
+    password: guest
+  service:
+    amqpPort: 5672
+    managementPort: 15672
+  persistence:
+    enabled: false
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 migration:
   enabled: true
