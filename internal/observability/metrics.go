@@ -48,9 +48,22 @@ var (
 
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
-		Help:    "HTTP request latency.",
+		Help:    "HTTP request latency (inbound, server handler).",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path"})
+
+	// HTTPClientRequestDurationSeconds measures outbound HTTP from this process (client perspective).
+	// Labels: client = calling service name, upstream = logical peer (e.g. validation, execution).
+	httpClientRequestDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_client_request_duration_seconds",
+		Help:    "Outbound HTTP request latency (client perspective).",
+		Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800},
+	}, []string{"client", "upstream"})
+
+	httpClientRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_client_requests_total",
+		Help: "Outbound HTTP requests by client, upstream, and HTTP status (or error).",
+	}, []string{"client", "upstream", "code"})
 )
 
 // RegisterMetrics registers all CI/CD and HTTP metrics with the default registry.
@@ -64,6 +77,8 @@ func RegisterMetrics() {
 		JobRunsTotal,
 		httpRequestsTotal,
 		httpRequestDuration,
+		httpClientRequestDurationSeconds,
+		httpClientRequestsTotal,
 	)
 }
 

@@ -86,7 +86,7 @@ Every service exposes a `/metrics` endpoint scraped by Prometheus. The following
 | `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
 | `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
 
-HTTP request metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware.
+Inbound HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware. Outbound calls from the API Gateway and Execution Service use `http_client_requests_total` and `http_client_request_duration_seconds` (labels `client`, `upstream`, and `code` for the counter). The Grafana dashboard **HTTP Latency (Server & Client)** (`observability/grafana/dashboards/http-latency.json`) charts both.
 
 ### Structured Logs
 

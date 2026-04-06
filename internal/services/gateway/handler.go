@@ -277,7 +277,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Client) checkValidationReady() (string, error) {
-	resp, err := c.httpClient.Get(c.validationURL + "/ready")
+	resp, err := c.httpValidation.Get(c.validationURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -293,7 +293,7 @@ func (c *Client) checkValidationReady() (string, error) {
 }
 
 func (c *Client) checkReportReady() (string, error) {
-	resp, err := c.httpClient.Get(c.reportURL + "/ready")
+	resp, err := c.httpReporting.Get(c.reportURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -308,7 +308,7 @@ func (c *Client) checkReportReady() (string, error) {
 }
 
 func (c *Client) checkExecutionReady() (string, error) {
-	resp, err := c.httpClient.Get(c.executionURL + "/ready")
+	resp, err := c.httpExecution.Get(c.executionURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
