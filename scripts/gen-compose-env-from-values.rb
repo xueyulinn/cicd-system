@@ -2,8 +2,10 @@
 # frozen_string_literal: true
 
 # Reads charts/e-team/values.yaml and writes compose.values.env for Docker Compose.
+# Single source of truth with Helm: worker concurrency, RabbitMQ auth/URL, execution URL for worker.
 # Run from repo root: ruby scripts/gen-compose-env-from-values.rb
 
+require "uri"
 require "yaml"
 
 ROOT = File.expand_path("..", __dir__)
@@ -14,6 +16,15 @@ def image_string(h)
   raise ArgumentError, "missing image hash" unless h.is_a?(Hash)
 
   "#{h.fetch('repository')}:#{h.fetch('tag')}"
+end
+
+def amqp_url_for_compose(v)
+  user = v.dig("rabbitmq", "auth", "username") || "guest"
+  pass = v.dig("rabbitmq", "auth", "password") || "guest"
+  port = v.dig("rabbitmq", "service", "amqpPort") || 5672
+  u = URI.encode_www_form_component(user)
+  p = URI.encode_www_form_component(pass)
+  "amqp://#{u}:#{p}@rabbitmq:#{port}/"
 end
 
 v = YAML.load_file(VALUES_PATH)
@@ -43,8 +54,22 @@ lines << "OTEL_COLLECTOR_IMAGE=#{image_string(obs.dig('otelCollector', 'image'))
 lines << "PROMTAIL_IMAGE=#{image_string(obs.dig('promtail', 'image'))}"
 lines << "GRAFANA_IMAGE=#{image_string(obs.dig('grafana', 'image'))}"
 
-rabbit = v.dig("composeLocal", "rabbitmq", "image") || "rabbitmq:3-management-alpine"
-lines << "RABBITMQ_IMAGE=#{rabbit}"
+if v.dig("rabbitmq", "image")
+  lines << "RABBITMQ_IMAGE=#{image_string(v.dig('rabbitmq', 'image'))}"
+else
+  # Legacy fallback if rabbitmq.image is absent
+  rabbit = v.dig("composeLocal", "rabbitmq", "image") || "rabbitmq:3-management-alpine"
+  lines << "RABBITMQ_IMAGE=#{rabbit}"
+end
+
+lines << "RABBITMQ_USER=#{v.dig('rabbitmq', 'auth', 'username') || 'guest'}"
+lines << "RABBITMQ_PASSWORD=#{v.dig('rabbitmq', 'auth', 'password') || 'guest'}"
+lines << "RABBITMQ_URL=#{amqp_url_for_compose(v)}"
+
+exec_port = v.dig("executionService", "service", "port") || 8002
+lines << "EXECUTION_URL=http://execution-service:#{exec_port}"
+
+lines << "WORKER_CONCURRENCY=#{v.dig('workerService', 'concurrency') || 1}"
 
 File.write(OUT_PATH, lines.join("\n") + "\n")
 puts "Wrote #{OUT_PATH}" if ARGV.empty?
