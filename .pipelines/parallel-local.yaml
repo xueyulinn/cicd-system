@@ -1,6 +1,7 @@
 # Local demo: two independent jobs in the same stage (parallel-ready batch).
 # Expect: execution logs mq-dispatch-batch with batch_size=2; worker runs both in parallel when WORKER_CONCURRENCY>=2.
 #
+#
 # Prereq: docker compose --env-file compose.values.env up -d (compose.values.env from charts/e-team/values.yaml).
 # Run: ./bin/cicd run --file .pipelines/parallel-local.yaml
 # See README "Local parallel execution (RabbitMQ + worker)".
