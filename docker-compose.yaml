@@ -114,6 +114,10 @@ services:
     environment:
       PORT: "8003"
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      # In Compose, localhost inside the container is not the execution service — use the service DNS name.
+      EXECUTION_URL: http://execution-service:8002
+      # >1 so multiple ready jobs in one stage can run in parallel (separate RabbitMQ consumers).
+      WORKER_CONCURRENCY: "2"
       SERVICE_NAME: worker-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
