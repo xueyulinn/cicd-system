@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/component: worker-service
 data:
   PORT: {{ .Values.workerService.service.port | quote }}
+  EXECUTION_URL: {{ printf "http://%s:%v" (include "e-team.executionServiceName" .) .Values.executionService.service.port | quote }}
+  WORKER_CONCURRENCY: {{ .Values.workerService.concurrency | toString | quote }}
   SERVICE_NAME: worker-service
   OTEL_SERVICE_NAME: worker-service
   {{- if .Values.observability.enabled }}
@@ -40,6 +42,21 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and .Values.rabbitmq.enabled .Values.workerService.waitForRabbitmq.enabled }}
+      initContainers:
+        - name: wait-for-rabbitmq
+          image: "{{ .Values.workerService.waitForRabbitmq.image.repository }}:{{ .Values.workerService.waitForRabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.workerService.waitForRabbitmq.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for RabbitMQ..."
+              until nc -z {{ include "e-team.rabbitmqName" . }} {{ .Values.rabbitmq.service.amqpPort }}; do
+                sleep 2
+              done
+      {{- end }}
       containers:
         - name: worker-service
           image: "{{ .Values.workerService.image.repository }}:{{ .Values.workerService.image.tag }}"
@@ -50,6 +67,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "e-team.workerServiceName" . }}-config
+            {{- if .Values.rabbitmq.enabled }}
+            - secretRef:
+                name: {{ include "e-team.rabbitmqSecretName" . }}
+            {{- end }}
           securityContext:
             runAsUser: {{ .Values.workerService.securityContext.runAsUser }}
             runAsGroup: {{ .Values.workerService.securityContext.runAsGroup }}
