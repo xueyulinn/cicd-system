@@ -16,6 +16,8 @@ Kubernetes-enabled by this chart:
 
 Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `EXECUTION_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
 
+**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `EXECUTION_URL`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
+
 Not Kubernetes-enabled in this chart:
 
 - None of the current application components are excluded, but the worker still depends on a reachable Docker socket. In Minikube that is provided through a `hostPath` mount to `/var/run/docker.sock`.

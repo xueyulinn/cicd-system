@@ -56,7 +56,7 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
 
-**Single source of truth:** application images and default DB credentials for local Compose are generated from `charts/e-team/values.yaml` into `compose.values.env` (`ruby scripts/gen-compose-env-from-values.rb`). Cluster deployment uses Helm only (`charts/e-team/`); run `helm template` yourself if you need to inspect rendered YAML.
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images, Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
 
 ## Observability
 
@@ -476,6 +476,22 @@ docker compose --env-file compose.values.env logs -f execution-service worker-se
 - `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
 - `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
 
+`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: Postgres, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `EXECUTION_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+
+#### Local parallel execution (RabbitMQ + worker)
+
+To exercise **multiple ready jobs in one stage** (parallel dispatch to the queue and, with enough consumers, overlapping job runs):
+
+1. Ensure RabbitMQ is healthy and execution/worker were not started before the broker was ready. If execution returns `503` / `fail to create RabbitMQ client`, recreate it: `docker compose --env-file compose.values.env up -d --force-recreate execution-service`.
+2. Set concurrency via `workerService.concurrency` in `values.yaml`, then run `ruby scripts/gen-compose-env-from-values.rb` so `WORKER_CONCURRENCY` matches (default `2`).
+3. Run the sample pipeline:
+
+   ```bash
+   ./bin/cicd run --file .pipelines/parallel-local.yaml
+   ```
+
+   See `.pipelines/parallel-local.yaml` for the DAG (two independent jobs in `build`). With `WORKER_CONCURRENCY>=2`, both can run concurrently; with `1`, they still dispatch in one batch but run serially.
+
 ### Running services without Docker
 
 To run services directly (without Docker Compose):
@@ -525,7 +541,7 @@ e-team/
 ├── k8s/                          # Notes for Kubernetes (see k8s/README.md)
 ├── scripts/                      # Dev scripts (start services, verify DB)
 ├── .pipelines/                   # Pipeline configurations
-├── compose.values.env            # Compose image/DB vars (generated from chart values)
+├── compose.values.env            # Compose env (generated from chart values; includes MQ + worker concurrency)
 ├── docker-compose.yaml           # Full stack (services + observability)
 ├── docker-compose.override.yaml  # Local dev overrides (build from source)
 └── Makefile                      # Build automation
