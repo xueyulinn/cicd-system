@@ -43,8 +43,9 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.executionService.waitForDatabase.enabled }}
+      {{- if or .Values.executionService.waitForDatabase.enabled (and .Values.rabbitmq.enabled .Values.executionService.waitForRabbitmq.enabled) }}
       initContainers:
+        {{- if .Values.executionService.waitForDatabase.enabled }}
         - name: wait-for-report-db
           image: "{{ .Values.executionService.waitForDatabase.image.repository }}:{{ .Values.executionService.waitForDatabase.image.tag }}"
           imagePullPolicy: {{ .Values.executionService.waitForDatabase.image.pullPolicy }}
@@ -73,6 +74,21 @@ spec:
                 "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs')::text" | tr -d '[:space:]')" = "true" ]; do
                 sleep 2
               done
+        {{- end }}
+        {{- if and .Values.rabbitmq.enabled .Values.executionService.waitForRabbitmq.enabled }}
+        - name: wait-for-rabbitmq
+          image: "{{ .Values.executionService.waitForRabbitmq.image.repository }}:{{ .Values.executionService.waitForRabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.executionService.waitForRabbitmq.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for RabbitMQ..."
+              until nc -z {{ include "e-team.rabbitmqName" . }} {{ .Values.rabbitmq.service.amqpPort }}; do
+                sleep 2
+              done
+        {{- end }}
       {{- end }}
       containers:
         - name: execution-service
@@ -84,6 +100,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "e-team.executionServiceName" . }}-config
+            {{- if .Values.rabbitmq.enabled }}
+            - secretRef:
+                name: {{ include "e-team.rabbitmqSecretName" . }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /ready
