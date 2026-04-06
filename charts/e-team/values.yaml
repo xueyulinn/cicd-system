@@ -333,7 +333,3 @@ observability:
         cpu: 500m
         memory: 512Mi
 
-# Docker Compose only (not used by Helm templates). Image is injected via compose.values.env — see scripts/gen-compose-env-from-values.rb.
-composeLocal:
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
