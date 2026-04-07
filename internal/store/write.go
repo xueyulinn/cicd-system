@@ -2,7 +2,16 @@ package store
 
 import (
 	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
 )
+
+type CreateRunResult struct {
+	RunNo          int
+	Deduped        bool
+	ExistingStatus string
+}
 
 // CreateRun inserts a new pipeline run and allocates run_no in a transaction (concurrency-safe).
 // Returns the allocated run_no.
@@ -23,6 +32,61 @@ func (s *Store) CreateRun(ctx context.Context, in CreateRunInput) (runNo int, er
 		return 0, err
 	}
 
+	runNo, err = s.createRunTx(ctx, tx, in)
+	if err != nil {
+		return 0, err
+	}
+
+	return runNo, tx.Commit(ctx)
+}
+
+// CreateRunOrGetActive allocates a new run unless an equivalent request is already in flight.
+// It returns the oldest active run for the same request_key when deduplication matches.
+func (s *Store) CreateRunOrGetActive(ctx context.Context, in CreateRunInput) (result CreateRunResult, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return CreateRunResult{}, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, in.Pipeline+":"+in.RequestKey)
+	if err != nil {
+		return CreateRunResult{}, err
+	}
+
+	if in.RequestKey != "" {
+		err = tx.QueryRow(ctx,
+			`SELECT run_no, status
+			 FROM pipeline_runs
+			 WHERE pipeline = $1 AND request_key = $2 AND status IN ($3, $4)
+			 ORDER BY run_no ASC
+			 LIMIT 1`,
+			in.Pipeline, in.RequestKey, StatusQueued, StatusRunning,
+		).Scan(&result.RunNo, &result.ExistingStatus)
+		if err == nil {
+			result.Deduped = true
+			return result, tx.Commit(ctx)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return CreateRunResult{}, err
+		}
+		err = nil
+	}
+
+	runNo, err := s.createRunTx(ctx, tx, in)
+	if err != nil {
+		return CreateRunResult{}, err
+	}
+	result.RunNo = runNo
+	result.ExistingStatus = in.Status
+	return result, tx.Commit(ctx)
+}
+
+func (s *Store) createRunTx(ctx context.Context, tx pgx.Tx, in CreateRunInput) (runNo int, err error) {
 	err = tx.QueryRow(ctx,
 		`SELECT COALESCE(MAX(run_no), 0) + 1 FROM pipeline_runs WHERE pipeline = $1`,
 		in.Pipeline,
@@ -32,15 +96,14 @@ func (s *Store) CreateRun(ctx context.Context, in CreateRunInput) (runNo int, er
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO pipeline_runs (pipeline, run_no, start_time, status, git_hash, git_branch, git_repo, trace_id)
-		 VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), NULLIF($7,''), NULLIF($8,''))`,
-		in.Pipeline, runNo, in.StartTime, in.Status, in.GitHash, in.GitBranch, in.GitRepo, in.TraceID,
+		`INSERT INTO pipeline_runs (pipeline, run_no, start_time, status, git_hash, git_branch, git_repo, trace_id, request_key)
+		 VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''))`,
+		in.Pipeline, runNo, in.StartTime, in.Status, in.GitHash, in.GitBranch, in.GitRepo, in.TraceID, in.RequestKey,
 	)
 	if err != nil {
 		return 0, err
 	}
-
-	return runNo, tx.Commit(ctx)
+	return runNo, nil
 }
 
 // UpdateRun updates end_time and/or status for a pipeline run.
@@ -110,4 +173,3 @@ func (s *Store) UpdateJob(ctx context.Context, pipeline string, runNo int, stage
 	)
 	return err
 }
-

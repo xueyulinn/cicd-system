@@ -52,6 +52,24 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "%s-reporting-service" (include "e-team.fullname" .) -}}
 {{- end -}}
 
+{{- define "e-team.rabbitmqName" -}}
+{{- printf "%s-rabbitmq" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.rabbitmqSecretName" -}}
+{{- printf "%s-rabbitmq-credentials" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.workerGitAuthSecretName" -}}
+{{- printf "%s-worker-git-auth" (include "e-team.fullname" .) -}}
+{{- end -}}
+
+{{- define "e-team.rabbitmqAmqpURL" -}}
+{{- $u := urlquery .Values.rabbitmq.auth.username -}}
+{{- $p := urlquery .Values.rabbitmq.auth.password -}}
+{{- printf "amqp://%s:%s@%s:%v/" $u $p (include "e-team.rabbitmqName" .) .Values.rabbitmq.service.amqpPort -}}
+{{- end -}}
+
 {{- define "e-team.postgresName" -}}
 {{- printf "%s-postgres" (include "e-team.fullname" .) -}}
 {{- end -}}

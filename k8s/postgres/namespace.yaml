@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: e-team
-  labels:
-    app.kubernetes.io/part-of: e-team

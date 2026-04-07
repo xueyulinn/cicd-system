@@ -48,9 +48,46 @@ var (
 
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
-		Help:    "HTTP request latency.",
+		Help:    "HTTP request latency (inbound, server handler).",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path"})
+
+	// HTTPClientRequestDurationSeconds measures outbound HTTP from this process (client perspective).
+	// Labels: client = calling service name, upstream = logical peer (e.g. validation, execution).
+	httpClientRequestDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_client_request_duration_seconds",
+		Help:    "Outbound HTTP request latency (client perspective).",
+		Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800},
+	}, []string{"client", "upstream"})
+
+	httpClientRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_client_requests_total",
+		Help: "Outbound HTTP requests by client, upstream, and HTTP status (or error).",
+	}, []string{"client", "upstream", "code"})
+)
+
+// Async execution / RabbitMQ metrics (parallel-ready batches and worker queue).
+var (
+	cicdMQJobsPublishedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cicd_mq_jobs_published_total",
+		Help: "Job messages published to RabbitMQ (success or failure).",
+	}, []string{"queue", "outcome"})
+
+	cicdMQDeliveryOutcomesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cicd_mq_delivery_outcomes_total",
+		Help: "RabbitMQ consumer outcomes per delivery (ack, nack with requeue, or ack error).",
+	}, []string{"queue", "outcome"})
+
+	cicdExecutionReadyBatchSize = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cicd_execution_ready_batch_size",
+		Help:    "Number of jobs dispatched together in one enqueue batch (parallel-ready within a stage).",
+		Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
+	})
+
+	cicdExecutionJobsEnqueuedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "cicd_execution_jobs_enqueued_total",
+		Help: "Jobs successfully enqueued to the worker queue after publish.",
+	}, []string{"pipeline", "stage"})
 )
 
 // RegisterMetrics registers all CI/CD and HTTP metrics with the default registry.
@@ -64,7 +101,40 @@ func RegisterMetrics() {
 		JobRunsTotal,
 		httpRequestsTotal,
 		httpRequestDuration,
+		httpClientRequestDurationSeconds,
+		httpClientRequestsTotal,
+		cicdMQJobsPublishedTotal,
+		cicdMQDeliveryOutcomesTotal,
+		cicdExecutionReadyBatchSize,
+		cicdExecutionJobsEnqueuedTotal,
 	)
+}
+
+// RecordMQJobPublished records publish success or failure for a queue.
+func RecordMQJobPublished(queue string, success bool) {
+	outcome := "failure"
+	if success {
+		outcome = "success"
+	}
+	cicdMQJobsPublishedTotal.WithLabelValues(queue, outcome).Inc()
+}
+
+// RecordMQDeliveryOutcome records how a single delivery was handled (acked, nack+requeue, or ack error).
+func RecordMQDeliveryOutcome(queue, outcome string) {
+	cicdMQDeliveryOutcomesTotal.WithLabelValues(queue, outcome).Inc()
+}
+
+// RecordExecutionReadyBatchSize records how many jobs were ready in one dispatch batch.
+func RecordExecutionReadyBatchSize(n int) {
+	if n < 0 {
+		n = 0
+	}
+	cicdExecutionReadyBatchSize.Observe(float64(n))
+}
+
+// RecordExecutionJobEnqueued increments after a successful publish for one job.
+func RecordExecutionJobEnqueued(pipeline, stage string) {
+	cicdExecutionJobsEnqueuedTotal.WithLabelValues(pipeline, stage).Inc()
 }
 
 // MetricsHandler returns an http.Handler that serves Prometheus metrics.

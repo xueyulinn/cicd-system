@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
@@ -25,11 +27,55 @@ func main() {
 	}
 	defer func() { _ = shutdown(ctx) }()
 
-	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultWorkerPort)
+	handler := worker.NewHandler()
+	defer handler.Close()
 
-	slog.Info("service starting", "addr", addr)
-	if err := worker.Run(ctx, addr); err != nil {
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+	mux.Handle("/metrics", observability.MetricsHandler())
+
+	wrapped := observability.HTTPMetricsMiddleware(
+		observability.TracingMiddleware(serviceName, mux))
+
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultWorkerPort)
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      wrapped,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	errCh := make(chan error, 2)
+
+	go func() {
+		slog.Info("service starting", "addr", addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+
+	go func() {
+		if err := handler.Run(ctx); err != nil && ctx.Err() == nil {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
 		slog.Error("service error", "error", err)
-		os.Exit(1)
+		stop()
+	case <-ctx.Done():
+	}
+
+	slog.Info("service shutting down")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("forced shutdown", "error", err)
+	} else {
+		slog.Info("service stopped")
 	}
 }

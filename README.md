@@ -10,6 +10,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 - **API Gateway**: Single entry point that routes requests to validation, dry-run, and execution
 - **Execution Service**: Orchestrates pipeline runs (stages, jobs, dependencies)
 - **Worker Layer**: Executes individual jobs (e.g. in containers) and reports status
+- **Queue Deduplication**: Reuses the oldest in-flight run for identical requests and drops duplicates
 - **CLI Interface**: Command-line tool for verify, dryrun, and run
 
 ## Architecture (Current Sprint)
@@ -34,11 +35,11 @@ The repository supports Kubernetes deployment for all current stateless services
 
 | Component | Type | K8s Enabled | Notes |
 |-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deployable via raw manifests in `k8s/` or Helm chart in `charts/e-team/` |
-| Validation Service | Stateless | Yes | Deployable via raw manifests or Helm |
-| Execution Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) |
+| Validation Service | Stateless | Yes | Same as API Gateway |
+| Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
-| Reporting Service | Stateless | Yes | Deployable via raw manifests or Helm |
+| Reporting Service | Stateless | Yes | Same as API Gateway |
 | PostgreSQL report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
 
 ### Kubernetes Deployment Modes
@@ -55,6 +56,26 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `DATABASE_URL`
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
+
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images, Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+
+### Queue Deduplication
+
+The execution service deduplicates identical in-flight run requests. If a second request arrives while an equivalent run for the same pipeline is still `queued` or `running`, the oldest request continues and the duplicate request is dropped. The duplicate response returns the original `run_no` together with a message indicating that the existing in-flight run was reused.
+
+The deduplication key is derived from the pipeline name, YAML content, branch, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
+
+### Repository-Backed Runs in Kubernetes
+
+For repo-backed runs, the worker clones the requested repository revision inside Kubernetes before executing the job container. Public repositories work without extra configuration. Private repositories require Git credentials to be injected into the worker pod.
+
+For Helm deployments, configure one of:
+
+- `workerService.gitAuth.githubToken`
+- `workerService.gitAuth.username` with `workerService.gitAuth.password`
+- `workerService.gitAuth.existingSecret`
+
+The worker uses those credentials when cloning private repositories. If repo-backed runs fail with GitHub `401` or `Repository not found`, verify that the token has read access to the target repository.
 
 ## Observability
 
@@ -83,12 +104,16 @@ Every service exposes a `/metrics` endpoint scraped by Prometheus. The following
 | `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` (+ `run_no`) | Execution Service |
 | `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
 | `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
+| `cicd_mq_jobs_published_total` | Counter | `queue`, `outcome` (`success` / `failure`) | Execution Service (via MQ publisher) |
+| `cicd_mq_delivery_outcomes_total` | Counter | `queue`, `outcome` (`acked`, `nack_requeue`, `ack_error`) | Worker Service (RabbitMQ consumer) |
+| `cicd_execution_ready_batch_size` | Histogram | — | Execution Service (batch of parallel-ready jobs per dispatch) |
+| `cicd_execution_jobs_enqueued_total` | Counter | `pipeline`, `stage` | Execution Service |
 
-HTTP request metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware.
+Inbound HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware. Outbound calls from the API Gateway and Execution Service use `http_client_requests_total` and `http_client_request_duration_seconds` (labels `client`, `upstream`, and `code` for the counter). The Grafana dashboard **HTTP Latency (Server & Client)** (`observability/grafana/dashboards/http-latency.json`) charts both. Async pipeline execution (RabbitMQ and parallel-ready job batches) is covered by **Parallel execution & RabbitMQ** (`observability/grafana/dashboards/parallel-mq.json`).
 
 ### Structured Logs
 
-All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
+All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. When the execution service dispatches more than one parallel-ready job in a single batch, it logs `event: "mq-dispatch-batch"` with `batch_size`. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
 
 ### Distributed Tracing
 
@@ -97,6 +122,8 @@ Services use OpenTelemetry SDK with W3C Trace Context propagation. The following
 - **`pipeline.run`** (root span) — full pipeline execution, with `pipeline` and `run_no` attributes
 - **`stage.run`** (child) — per-stage execution
 - **`job.run`** (child) — per-job execution in the Worker
+- **`mq.job.publish`** — execution service publishes one job message to the queue (`pipeline`, `run_no`, `stage`, `job`)
+- **`mq.job.consume`** — worker handles one delivery (`pipeline`, `run_no`, `stage`, `job`)
 
 Outbound HTTP calls between services automatically propagate trace context.
 
@@ -104,7 +131,7 @@ The `trace-id` is persisted in the report database and included in `report --run
 
 ### Accessing the Observability Stack
 
-After `docker compose up -d`:
+After `docker compose --env-file compose.values.env up -d`:
 
 | Tool | URL | Credentials |
 |------|-----|-------------|
@@ -121,6 +148,7 @@ The following dashboards are provisioned from files committed to the repository:
 - `Stage and Job Breakdown`
 - `Logs Viewer`
 - `Trace Explorer`
+- `Parallel execution & RabbitMQ`
 
 `Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
 
@@ -448,21 +476,40 @@ deploy:
 The recommended way to run everything locally — all services, database, migrations, and the observability stack:
 
 ```bash
+# Align image tags and DB defaults with charts/e-team/values.yaml (committed compose.values.env)
+ruby scripts/gen-compose-env-from-values.rb
+
 # Start all containers (builds services from local source via docker-compose.override.yaml)
-docker compose up -d
+docker compose --env-file compose.values.env up -d
 
 # Verify everything is running
-docker compose ps
+docker compose --env-file compose.values.env ps
 
 # View logs
-docker compose logs -f execution-service worker-service
+docker compose --env-file compose.values.env logs -f execution-service worker-service
 ```
 
-`docker-compose.yaml` defines the baseline configuration with registry images. `docker-compose.override.yaml` (automatically loaded) adds `build:` directives so services are built from local source code. This means:
+`docker-compose.yaml` uses `${...}` values from `compose.values.env`. `docker-compose.override.yaml` (automatically loaded) adds `build:` directives so services are built from local source code. This means:
 
-- `docker compose up -d` — builds from local source (development)
-- `docker compose up -d --build` — forces a rebuild after code changes
-- `docker compose -f docker-compose.yaml up -d` — uses registry images only (CI/production)
+- `docker compose --env-file compose.values.env up -d` — builds from local source (development)
+- `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
+- `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
+
+`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: Postgres, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `EXECUTION_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+
+#### Local parallel execution (RabbitMQ + worker)
+
+To exercise **multiple ready jobs in one stage** (parallel dispatch to the queue and, with enough consumers, overlapping job runs):
+
+1. Ensure RabbitMQ is healthy and execution/worker were not started before the broker was ready. If execution returns `503` / `fail to create RabbitMQ client`, recreate it: `docker compose --env-file compose.values.env up -d --force-recreate execution-service`.
+2. Set concurrency via `workerService.concurrency` in `values.yaml`, then run `ruby scripts/gen-compose-env-from-values.rb` so `WORKER_CONCURRENCY` matches (default `2`).
+3. Run the sample pipeline:
+
+   ```bash
+   ./bin/cicd run --file .pipelines/parallel-local.yaml
+   ```
+
+   See `.pipelines/parallel-local.yaml` for the DAG (two independent jobs in `build`). With `WORKER_CONCURRENCY>=2`, both can run concurrently; with `1`, they still dispatch in one batch but run serially.
 
 ### Running services without Docker
 
@@ -479,7 +526,7 @@ Use another terminal for CLI commands. To point the CLI at a different Execution
 For the `report` subcommand, execution and report services need a PostgreSQL database. With Docker Compose this is handled automatically (Postgres + migrations start together). For manual setup:
 
 ```bash
-docker compose up -d postgres db-migrate
+docker compose --env-file compose.values.env up -d postgres db-migrate
 export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
 ```
 
@@ -509,10 +556,11 @@ e-team/
 │   ├── tempo/                    # Tempo tracing config
 │   ├── otel-collector/           # OpenTelemetry Collector pipeline config
 │   └── grafana/                  # Grafana provisioning and dashboards
-├── charts/e-team/                # Helm chart for Kubernetes deployment
-├── k8s/                          # Raw Kubernetes manifests
+├── charts/e-team/                # Helm chart for Kubernetes deployment (canonical)
+├── k8s/                          # Notes for Kubernetes (see k8s/README.md)
 ├── scripts/                      # Dev scripts (start services, verify DB)
 ├── .pipelines/                   # Pipeline configurations
+├── compose.values.env            # Compose env (generated from chart values; includes MQ + worker concurrency)
 ├── docker-compose.yaml           # Full stack (services + observability)
 ├── docker-compose.override.yaml  # Local dev overrides (build from source)
 └── Makefile                      # Build automation

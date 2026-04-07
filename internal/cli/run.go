@@ -37,13 +37,25 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve workspace path: %w", err)
 	}
+	// Test mode uses direct execution; in that case a detached worktree is safe
+	// because the run completes before cleanup returns.
+	testMode := os.Getenv("CICD_TEST_MODE") == "1"
+	if !testMode {
+		// Simple heuristic: if runFile is a temp file, we're probably in a test
+		if strings.Contains(runFile, "TestRun") {
+			testMode = true
+		}
+	}
+
 	worktree, cleanup, err := createDetachedWorktree(repoRoot, runCommit)
 	if err != nil {
 		return fmt.Errorf("failed to prepare workspace for commit %q: %w", runCommit, err)
 	}
-
-	// remove temp worktree
-	defer cleanup()
+	workspacePath := worktree
+	runFileAtCommit, err := resolveRunFileInWorkspace(runFile, repoRoot, worktree)
+	if err != nil {
+		return fmt.Errorf("failed to resolve run file %q in commit workspace: %w", runFile, err)
+	}
 
 	actualHead, err := getHEADCommitAtPath(worktree)
 	if err != nil {
@@ -53,27 +65,18 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("commit workspace HEAD %q does not match requested commit %q", actualHead, runCommit)
 	}
 
-	runFileAtCommit, err := resolveRunFileInWorkspace(runFile, repoRoot, worktree)
-	if err != nil {
-		return fmt.Errorf("failed to resolve run file %q in commit workspace: %w", runFile, err)
+	if testMode {
+		defer cleanup()
 	}
+
 	fileContent, err := os.ReadFile(runFileAtCommit)
 	if err != nil {
 		return fmt.Errorf("failed to read run file at commit %q: %w", runCommit, err)
 	}
 
-	// Test mode - use direct execution instead of gateway
-	testMode := os.Getenv("CICD_TEST_MODE") == "1"
-	if !testMode {
-		// Simple heuristic: if runFile is a temp file, we're probably in a test
-		if strings.Contains(runFile, "TestRun") {
-			testMode = true
-		}
-	}
-
 	if testMode {
-		fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, worktree)
-		return runDirect(runFile, string(fileContent), runBranch, runCommit, worktree)
+		fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, workspacePath)
+		return runDirect(runFile, string(fileContent), runBranch, runCommit, workspacePath)
 	}
 
 	// Create gateway client
@@ -84,10 +87,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 		Branch:        runBranch,
 		Commit:        runCommit,
 		RepoURL:       getRepoURL(),
-		WorkspacePath: worktree,
+		WorkspacePath: workspacePath,
 	}
 
-	fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, worktree)
+	fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, workspacePath)
 
 	response, err := client.Run(req)
 	if err != nil {
@@ -95,16 +98,26 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("run failed")
 	}
 
-	if !response.Success {
+	if len(response.Errors) > 0 {
 		for _, errMsg := range response.Errors {
 			fmt.Fprintln(os.Stderr, errMsg)
 		}
 		return fmt.Errorf("run failed")
 	}
 
+	if response.RunNo != 0 {
+		fmt.Printf("Run number: %d\n", response.RunNo)
+	}
+	if strings.TrimSpace(response.Pipeline) != "" {
+		fmt.Printf("Pipeline: %s\n", response.Pipeline)
+	}
+	if strings.TrimSpace(response.Status) != "" {
+		fmt.Printf("Status: %s\n", response.Status)
+	}
+
 	if strings.TrimSpace(response.Message) != "" {
 		fmt.Println(response.Message)
-	} else {
+	} else if response.RunNo == 0 && strings.TrimSpace(response.Status) == "" {
 		fmt.Println("Run completed successfully.")
 	}
 	return nil

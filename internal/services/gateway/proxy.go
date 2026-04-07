@@ -16,23 +16,28 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
+const gatewayClientName = "api-gateway"
+
 // Client handles communication with downstream services
 type Client struct {
 	validationURL string
 	executionURL  string
 	reportURL     string
-	httpClient    *http.Client
+	httpValidation *http.Client
+	httpExecution  *http.Client
+	httpReporting  *http.Client
 }
 
-// NewClient creates a new gateway client with trace-propagating HTTP transport.
+// NewClient creates a new gateway client with trace-propagating HTTP transport and client-side latency metrics per upstream.
 func NewClient() *Client {
-	traced := observability.NewHTTPClient()
-	traced.Timeout = 15 * time.Minute
+	timeout := 15 * time.Minute
 	return &Client{
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		executionURL:  config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
 		reportURL:     config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
-		httpClient:    traced,
+		httpValidation: observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", timeout),
+		httpExecution:  observability.NewInstrumentedHTTPClient(gatewayClientName, "execution", timeout),
+		httpReporting:  observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", timeout),
 	}
 }
 
@@ -47,7 +52,7 @@ func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, err
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := c.httpValidation.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
@@ -89,7 +94,7 @@ func (c *Client) DryRunRequest(yamlContent string) (*api.DryRunResponse, error) 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.validationURL+"/dryrun", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := c.httpValidation.Post(c.validationURL+"/dryrun", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
@@ -127,7 +132,7 @@ func (c *Client) RunRequest(req api.RunRequest) (*api.RunResponse, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := c.httpExecution.Post(c.executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call execution service: %w", err)
 	}
@@ -172,7 +177,7 @@ func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse
 		params.Set("job", query.Job)
 	}
 
-	resp, err := c.httpClient.Get(c.reportURL + "/report?" + params.Encode())
+	resp, err := c.httpReporting.Get(c.reportURL + "/report?" + params.Encode())
 	if err != nil {
 		return nil, http.StatusBadGateway, fmt.Errorf("failed to call reporting service: %w", err)
 	}

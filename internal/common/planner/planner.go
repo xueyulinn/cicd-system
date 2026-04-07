@@ -17,6 +17,44 @@ func GenerateExecutionPlan(pipeline *models.Pipeline) (*models.ExecutionPlan, er
 	return plan, nil
 }
 
+// BuildStagePlan builds the static dependency graph for a single stage.
+func BuildStagePlan(stageName string, pipeline *models.Pipeline) models.StagePlan {
+	stageJobs := jobsForStage(stageName, pipeline)
+	orderedJobs := scheduleJobsInStage(stageJobs)
+
+	plan := models.StagePlan{
+		Name:       stageName,
+		Jobs:       make([]models.JobExecutionPlan, 0, len(orderedJobs)),
+		Needs:      make(map[string][]string, len(stageJobs)),
+		Dependents: make(map[string][]string, len(stageJobs)),
+		InDegree:   make(map[string]int, len(stageJobs)),
+		JobByName:  make(map[string]models.JobExecutionPlan, len(stageJobs)),
+	}
+
+	for _, job := range stageJobs {
+		plan.Needs[job.Name] = append([]string(nil), job.Needs...)
+		plan.InDegree[job.Name] = len(job.Needs)
+	}
+
+	for _, job := range stageJobs {
+		for _, need := range job.Needs {
+			plan.Dependents[need] = append(plan.Dependents[need], job.Name)
+		}
+	}
+
+	for _, job := range orderedJobs {
+		jobPlan := models.JobExecutionPlan{
+			Name:   job.Name,
+			Image:  job.Image,
+			Script: job.Script,
+		}
+		plan.Jobs = append(plan.Jobs, jobPlan)
+		plan.JobByName[job.Name] = jobPlan
+	}
+
+	return plan
+}
+
 // scheduleJobsInStage returns jobs in execution order within a stage (dependencies first).
 // Uses Kahn's algorithm on the Needs graph.
 func scheduleJobsInStage(jobs []models.Job) []models.Job {
@@ -56,6 +94,20 @@ func scheduleJobsInStage(jobs []models.Job) []models.Job {
 		}
 	}
 	return result
+}
+
+func jobsForStage(stageName string, pipeline *models.Pipeline) []models.Job {
+	if pipeline == nil {
+		return nil
+	}
+
+	var stageJobs []models.Job
+	for _, job := range pipeline.Jobs {
+		if job.Stage == stageName {
+			stageJobs = append(stageJobs, job)
+		}
+	}
+	return stageJobs
 }
 
 func buildStagePlan(stage *models.Stage, pipeline *models.Pipeline) models.StageExecutionPlan {

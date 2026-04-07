@@ -11,7 +11,12 @@ Kubernetes-enabled by this chart:
 - `execution-service`
 - `worker-service`
 - `reporting-service`
+- `rabbitmq` Deployment, Service, and credentials `Secret` when `rabbitmq.enabled=true` (AMQP for pipeline job dispatch; aligns with Docker Compose)
 - `postgres` StatefulSet, Service, Secret, and migration `Job` when `postgres.enabled=true`
+
+Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `EXECUTION_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
+
+**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `EXECUTION_URL`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
 
 Not Kubernetes-enabled in this chart:
 
@@ -84,6 +89,7 @@ kubectl -n e-team logs deploy/e-team-e-team-validation-service
 kubectl -n e-team logs deploy/e-team-e-team-execution-service
 kubectl -n e-team logs deploy/e-team-e-team-reporting-service
 kubectl -n e-team logs deploy/e-team-e-team-worker-service
+kubectl -n e-team logs deploy/e-team-e-team-rabbitmq
 kubectl -n e-team logs job/e-team-e-team-report-db-migrate
 ```
 
@@ -151,6 +157,8 @@ It also provisions these dashboards from config committed to the repository:
 - `Stage and Job Breakdown`
 - `Logs Viewer`
 - `Trace Explorer`
+- `HTTP Latency (Server & Client)`
+- `Parallel execution & RabbitMQ`
 
 This deployment uses Prometheus direct scraping for `/metrics`, Promtail for pod log shipping to Loki, and the OTel Collector for traces. That is the documented substitution for the recommended “single ingestion point” design, chosen so service logs and worker-managed job-container logs are both queryable without modifying pipeline job images.
 

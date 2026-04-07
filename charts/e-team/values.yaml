@@ -71,10 +71,18 @@ executionService:
       repository: postgres
       tag: 16-alpine
       pullPolicy: IfNotPresent
+  waitForRabbitmq:
+    enabled: true
+    image:
+      repository: busybox
+      tag: "1.36"
+      pullPolicy: IfNotPresent
 
 workerService:
   enabled: true
   replicaCount: 1
+  # RabbitMQ consumers per worker Pod (parallel-ready jobs within a stage).
+  concurrency: 2
   image:
     repository: yulinxue/cicd-worker-service
     tag: latest
@@ -84,9 +92,20 @@ workerService:
   dockerSocket:
     enabled: true
     hostPath: /var/run/docker.sock
+  gitAuth:
+    existingSecret: ""
+    username: ""
+    password: ""
+    githubToken: ""
   securityContext:
     runAsUser: 0
     runAsGroup: 0
+  waitForRabbitmq:
+    enabled: true
+    image:
+      repository: busybox
+      tag: "1.36"
+      pullPolicy: IfNotPresent
   resources:
     requests:
       cpu: 100m
@@ -151,10 +170,52 @@ externalDatabase:
   password: ""
   database: ""
 
+# In-cluster RabbitMQ (same role as docker-compose rabbitmq service).
+rabbitmq:
+  enabled: true
+  image:
+    repository: rabbitmq
+    tag: 3-management-alpine
+    pullPolicy: IfNotPresent
+  auth:
+    username: guest
+    password: guest
+  service:
+    amqpPort: 5672
+    managementPort: 15672
+  startupProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 18
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 15
+    failureThreshold: 6
+  livenessProbe:
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    timeoutSeconds: 15
+    failureThreshold: 6
+  persistence:
+    enabled: false
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 migration:
   enabled: true
   image:
-    repository: e-team-db-migrate
+    repository: yulinxue/cicd-db-migrate
     tag: latest
     pullPolicy: IfNotPresent
   backoffLimit: 5
@@ -291,3 +352,4 @@ observability:
       limits:
         cpu: 500m
         memory: 512Mi
+
