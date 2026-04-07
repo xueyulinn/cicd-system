@@ -8,7 +8,11 @@
 |[[Observability] parallel execution and RabbitMQ async path (metrics, logs, traces)](https://github.com/CS7580-SEA-SP26/e-team/issues/270) |  M |Eugenia-Z|
 |[K8S: end-to-end stack including RabbitMQ and parallel-execution config](https://github.com/CS7580-SEA-SP26/e-team/issues/276) | M | Eugenia-Z |
 |[Align local dev: test pipelines and docker-compose.yaml](https://github.com/CS7580-SEA-SP26/e-team/issues/277) | S | Eugenia-Z|
-|
+|[[Worker-Service] Add RabbitMQ Readiness Check to Worker Service Readiness Endpoint](https://github.com/CS7580-SEA-SP26/e-team/issues/274) | S | xueyulinn | 
+|[[Execution-Service] Add RabbitMQ Passive Readiness Check and Use It in Execution Service](https://github.com/CS7580-SEA-SP26/e-team/issues/272) | S | xueyulinn | 
+|[[Worker-Service] Worker service should support parallel MQ consumption with standard service lifecycle endpoints](https://github.com/CS7580-SEA-SP26/e-team/issues/267) | M | xueyulinn | 
+|[[Execution-Service] Execution service cannot reliably orchestrate worker lifecycle through callbacks and message publishing](https://github.com/CS7580-SEA-SP26/e-team/issues/265) | M | xueyulinn | 
+| [[MQ]Add RabbitMQ-based job message pipeline and tests](https://github.com/CS7580-SEA-SP26/e-team/issues/262) | M | xueyulinn|
 # Carry over tasks
 
 | Task | Weight | Assignee  |
