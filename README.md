@@ -10,6 +10,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 - **API Gateway**: Single entry point that routes requests to validation, dry-run, and execution
 - **Execution Service**: Orchestrates pipeline runs (stages, jobs, dependencies)
 - **Worker Layer**: Executes individual jobs (e.g. in containers) and reports status
+- **Queue Deduplication**: Reuses the oldest in-flight run for identical requests and drops duplicates
 - **CLI Interface**: Command-line tool for verify, dryrun, and run
 
 ## Architecture (Current Sprint)
@@ -57,6 +58,24 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
 
 **Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images, Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+
+### Queue Deduplication
+
+The execution service deduplicates identical in-flight run requests. If a second request arrives while an equivalent run for the same pipeline is still `queued` or `running`, the oldest request continues and the duplicate request is dropped. The duplicate response returns the original `run_no` together with a message indicating that the existing in-flight run was reused.
+
+The deduplication key is derived from the pipeline name, YAML content, branch, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
+
+### Repository-Backed Runs in Kubernetes
+
+For repo-backed runs, the worker clones the requested repository revision inside Kubernetes before executing the job container. Public repositories work without extra configuration. Private repositories require Git credentials to be injected into the worker pod.
+
+For Helm deployments, configure one of:
+
+- `workerService.gitAuth.githubToken`
+- `workerService.gitAuth.username` with `workerService.gitAuth.password`
+- `workerService.gitAuth.existingSecret`
+
+The worker uses those credentials when cloning private repositories. If repo-backed runs fail with GitHub `401` or `Repository not found`, verify that the token has read access to the target repository.
 
 ## Observability
 

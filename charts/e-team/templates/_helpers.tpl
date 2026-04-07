@@ -60,6 +60,10 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "%s-rabbitmq-credentials" (include "e-team.fullname" .) -}}
 {{- end -}}
 
+{{- define "e-team.workerGitAuthSecretName" -}}
+{{- printf "%s-worker-git-auth" (include "e-team.fullname" .) -}}
+{{- end -}}
+
 {{- define "e-team.rabbitmqAmqpURL" -}}
 {{- $u := urlquery .Values.rabbitmq.auth.username -}}
 {{- $p := urlquery .Values.rabbitmq.auth.password -}}

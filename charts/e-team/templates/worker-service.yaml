@@ -71,6 +71,13 @@ spec:
             - secretRef:
                 name: {{ include "e-team.rabbitmqSecretName" . }}
             {{- end }}
+            {{- if .Values.workerService.gitAuth.existingSecret }}
+            - secretRef:
+                name: {{ .Values.workerService.gitAuth.existingSecret }}
+            {{- else if or .Values.workerService.gitAuth.username .Values.workerService.gitAuth.password .Values.workerService.gitAuth.githubToken }}
+            - secretRef:
+                name: {{ include "e-team.workerGitAuthSecretName" . }}
+            {{- end }}
           securityContext:
             runAsUser: {{ .Values.workerService.securityContext.runAsUser }}
             runAsGroup: {{ .Values.workerService.securityContext.runAsGroup }}
