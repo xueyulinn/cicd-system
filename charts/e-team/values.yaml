@@ -92,6 +92,11 @@ workerService:
   dockerSocket:
     enabled: true
     hostPath: /var/run/docker.sock
+  gitAuth:
+    existingSecret: ""
+    username: ""
+    password: ""
+    githubToken: ""
   securityContext:
     runAsUser: 0
     runAsGroup: 0
@@ -178,6 +183,21 @@ rabbitmq:
   service:
     amqpPort: 5672
     managementPort: 15672
+  startupProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 18
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 15
+    failureThreshold: 6
+  livenessProbe:
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    timeoutSeconds: 15
+    failureThreshold: 6
   persistence:
     enabled: false
     size: 2Gi

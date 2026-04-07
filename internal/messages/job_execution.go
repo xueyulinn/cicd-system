@@ -10,6 +10,7 @@ type JobExecutionMessage struct {
 	Stage         string                  `json:"stage"`
 	Branch        string                  `json:"branch,omitempty"`
 	Commit        string                  `json:"commit,omitempty"`
+	RepoURL       string                  `json:"repo_url,omitempty"`
 	WorkspacePath string                  `json:"workspace_path,omitempty"`
 	Job           models.JobExecutionPlan `json:"job"`
 }

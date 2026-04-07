@@ -205,7 +205,7 @@ func (s *Server) handleJobMessage(ctx context.Context, msg messages.JobExecution
 	}
 
 	start := time.Now()
-	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, "", msg.Commit, msg.WorkspacePath)
+	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
 	duration := time.Since(start)
 
 	if execErr != nil {
