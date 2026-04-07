@@ -1,20 +1,22 @@
 package worker
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/models"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 )
 
@@ -48,14 +50,24 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 		defer cleanup()
 	}
 
-	// 2. Create and start container
-	containerID, err := runContainer(ctx, cli, image, job.Script, workspacePath)
+	// 2. Create container
+	containerID, err := createContainer(ctx, cli, image, job.Script, workspacePath != "")
 	if err != nil {
 		return "", fmt.Errorf("run container: %w", err)
 	}
 	defer func() {
 		_ = removeContainer(context.Background(), cli, containerID)
 	}()
+
+	if workspacePath != "" {
+		if err := copyWorkspaceToContainer(ctx, cli, containerID, workspacePath); err != nil {
+			return "", fmt.Errorf("copy workspace to container: %w", err)
+		}
+	}
+
+	if err := startContainer(ctx, cli, containerID); err != nil {
+		return "", fmt.Errorf("run container: %w", err)
+	}
 
 	// 3. Wait for container to exit, then always attempt to collect logs so
 	// failed jobs expose stderr/stdout to callbacks and debugging output.
@@ -88,6 +100,7 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 
 		repo, err := git.PlainCloneContext(ctx, tmpDir, &git.CloneOptions{
 			URL: repoURL,
+			Auth: cloneAuth(repoURL),
 		})
 		if err != nil {
 			_ = os.RemoveAll(tmpDir)
@@ -114,6 +127,26 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 	return workspacePath, nil, nil
 }
 
+func cloneAuth(repoURL string) *githttp.BasicAuth {
+	if username := strings.TrimSpace(os.Getenv("GIT_USERNAME")); username != "" {
+		return &githttp.BasicAuth{
+			Username: username,
+			Password: strings.TrimSpace(os.Getenv("GIT_PASSWORD")),
+		}
+	}
+
+	if strings.Contains(strings.ToLower(strings.TrimSpace(repoURL)), "github.com") {
+		if token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); token != "" {
+			return &githttp.BasicAuth{
+				Username: "x-access-token",
+				Password: token,
+			}
+		}
+	}
+
+	return nil
+}
+
 // scriptToCmd converts script lines (e.g. ["make build", "make test"]) into Docker Cmd.
 // Docker's Cmd expects the first element to be the executable; we run via sh -c so that
 // "make build" is executed as a shell command, not as an executable named "make build".
@@ -138,9 +171,9 @@ func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 	return resp.Wait(ctx)
 }
 
-// runContainer creates and starts a container with the given image and script; returns container ID.
-// If workspacePath is non-empty, it is bound to /workspace and set as WorkingDir.
-func runContainer(ctx context.Context, cli *client.Client, image string, script []string, workspacePath string) (containerID string, err error) {
+// createContainer creates a container for the given image and script; returns container ID.
+// If hasWorkspace is true, the container will run with /workspace as its working directory.
+func createContainer(ctx context.Context, cli *client.Client, image string, script []string, hasWorkspace bool) (containerID string, err error) {
 	cmd := scriptToCmd(script)
 	cfg := &container.Config{
 		Image:        image,
@@ -148,31 +181,84 @@ func runContainer(ctx context.Context, cli *client.Client, image string, script 
 		AttachStdout: true,
 		AttachStderr: true,
 	}
-	if workspacePath != "" {
+	if hasWorkspace {
 		cfg.WorkingDir = "/workspace"
 	}
 	opts := client.ContainerCreateOptions{Config: cfg}
-	if workspacePath != "" {
-		opts.HostConfig = &container.HostConfig{
-			Mounts: []mount.Mount{
-				{
-					Type:   mount.TypeBind,
-					Source: workspacePath,
-					Target: "/workspace",
-				},
-			},
-		}
-	}
 	createResp, err := cli.ContainerCreate(ctx, opts)
 	if err != nil {
 		return "", err
 	}
-	containerID = createResp.ID
-	_, err = cli.ContainerStart(ctx, containerID, client.ContainerStartOptions{})
+	return createResp.ID, nil
+}
+
+func startContainer(ctx context.Context, cli *client.Client, containerID string) error {
+	_, err := cli.ContainerStart(ctx, containerID, client.ContainerStartOptions{})
+	return err
+}
+
+func copyWorkspaceToContainer(ctx context.Context, cli *client.Client, containerID string, workspacePath string) error {
+	archiveBuf, err := buildWorkspaceArchive(workspacePath)
 	if err != nil {
-		return containerID, err
+		return err
 	}
-	return containerID, nil
+
+	_, err = cli.CopyToContainer(ctx, containerID, client.CopyToContainerOptions{
+		DestinationPath: "/",
+		Content:         archiveBuf,
+	})
+	return err
+}
+
+func buildWorkspaceArchive(workspacePath string) (io.Reader, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	err := filepath.Walk(workspacePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(workspacePath, path)
+		if err != nil {
+			return err
+		}
+		relPath = filepath.ToSlash(relPath)
+		if relPath == "." {
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(filepath.Join("workspace", relPath))
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = file.Close() }()
+
+		_, err = io.Copy(tw, file)
+		return err
+	})
+	if err != nil {
+		_ = tw.Close()
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+
+	return bytes.NewReader(buf.Bytes()), nil
 }
 
 // waitContainer blocks until the container exits.

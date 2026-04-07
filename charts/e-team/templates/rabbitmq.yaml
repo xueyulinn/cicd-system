@@ -60,26 +60,36 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq
+          startupProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - -q
+                - ping
+            initialDelaySeconds: {{ .Values.rabbitmq.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rabbitmq.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.rabbitmq.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.rabbitmq.startupProbe.failureThreshold }}
           readinessProbe:
             exec:
               command:
                 - rabbitmq-diagnostics
                 - -q
                 - ping
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 10
-            failureThreshold: 6
+            initialDelaySeconds: {{ .Values.rabbitmq.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rabbitmq.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.rabbitmq.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.rabbitmq.readinessProbe.failureThreshold }}
           livenessProbe:
             exec:
               command:
                 - rabbitmq-diagnostics
                 - -q
                 - ping
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
+            initialDelaySeconds: {{ .Values.rabbitmq.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rabbitmq.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.rabbitmq.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.rabbitmq.livenessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
       volumes:
