@@ -13,13 +13,18 @@
 |[[Worker-Service] Worker service should support parallel MQ consumption with standard service lifecycle endpoints](https://github.com/CS7580-SEA-SP26/e-team/issues/267) | M | xueyulinn | 
 |[[Execution-Service] Execution service cannot reliably orchestrate worker lifecycle through callbacks and message publishing](https://github.com/CS7580-SEA-SP26/e-team/issues/265) | M | xueyulinn | 
 | [[MQ]Add RabbitMQ-based job message pipeline and tests](https://github.com/CS7580-SEA-SP26/e-team/issues/262) | M | xueyulinn|
+|[[Deduplication] Add tests for dedupe in services](https://github.com/CS7580-SEA-SP26/e-team/issues/291) | M | Asurkatha|
+|[[Deduplication] Add deduplication logic](https://github.com/CS7580-SEA-SP26/e-team/issues/290) | M | Asurkatha|
+|[Update ReadMe with additional features](https://github.com/CS7580-SEA-SP26/e-team/issues/293) | S | Asurkatha |
+|[[GitHubAuth] Add github creds support from the env var](https://github.com/CS7580-SEA-SP26/e-team/issues/292) | M | Asurkatha |
+|[GitHubAuth] Add worker auth documentation for private GitHub repos](https://github.com/CS7580-SEA-SP26/e-team/issues/289) | S | Asurkatha |
+
 # Carry over tasks
 
 | Task | Weight | Assignee  |
 | ---- |--------|-----------|
 | [ Propagate trace context over RabbitMQ (MQ message / headers)  ](https://github.com/CS7580-SEA-SP26/e-team/issues/278)  | M      | Eugenia-Z |
-| [Automate Docker Image Build & Publish via GitHub Actions](https://github.com/CS7580-SEA-SP26/e-team/issues/281) | S      | Eugenia-Z 
-
+| [Automate Docker Image Build & Publish via GitHub Actions](https://github.com/CS7580-SEA-SP26/e-team/issues/281) | S      | Asurkatha 
 
 
 
