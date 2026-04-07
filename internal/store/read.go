@@ -13,7 +13,7 @@ var ErrNotFound = errors.New("not found")
 // GetRunsByPipeline returns all runs for a pipeline, ordered by run_no ascending.
 func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,'')
+		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,''), COALESCE(request_key,'')
 		 FROM pipeline_runs WHERE pipeline = $1 ORDER BY run_no ASC`,
 		pipeline,
 	)
@@ -25,7 +25,7 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 	var runs []Run
 	for rows.Next() {
 		var r Run
-		err := rows.Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID)
+		err := rows.Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
 		if err != nil {
 			return nil, err
 		}
@@ -38,10 +38,10 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 func (s *Store) GetRun(ctx context.Context, pipeline string, runNo int) (*Run, error) {
 	var r Run
 	err := s.pool.QueryRow(ctx,
-		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,'')
+		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,''), COALESCE(request_key,'')
 		 FROM pipeline_runs WHERE pipeline = $1 AND run_no = $2`,
 		pipeline, runNo,
-	).Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID)
+	).Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

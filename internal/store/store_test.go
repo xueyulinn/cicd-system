@@ -183,3 +183,57 @@ func TestStore_CreateJob_UpdateJob_GetJobsForRun(t *testing.T) {
 		t.Fatalf("GetJobsForRun: got %+v", jobs)
 	}
 }
+
+func TestStore_CreateRunOrGetActive_DeduplicatesIdenticalInFlightRun(t *testing.T) {
+	ctx := context.Background()
+	url := connURL(t)
+	s, err := New(ctx, url)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+
+	pipeline := "test-pipeline-dedupe"
+	input := CreateRunInput{
+		Pipeline:   pipeline,
+		StartTime:  time.Now().UTC(),
+		Status:     StatusQueued,
+		GitHash:    "abc123",
+		GitBranch:  "main",
+		GitRepo:    "https://example.com/repo",
+		RequestKey: "same-request",
+	}
+
+	first, err := s.CreateRunOrGetActive(ctx, input)
+	if err != nil {
+		t.Fatalf("CreateRunOrGetActive first: %v", err)
+	}
+	if first.Deduped {
+		t.Fatal("expected first request to create a new run")
+	}
+
+	second, err := s.CreateRunOrGetActive(ctx, input)
+	if err != nil {
+		t.Fatalf("CreateRunOrGetActive second: %v", err)
+	}
+	if !second.Deduped {
+		t.Fatal("expected second request to dedupe to existing run")
+	}
+	if second.RunNo != first.RunNo {
+		t.Fatalf("expected deduped run_no %d, got %d", first.RunNo, second.RunNo)
+	}
+
+	runs, err := s.GetRunsByPipeline(ctx, pipeline)
+	if err != nil {
+		t.Fatalf("GetRunsByPipeline: %v", err)
+	}
+	count := 0
+	for _, run := range runs {
+		if run.RequestKey == input.RequestKey {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 persisted run for request_key %q, got %d", input.RequestKey, count)
+	}
+}

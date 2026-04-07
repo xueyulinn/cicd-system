@@ -3,6 +3,7 @@ package execution
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,7 @@ type PreparedRun struct {
 
 // context for this pipeline run
 type runInfo struct {
+	RepoURL       string
 	Branch        string
 	Commit        string
 	WorkspacePath string
@@ -78,6 +80,8 @@ type stageState struct {
 type initializedRun struct {
 	runNo   int
 	runtime *pipelineRuntime
+	deduped bool
+	status  string
 }
 
 type pipelineRuntime struct {
@@ -132,10 +136,22 @@ func NewService(ctx context.Context) (*Service, error) {
 
 func newRunInfo(req api.RunRequest) runInfo {
 	return runInfo{
+		RepoURL:       req.RepoURL,
 		Branch:        req.Branch,
 		Commit:        req.Commit,
 		WorkspacePath: req.WorkspacePath,
 	}
+}
+
+func buildRunRequestKey(req api.RunRequest, pipelineName string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		pipelineName,
+		req.YAMLContent,
+		strings.TrimSpace(req.Branch),
+		strings.TrimSpace(req.Commit),
+		strings.TrimSpace(req.RepoURL),
+	}, "\n")))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 // close dependent resources: DB client and MQ client
@@ -179,7 +195,7 @@ func (s *Service) Ready(ctx context.Context) error {
 	defer cancel()
 	if err := mq.PingMQ(timedoutCtx, mq.LoadConfig()); err != nil {
 		return fmt.Errorf("mq is not ready: %w", err)
-	} 
+	}
 
 	return nil
 }
@@ -239,6 +255,7 @@ func (s *Service) buildJobExecutionMessage(runNo int, pipeline, stage string, jo
 		RunNo:         runNo,
 		Pipeline:      pipeline,
 		Stage:         stage,
+		RepoURL:       runInfo.RepoURL,
 		Branch:        runInfo.Branch,
 		Commit:        runInfo.Commit,
 		WorkspacePath: runInfo.WorkspacePath,
@@ -426,14 +443,22 @@ func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 }
 
 // initialize pipeline runtime
-func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo) (*initializedRun, error) {
+func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (*initializedRun, error) {
 	pipeline := prepared.Pipeline
 	executionPlan := prepared.ExecutionPlan
-	runNo, err := s.startPipelineRun(ctx, pipeline.Name, runInfo)
+	runResult, err := s.startPipelineRun(ctx, pipeline.Name, runInfo, requestKey)
 
 	if err != nil {
 		return nil, fmt.Errorf("create pipeline run record: %w", err)
 	}
+	if runResult.Deduped {
+		return &initializedRun{
+			runNo:   runResult.RunNo,
+			deduped: true,
+			status:  runResult.ExistingStatus,
+		}, nil
+	}
+	runNo := runResult.RunNo
 
 	stageStates := make(map[string]*stageState, len(executionPlan.Stages))
 	stageOrder := make([]string, 0, len(executionPlan.Stages))
@@ -521,10 +546,19 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	// {branch, commit, repo}
 	info := newRunInfo(req)
 	jobConfigs := buildJobConfigs(prepared.Pipeline)
+	requestKey := buildRunRequestKey(req, prepared.Pipeline.Name)
 
-	initialized, err := s.initializePipelineRun(ctx, *prepared, jobConfigs, info)
+	initialized, err := s.initializePipelineRun(ctx, *prepared, jobConfigs, info, requestKey)
 	if err != nil {
 		return nil, err
+	}
+	if initialized.deduped {
+		return &api.RunResponse{
+			Pipeline: prepared.Pipeline.Name,
+			RunNo:    initialized.runNo,
+			Status:   initialized.status,
+			Message:  fmt.Sprintf("Duplicate run request dropped; using in-flight run %d.", initialized.runNo),
+		}, nil
 	}
 	s.putRuntime(initialized.runtime)
 
@@ -545,17 +579,21 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 }
 
 // startPipelineRun inserts a new pipeline run in queued state and returns run_no.
-func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo runInfo) (int, error) {
+func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo runInfo, requestKey string) (store.CreateRunResult, error) {
 	now := time.Now().UTC()
 	in := store.CreateRunInput{
-		Pipeline:  pipeline,
-		StartTime: now,
-		Status:    store.StatusQueued,
-		GitBranch: runInfo.Branch,
-		GitHash:   runInfo.Commit,
-		GitRepo:   runInfo.WorkspacePath,
+		Pipeline:   pipeline,
+		StartTime:  now,
+		Status:     store.StatusQueued,
+		GitBranch:  runInfo.Branch,
+		GitHash:    runInfo.Commit,
+		GitRepo:    runInfo.RepoURL,
+		RequestKey: requestKey,
 	}
-	return s.store.CreateRun(ctx, in)
+	if strings.TrimSpace(in.GitRepo) == "" {
+		in.GitRepo = runInfo.WorkspacePath
+	}
+	return s.store.CreateRunOrGetActive(ctx, in)
 }
 
 // finishRun records terminal run status and end_time.
@@ -634,8 +672,6 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 
 	return jobConfigs
 }
-
-
 
 // validatePipeline calls validation service and returns validation result.
 func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, error) {
@@ -784,4 +820,3 @@ func (s *Service) markJobRunning(ctx context.Context, pipeline string, runNo int
 	}
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
 }
-
