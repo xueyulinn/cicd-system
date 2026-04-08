@@ -57,7 +57,9 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
 
-**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI, see `.github/workflows/publish-images.yaml`), Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+
+**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/e-team/README.md`](charts/e-team/README.md).
 
 ### Queue Deduplication
 

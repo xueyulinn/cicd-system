@@ -39,7 +39,7 @@ If you prefer a remote registry, override the image repositories/tags in `values
 
 ### CI-built images (GitHub Container Registry)
 
-On push to `main` and on semantic version tags, [`.github/workflows/publish-images.yaml`](../../.github/workflows/publish-images.yaml) builds and pushes all application images to GHCR:
+On push to `main` and on semantic version tags, [`.github/workflows/publish-images.yaml`](../../.github/workflows/publish-images.yaml) builds and pushes all application images to GHCR using **Docker Buildx** with **`linux/amd64`** and **`linux/arm64`** (manifest list per tag, suitable for Intel/AMD and Apple Silicon clusters).
 
 `ghcr.io/<lowercase GitHub org>/<lowercase repo>/<component>`
 
@@ -48,6 +48,24 @@ Tags include the **short git SHA**, **`sha-<full SHA>`**, **`main`** when built 
 Default `values.yaml` points at `ghcr.io/cs7580-sea-sp26/e-team/*` with tag **`main`**. If your fork uses a different org/repo, update the `repository` fields (the workflow always publishes under your actual `GITHUB_REPOSITORY`).
 
 Pin Helm to an exact image: `--set executionService.image.tag=<short-sha>` (and the same pattern for other services / migration).
+
+#### Private GHCR images (pull credentials)
+
+If packages are **private** (common for org-managed GHCR), nodes need credentials to pull images. Use a GitHub **Personal Access Token** (classic or fine-grained) with at least **`read:packages`**.
+
+```bash
+kubectl -n e-team create secret docker-registry ghcr-pull-secret \
+  --docker-server=ghcr.io \
+  --docker-username=<YOUR_GITHUB_USERNAME> \
+  --docker-password=<YOUR_TOKEN>
+```
+
+Then install or upgrade Helm (quote `--set` in **zsh**):
+
+```bash
+helm upgrade --install e-team ./charts/e-team -n e-team \
+  --set 'global.imagePullSecrets[0].name=ghcr-pull-secret'
+```
 
 ## Install
 
