@@ -37,6 +37,18 @@ minikube image build -t e-team-db-migrate:latest -f migrations/Dockerfile .
 
 If you prefer a remote registry, override the image repositories/tags in `values.yaml` or with `--set`.
 
+### CI-built images (GitHub Container Registry)
+
+On push to `main` and on semantic version tags, [`.github/workflows/publish-images.yaml`](../../.github/workflows/publish-images.yaml) builds and pushes all application images to GHCR:
+
+`ghcr.io/<lowercase GitHub org>/<lowercase repo>/<component>`
+
+Tags include the **short git SHA**, **`sha-<full SHA>`**, **`main`** when built from `main`, and the **git tag** on release tag pushes.
+
+Default `values.yaml` points at `ghcr.io/cs7580-sea-sp26/e-team/*` with tag **`main`**. If your fork uses a different org/repo, update the `repository` fields (the workflow always publishes under your actual `GITHUB_REPOSITORY`).
+
+Pin Helm to an exact image: `--set executionService.image.tag=<short-sha>` (and the same pattern for other services / migration).
+
 ## Install
 
 Install into a namespace:

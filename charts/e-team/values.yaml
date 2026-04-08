@@ -1,6 +1,10 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Application images are built and pushed by .github/workflows/publish-images.yaml to GHCR:
+#   ghcr.io/<lowercase github org>/<lowercase repo>/<component>
+# Default tag `main` tracks the latest image built from the main branch; pin with a short SHA or release tag.
+# If you fork, replace the ghcr.io/... prefix to match your repository (or override per-service below).
 global:
   imagePullSecrets: []
   podAnnotations: {}
@@ -9,8 +13,8 @@ apiGateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: yulinxue/cicd-api-gateway
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/api-gateway
+    tag: main
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -36,8 +40,8 @@ validationService:
   enabled: true
   replicaCount: 1
   image:
-    repository: yulinxue/cicd-validation-service
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/validation-service
+    tag: main
     pullPolicy: IfNotPresent
   service:
     port: 8001
@@ -53,8 +57,8 @@ executionService:
   enabled: true
   replicaCount: 1
   image:
-    repository: yulinxue/cicd-execution-service
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/execution-service
+    tag: main
     pullPolicy: IfNotPresent
   service:
     port: 8002
@@ -84,8 +88,8 @@ workerService:
   # RabbitMQ consumers per worker Pod (parallel-ready jobs within a stage).
   concurrency: 2
   image:
-    repository: yulinxue/cicd-worker-service
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/worker-service
+    tag: main
     pullPolicy: IfNotPresent
   service:
     port: 8003
@@ -118,8 +122,8 @@ reportingService:
   enabled: true
   replicaCount: 1
   image:
-    repository: yulinxue/cicd-reporting-service
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/reporting-service
+    tag: main
     pullPolicy: IfNotPresent
   service:
     port: 8004
@@ -215,8 +219,8 @@ rabbitmq:
 migration:
   enabled: true
   image:
-    repository: yulinxue/cicd-db-migrate
-    tag: latest
+    repository: ghcr.io/cs7580-sea-sp26/e-team/db-migrate
+    tag: main
     pullPolicy: IfNotPresent
   backoffLimit: 5
   ttlSecondsAfterFinished: 86400
