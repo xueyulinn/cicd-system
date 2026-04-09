@@ -10,11 +10,9 @@ import (
 
 // PipelineVerifier validates pipeline configurations.
 type PipelineVerifier struct {
-	filePath   string
-	pipeline   *models.Pipeline
-	rootNode   *yaml.Node
-	jobsCached bool
-	jobNodes   []parser.JobNode
+	filePath string
+	pipeline *models.Pipeline
+	rootNode *yaml.Node
 }
 
 // NewPipelineVerifier creates a new verifier
