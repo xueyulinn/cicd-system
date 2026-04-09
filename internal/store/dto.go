@@ -2,12 +2,12 @@ package store
 
 import "time"
 
-// Status values for pipeline run, stage, and job.
+// Status constants for pipeline runs, stages, and jobs.
 const (
-	StatusQueued = "queued"
-	StatusRunning = "running"
-	StatusSuccess = "success"
-	StatusFailed  = "failed"
+	StatusQueued  = "queued"  // initial state before execution begins
+	StatusRunning = "running" // actively executing
+	StatusSuccess = "success" // completed without error
+	StatusFailed  = "failed"  // completed with error
 )
 
 // Run represents a pipeline run (one row in pipeline_runs).
