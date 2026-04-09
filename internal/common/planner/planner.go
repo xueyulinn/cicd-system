@@ -1,3 +1,5 @@
+// Package planner builds execution plans from parsed pipelines by resolving
+// stage ordering and intra-stage job dependencies via topological sort.
 package planner
 
 import (
@@ -111,13 +113,7 @@ func jobsForStage(stageName string, pipeline *models.Pipeline) []models.Job {
 }
 
 func buildStagePlan(stage *models.Stage, pipeline *models.Pipeline) models.StageExecutionPlan {
-	var stageJobs []models.Job
-	for _, job := range pipeline.Jobs {
-		if job.Stage == stage.Name {
-			stageJobs = append(stageJobs, job)
-		}
-	}
-	orderedJobs := scheduleJobsInStage(stageJobs)
+	orderedJobs := scheduleJobsInStage(jobsForStage(stage.Name, pipeline))
 	jobs := make([]models.JobExecutionPlan, 0, len(orderedJobs))
 	for _, job := range orderedJobs {
 		jobs = append(jobs, models.JobExecutionPlan{
