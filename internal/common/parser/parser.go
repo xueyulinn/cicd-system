@@ -1,3 +1,5 @@
+// Package parser reads YAML pipeline configuration files and builds the
+// in-memory Pipeline model used by the verifier and planner.
 package parser
 
 import (
@@ -48,8 +50,7 @@ func parseYAMLData(data []byte) (*models.Pipeline, *yaml.Node, error) {
 		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	p := &Parser{}
-	pipeline, err := p.buildPipeline(&rootNode)
+	pipeline, err := buildPipeline(&rootNode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -57,7 +58,7 @@ func parseYAMLData(data []byte) (*models.Pipeline, *yaml.Node, error) {
 	return pipeline, &rootNode, nil
 }
 
-func (p *Parser) buildPipeline(root *yaml.Node) (*models.Pipeline, error) {
+func buildPipeline(root *yaml.Node) (*models.Pipeline, error) {
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
 		return nil, fmt.Errorf("invalid YAML document")
 	}
@@ -77,12 +78,12 @@ func (p *Parser) buildPipeline(root *yaml.Node) (*models.Pipeline, error) {
 	pipeline := &models.Pipeline{}
 	pipelineNode := findMappingNode(content, "pipeline")
 	if pipelineNode != nil {
-		if nameNode := findNameNode(pipelineNode); nameNode != nil {
+		if nameNode := findMappingNode(pipelineNode, "name"); nameNode != nil {
 			pipeline.Name = nameNode.Value
 		}
 	}
 
-	pipeline.Stages = parseStages(findSequenceNode(content, "stages"))
+	pipeline.Stages = parseStages(findMappingNode(content, "stages"))
 	if len(pipeline.Stages) == 0 {
 		// Set default stages if no stages are defined
 		pipeline.Stages = getDefaultStages()
@@ -104,22 +105,6 @@ func findMappingNode(root *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func findSequenceNode(root *yaml.Node, key string) *yaml.Node {
-	return findMappingNode(root, key)
-}
-
-func findNameNode(node *yaml.Node) *yaml.Node {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i < len(node.Content); i += 2 {
-		if node.Content[i].Value == "name" {
-			return node.Content[i+1]
-		}
-	}
-	return nil
-}
-
 func parseStages(node *yaml.Node) []models.Stage {
 	if node == nil || node.Kind != yaml.SequenceNode {
 		return nil
@@ -130,7 +115,7 @@ func parseStages(node *yaml.Node) []models.Stage {
 		case yaml.ScalarNode:
 			stages = append(stages, models.Stage{Name: entry.Value})
 		case yaml.MappingNode:
-			if nameNode := findNameNode(entry); nameNode != nil {
+			if nameNode := findMappingNode(entry, "name"); nameNode != nil {
 				stages = append(stages, models.Stage{Name: nameNode.Value})
 			}
 		}
@@ -146,7 +131,7 @@ func parseJobs(root *yaml.Node) []models.Job {
 	for i := 0; i < len(root.Content); i += 2 {
 		keyNode := root.Content[i]
 		valueNode := root.Content[i+1]
-		if isReservedTopLevelKey(keyNode.Value) {
+		if IsReservedTopLevelKey(keyNode.Value) {
 			continue
 		}
 		jobs = append(jobs, parseJob(keyNode.Value, valueNode))
@@ -154,9 +139,11 @@ func parseJobs(root *yaml.Node) []models.Job {
 	return jobs
 }
 
-func isReservedTopLevelKey(key string) bool {
+// IsReservedTopLevelKey reports whether key is a reserved top-level YAML key
+// (i.e. not a job definition). Shared by parser and verifier.
+func IsReservedTopLevelKey(key string) bool {
 	switch key {
-	case "pipeline", "stages":
+	case "name", "pipeline", "stages", "jobs":
 		return true
 	default:
 		return false
@@ -186,9 +173,9 @@ func parseJob(jobName string, node *yaml.Node) models.Job {
 					job.Image = fieldValue.Value
 				}
 			case "script":
-				scriptLines = appendScript(scriptLines, fieldValue)
+				scriptLines = appendStringValues(scriptLines, fieldValue)
 			case "needs":
-				job.Needs = appendNeeds(job.Needs, fieldValue)
+				job.Needs = appendStringValues(job.Needs, fieldValue)
 			case "failures":
 				if fieldValue.Kind == yaml.ScalarNode && fieldValue.Tag == "!!bool" {
 					job.Failures = fieldValue.Value == "true"
@@ -200,21 +187,9 @@ func parseJob(jobName string, node *yaml.Node) models.Job {
 	return job
 }
 
-func appendScript(existing []string, node *yaml.Node) []string {
-	switch node.Kind {
-	case yaml.ScalarNode:
-		return append(existing, node.Value)
-	case yaml.SequenceNode:
-		for _, item := range node.Content {
-			if item.Kind == yaml.ScalarNode {
-				existing = append(existing, item.Value)
-			}
-		}
-	}
-	return existing
-}
-
-func appendNeeds(existing []string, node *yaml.Node) []string {
+// appendStringValues appends scalar string(s) from a YAML node (scalar or sequence)
+// to an existing slice.
+func appendStringValues(existing []string, node *yaml.Node) []string {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		return append(existing, node.Value)
@@ -260,12 +235,10 @@ func (p *Parser) GetJobNodes(rootNode *yaml.Node) []JobNode {
 				key := content.Content[i]
 				value := content.Content[i+1]
 
-				// Skip reserved top-level keys
-				if isReservedTopLevelKey(key.Value) {
+				if IsReservedTopLevelKey(key.Value) {
 					continue
 				}
 
-				// This is a job node
 				jobNodes = append(jobNodes, JobNode{
 					Name:  key.Value,
 					Key:   key,
