@@ -1,10 +1,8 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,7 +13,6 @@ import (
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
@@ -198,55 +195,6 @@ func (s *Service) Ready(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// PrepareRun validates the incoming YAML and returns static execution plan and pipeline dto.
-func (s *Service) prepareRun(req api.RunRequest) (*PreparedRun, *api.RunResponse, error) {
-	if strings.TrimSpace(req.YAMLContent) == "" {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   []string{"yaml_content is required"},
-		}, nil
-	}
-
-	validationResp, err := s.validatePipeline(req.YAMLContent)
-	if err != nil {
-		return nil, nil, fmt.Errorf("run pipeline: %w", err)
-	}
-
-	if !validationResp.Valid {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   validationResp.Errors,
-		}, nil
-	}
-
-	p := parser.NewParserFromContent(req.YAMLContent)
-	pipeline, _, err := p.Parse()
-	if err != nil {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   []string{fmt.Sprintf("pipeline parse failed: %v", err)},
-		}, nil
-	}
-
-	// generate static executionPlan for current pipeline run
-	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
-	if err != nil {
-		return nil, &api.RunResponse{
-			Pipeline: pipeline.Name,
-			Status:   "failed",
-			Errors:   []string{fmt.Sprintf("generate execution plan failed: %v", err)},
-		}, nil
-	}
-
-	return &PreparedRun{
-		Pipeline:      pipeline,
-		ExecutionPlan: executionPlan,
-	}, nil, nil
 }
 
 // buildJobExecutionMessage constructs the MQ payload for a single job in a pipeline run.
@@ -596,142 +544,4 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 	return jobConfigs
 }
 
-// validatePipeline calls validation service and returns validation result.
-func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, error) {
-	validateReq := map[string]string{
-		"yaml_content": yamlContent,
-	}
-
-	jsonBody, err := json.Marshal(validateReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal validation request: %w", err)
-	}
-
-	resp, err := s.httpValidation.Post(s.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read validation response: %w", err)
-	}
-
-	var validationResp api.ValidateResponse
-	if err := json.Unmarshal(body, &validationResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal validation response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Keep server-provided validation details when available.
-		if len(validationResp.Errors) == 0 {
-			validationResp.Errors = []string{fmt.Sprintf("validation service returned status %d", resp.StatusCode)}
-		}
-		validationResp.Valid = false
-	}
-
-	return &validationResp, nil
-}
-
-// callback used to update job status from queued to running
-func (s *Service) HandleJobStarted(ctx context.Context, req api.JobStatusCallbackRequest) error {
-	if strings.TrimSpace(req.Pipeline) == "" || strings.TrimSpace(req.Stage) == "" || strings.TrimSpace(req.Job) == "" || req.RunNo == 0 {
-		return fmt.Errorf("pipeline, run_no, stage, and job are required")
-	}
-	return s.markJobRunning(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job)
-}
-
-func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallbackRequest) error {
-	if strings.TrimSpace(req.Pipeline) == "" || strings.TrimSpace(req.Stage) == "" || strings.TrimSpace(req.Job) == "" || req.RunNo == 0 {
-		return fmt.Errorf("pipeline, run_no, stage, and job are required")
-	}
-
-	status := strings.TrimSpace(req.Status)
-	switch status {
-	case store.StatusSuccess, store.StatusFailed:
-	default:
-		return fmt.Errorf("invalid finished status %q", req.Status)
-	}
-
-	// update DB job status
-	if err := s.finishJob(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job, status); err != nil {
-		return err
-	}
-
-	rt := s.getPipelineRuntime(req.Pipeline, req.RunNo)
-	if rt == nil {
-		return nil
-	}
-
-	stage := rt.stageStates[req.Stage]
-	if stage == nil {
-		return nil
-	}
-
-	jobCfg := stage.jobConfigs[req.Job]
-	allowFailure := jobCfg.allowFailures
-
-	if status == store.StatusFailed {
-		if allowFailure {
-			newlyReady := stage.markJobSucceeded(req.Job)
-			if err := s.enqueueReadyJobs(ctx, req.Pipeline, req.Stage, req.RunNo, newlyReady, rt.runInfo); err != nil {
-				return err
-			}
-		} else {
-			stage.markJobTerminal(req.Job)
-			if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusFailed); err != nil {
-				return err
-			}
-			if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusFailed); err != nil {
-				return err
-			}
-			s.deleteRuntime(req.Pipeline, req.RunNo)
-			return nil
-		}
-	} else {
-		newlyReady := stage.markJobSucceeded(req.Job)
-		if err := s.enqueueReadyJobs(ctx, req.Pipeline, req.Stage, req.RunNo, newlyReady, rt.runInfo); err != nil {
-			return err
-		}
-	}
-
-	// adjust the current stage
-	if !stage.isStageComplete() {
-		return nil
-	}
-
-	if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusSuccess); err != nil {
-		return err
-	}
-
-	nextStageName, ok := rt.nextStageName(req.Stage)
-
-	if !ok {
-		if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusSuccess); err != nil {
-			return err
-		}
-		s.deleteRuntime(req.Pipeline, req.RunNo)
-		return nil
-	}
-
-	nextStage := rt.stageStates[nextStageName]
-	if nextStage == nil {
-		return nil
-	}
-
-	readyJobs := nextStage.getReadyJobs()
-	if err := s.enqueueReadyJobs(ctx, req.Pipeline, nextStageName, req.RunNo, readyJobs, rt.runInfo); err != nil {
-		return err
-	}
-
-	if nextStage.isStageComplete() {
-		if err := s.finishStage(ctx, req.Pipeline, req.RunNo, nextStageName, store.StatusSuccess); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
