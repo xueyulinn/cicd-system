@@ -10,11 +10,13 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
+// Handler exposes HTTP endpoints for execution service operations.
 type Handler struct {
 	service *Service
 	initErr error
 }
 
+// NewHandler creates a Handler and initializes its underlying Service.
 func NewHandler() *Handler {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -26,12 +28,14 @@ func NewHandler() *Handler {
 	}
 }
 
+// Close releases resources held by the underlying execution service.
 func (h *Handler) Close() {
 	if h.service != nil {
 		h.service.Close()
 	}
 }
 
+// RegisterRoutes registers execution service HTTP routes on mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/run", h.handleExecution)

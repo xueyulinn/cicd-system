@@ -25,9 +25,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// struct called by execution handler
 const executionClientName = "execution-service"
 
+// Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
 	workerURL       string
 	validationURL   string
@@ -89,7 +89,7 @@ type pipelineRuntime struct {
 	runInfo     runInfo
 }
 
-// service constructor
+// NewService constructs an execution Service with DB, MQ, and HTTP dependencies initialized.
 func NewService(ctx context.Context) (*Service, error) {
 	// create DB client
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -151,7 +151,7 @@ func buildRunRequestKey(req api.RunRequest, pipelineName string) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-// close dependent resources: DB client and MQ client
+// Close releases resources held by the Service, including MQ publisher and DB store.
 func (s *Service) Close() {
 	if s.jobPublisher != nil {
 		_ = s.jobPublisher.Close()
@@ -480,7 +480,7 @@ func (s *Service) dispatchInitialReadyJobs(ctx context.Context, prepared Prepare
 	return nil
 }
 
-// validate pipeline, dispatch jobs concurrently and retutrn right away
+// Run validates the pipeline, initializes run records/state, dispatches initial jobs, and returns immediately.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
 	// validate pipeline file and generate execution plan
 	prepared, runResp, err := s.prepareRun(req)
