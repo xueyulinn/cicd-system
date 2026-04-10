@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// CreateRunResult holds the outcome of CreateRunOrGetActive, indicating
+// whether a new run was created or an existing in-flight run was returned.
 type CreateRunResult struct {
 	RunNo          int
 	Deduped        bool

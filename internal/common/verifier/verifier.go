@@ -1,3 +1,5 @@
+// Package verifier validates parsed pipeline configurations against structural
+// and semantic rules (unique names, valid references, cycle detection, etc.).
 package verifier
 
 import (
@@ -6,13 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PipelineVerifier validates pipeline configurations
+// PipelineVerifier validates pipeline configurations.
 type PipelineVerifier struct {
-	filePath   string
-	pipeline   *models.Pipeline
-	rootNode   *yaml.Node
-	JobsCached bool
-	JobNodes   []parser.JobNode
+	filePath string
+	pipeline *models.Pipeline
+	rootNode *yaml.Node
 }
 
 // NewPipelineVerifier creates a new verifier
