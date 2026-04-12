@@ -9,7 +9,7 @@ import (
 )
 
 type Handler struct {
-	server *Server
+	service *Service
 	initErr error
 }
 
@@ -17,13 +17,13 @@ func NewHandler() *Handler {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	srv, err := NewServer(ctx, 0)
+	srv, err := NewService(ctx, 0)
 	if err != nil {
 		return &Handler{initErr: err}
 	}
 
 	return &Handler{
-		server: srv,
+		service: srv,
 	}
 }
 
@@ -31,8 +31,8 @@ func (h *Handler) Close() {
 	if h == nil {
 		return
 	}
-	if h.server != nil {
-		_ = h.server.Close()
+	if h.service != nil {
+		_ = h.service.Close()
 	}
 }
 
@@ -48,10 +48,10 @@ func (h *Handler) Run(ctx context.Context) error {
 	if h.initErr != nil {
 		return h.initErr
 	}
-	if h.server == nil {
+	if h.service == nil {
 		return nil
 	}
-	return h.server.Start(ctx)
+	return h.service.Start(ctx)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	if err := h.server.Ready(ctx); err != nil {
+	if err := h.service.Ready(ctx); err != nil {
 		api.WriteJSONError(w, http.StatusServiceUnavailable, "worker service not ready: "+err.Error())
 		return
 	}
