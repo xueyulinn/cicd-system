@@ -8,11 +8,15 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
 )
 
+// Handler exposes HTTP endpoints and lifecycle hooks for the worker service.
 type Handler struct {
 	service *Service
 	initErr error
 }
 
+// NewHandler constructs a handler and initializes worker dependencies eagerly.
+// If initialization fails, the handler still returns and surfaces the error via
+// readiness checks and Run.
 func NewHandler() *Handler {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -27,6 +31,7 @@ func NewHandler() *Handler {
 	}
 }
 
+// Close releases resources held by the underlying worker service.
 func (h *Handler) Close() {
 	if h == nil {
 		return
@@ -36,11 +41,13 @@ func (h *Handler) Close() {
 	}
 }
 
+// RegisterRoutes registers liveness and readiness endpoints on mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/ready", h.handleReady)
 }
 
+// Run starts job consumption until ctx is canceled or startup fails.
 func (h *Handler) Run(ctx context.Context) error {
 	if h == nil {
 		return nil

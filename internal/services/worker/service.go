@@ -84,6 +84,7 @@ func NewService(ctx context.Context, jobTimeout time.Duration) (*Service, error)
 	}, nil
 }
 
+// Close releases all underlying consumers and Docker resources held by Service.
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
