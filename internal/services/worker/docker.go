@@ -23,6 +23,7 @@ func NewDockerClient(ctx context.Context) (*client.Client, error) {
 	return cli, nil
 }
 
+// PingDocker verifies that the Docker daemon is reachable using cli.
 func PingDocker(ctx context.Context, cli *client.Client) error {
 	if cli == nil {
 		return fmt.Errorf("docker client not available")
