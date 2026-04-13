@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/api"
@@ -29,7 +30,8 @@ type Service struct {
 	httpValidation  *http.Client
 	httpWorker      *http.Client
 	store           *store.Store
-	jobPublisher    mq.Publisher
+	jobPublishers   []mq.Publisher
+	publishIdx      uint64
 	runtimeMu       sync.Mutex
 	runtimes        map[string]*pipelineRuntime // isolate pipeline runs on parallel
 }
@@ -100,28 +102,23 @@ func NewService(ctx context.Context) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect report store: %w", err)
 	}
 
-	// create MQ client
+	// create MQ publishers
 	cfg := mq.LoadConfig()
-	mqClient, err := mq.NewRabbitClient(cfg)
+	publisherConcurrency := loadPublisherConcurrency()
+	jobPublishers, err := createJobPublishers(cfg, publisherConcurrency)
 	if err != nil {
-		return nil, fmt.Errorf("fail to create RabbitMQ client: %w", err)
-	}
-
-	jobPublisher, err := mq.NewJobPublisher(mqClient, cfg)
-	if err != nil {
-		_ = mqClient.Close()
 		st.Close()
-		return nil, fmt.Errorf("fail to initialize job publisher: %w", err)
+		return nil, fmt.Errorf("fail to initialize job publishers: %w", err)
 	}
 
 	return &Service{
 		workerURL:       config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
-		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		validationURL:   config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		// Validation calls are typically short; worker readiness and future HTTP paths may be long.
 		httpValidation: observability.NewInstrumentedHTTPClient(executionClientName, "validation", 2*time.Minute),
 		httpWorker:     observability.NewInstrumentedHTTPClient(executionClientName, "worker", 10*time.Minute),
 		store:          st,
-		jobPublisher:   jobPublisher,
+		jobPublishers:  jobPublishers,
 		runtimes:       make(map[string]*pipelineRuntime),
 	}, nil
 }
@@ -148,12 +145,22 @@ func buildRunRequestKey(req api.RunRequest, pipelineName string) string {
 
 // Close releases resources held by the Service, including MQ publisher and DB store.
 func (s *Service) Close() {
-	if s.jobPublisher != nil {
-		_ = s.jobPublisher.Close()
+	for _, publisher := range s.jobPublishers {
+		if publisher != nil {
+			_ = publisher.Close()
+		}
 	}
 	if s.store != nil {
 		s.store.Close()
 	}
+}
+
+func (s *Service) nextPublisher() mq.Publisher {
+	if s == nil || len(s.jobPublishers) == 0 {
+		return nil
+	}
+	idx := atomic.AddUint64(&s.publishIdx, 1) - 1
+	return s.jobPublishers[idx%uint64(len(s.jobPublishers))]
 }
 
 // Ready reports whether the execution service can serve requests.
