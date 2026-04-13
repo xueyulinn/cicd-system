@@ -41,23 +41,18 @@ func NewClient() *Client {
 	}
 }
 
-// ValidateRequest forwards validation request to validation service
-func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, error) {
-	reqBody := map[string]string{
-		"yaml_content": yamlContent,
-	}
-
+func postJSON[T any](client *http.Client, endpoint string, reqBody any, errorPrefix string) (*T, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := c.httpValidation.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	resp, err := client.Post(endpoint, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
+		return nil, fmt.Errorf("failed to call %s: %w", errorPrefix, err)
 	}
 	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
+		_ = resp.Body.Close()
 	}()
 
 	body, err := io.ReadAll(resp.Body)
@@ -66,101 +61,50 @@ func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Try to parse the error response first
-		var errorResp api.ValidateResponse
-		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
+		var typedErr T
+		if parseErr := json.Unmarshal(body, &typedErr); parseErr == nil {
+			switch v := any(typedErr).(type) {
+			case api.ValidateResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			case api.DryRunResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			case api.RunResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			}
 		}
-		// Fallback to raw body if parsing fails
-		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, string(body))
 	}
 
-	var validationResp api.ValidateResponse
-	if err := json.Unmarshal(body, &validationResp); err != nil {
+	var out T
+	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+	return &out, nil
+}
 
-	return &validationResp, nil
+// ValidateRequest forwards validation request to validation service
+func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, error) {
+	return postJSON[api.ValidateResponse](c.httpValidation, c.validationURL+"/validate", map[string]string{
+		"yaml_content": yamlContent,
+	}, "validation service")
 }
 
 // DryRunRequest forwards dry run request to validation service
 func (c *Client) DryRunRequest(yamlContent string) (*api.DryRunResponse, error) {
-	reqBody := map[string]string{
+	return postJSON[api.DryRunResponse](c.httpValidation, c.validationURL+"/dryrun", map[string]string{
 		"yaml_content": yamlContent,
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	resp, err := c.httpValidation.Post(c.validationURL+"/dryrun", "application/json", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Try to parse the error response first
-		var errorResp api.DryRunResponse
-		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
-		}
-		// Fallback to raw body if parsing fails
-		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var dryRunResp api.DryRunResponse
-	if err := json.Unmarshal(body, &dryRunResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	return &dryRunResp, nil
+	}, "validation service")
 }
 
 // RunRequest forwards run request to execution service
 func (c *Client) RunRequest(req api.RunRequest) (*api.RunResponse, error) {
-	jsonBody, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	resp, err := c.httpExecution.Post(c.executionURL+"/run", "application/json", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to call execution service: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Try to parse error response first
-		var errorResp api.RunResponse
-		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && len(errorResp.Errors) > 0 {
-			return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, errorResp.Errors[0])
-		}
-		// Fallback to raw body if parsing fails
-		return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var runResp api.RunResponse
-	if err := json.Unmarshal(body, &runResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	return &runResp, nil
+	return postJSON[api.RunResponse](c.httpExecution, c.executionURL+"/run", req, "execution service")
 }
 
 // ReportRequest forwards report request to reporting service.

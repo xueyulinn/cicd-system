@@ -18,28 +18,32 @@ func NewService() *Service {
 	return &Service{}
 }
 
-// ValidateYAML validates YAML pipeline content
-func (s *Service) ValidateYAML(yamlContent string) api.ValidateResponse {
+func validatePipelineContent(yamlContent string) (*models.Pipeline, []string) {
 	pipeline, rootNode, err := parser.NewParserFromContent(yamlContent).Parse()
 	if err != nil {
-		return api.ValidateResponse{
-			Valid:  false,
-			Errors: []string{err.Error()},
-		}
+		return nil, []string{err.Error()}
 	}
 
-	// Create verifier and validate
 	v := verifier.NewPipelineVerifier("content", pipeline, rootNode)
 	errors := v.Verify()
-
 	if len(errors) > 0 {
 		errorStrings := make([]string, len(errors))
 		for i, err := range errors {
 			errorStrings[i] = err.Error()
 		}
+		return nil, errorStrings
+	}
+
+	return pipeline, nil
+}
+
+// ValidateYAML validates YAML pipeline content.
+func (s *Service) ValidateYAML(yamlContent string) api.ValidateResponse {
+	_, errors := validatePipelineContent(yamlContent)
+	if len(errors) > 0 {
 		return api.ValidateResponse{
 			Valid:  false,
-			Errors: errorStrings,
+			Errors: errors,
 		}
 	}
 
@@ -49,28 +53,13 @@ func (s *Service) ValidateYAML(yamlContent string) api.ValidateResponse {
 	}
 }
 
-// DryRunYAML validates YAML and returns dry run output
+// DryRunYAML validates YAML and returns dry run output.
 func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
-	pipeline, rootNode, err := parser.NewParserFromContent(yamlContent).Parse()
-	if err != nil {
-		return api.DryRunResponse{
-			Valid:  false,
-			Errors: []string{err.Error()},
-		}
-	}
-
-	// Create verifier and validate
-	v := verifier.NewPipelineVerifier("content", pipeline, rootNode)
-	errors := v.Verify()
-
+	pipeline, errors := validatePipelineContent(yamlContent)
 	if len(errors) > 0 {
-		errorStrings := make([]string, len(errors))
-		for i, err := range errors {
-			errorStrings[i] = err.Error()
-		}
 		return api.DryRunResponse{
 			Valid:  false,
-			Errors: errorStrings,
+			Errors: errors,
 		}
 	}
 
@@ -99,7 +88,7 @@ func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
 	}
 }
 
-// marshalExecutionPlan converts execution plan to YAML string
+// marshalExecutionPlan converts an execution plan into the dry-run YAML view.
 func marshalExecutionPlan(plan *models.ExecutionPlan) (string, error) {
 	result := ""
 	for _, stage := range plan.Stages {
