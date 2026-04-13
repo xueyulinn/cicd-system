@@ -208,12 +208,12 @@ func (c *RabbitClient) startConsume(queue string) (<-chan amqp.Delivery, error) 
 }
 
 func (c *RabbitClient) reconnect() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c == nil {
 		return fmt.Errorf("rabbit client is nil")
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if err := c.cfg.Validate(); err != nil {
 		return err
 	}
@@ -225,6 +225,9 @@ func (c *RabbitClient) reconnect() error {
 }
 
 func (c *RabbitClient) reopenChannel() error {
+	if c == nil {
+		return fmt.Errorf("rabbit client is nil")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reopenChannelLocked()
