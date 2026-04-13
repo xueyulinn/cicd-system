@@ -16,6 +16,8 @@ type ReportResponse struct {
 }
 
 // ReportPipeline contains pipeline-level and scoped run/stage/job report fields.
+// Stages is used for full run-stage listings, while Stage preserves the existing
+// single-stage response shape used by current clients.
 type ReportPipeline struct {
 	Name    string      `json:"name" yaml:"name"`
 	Runs    []ReportRun `json:"runs,omitempty" yaml:"runs,omitempty"`
@@ -41,6 +43,8 @@ type ReportRun struct {
 }
 
 // ReportStage is a stage report block.
+// Jobs is used for full stage-job listings, while Job preserves the existing
+// single-job response shape used by current clients.
 type ReportStage struct {
 	Name   string      `json:"name" yaml:"name"`
 	Status string      `json:"status" yaml:"status"`

@@ -6,14 +6,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Pipeline represents the entire CI/CD pipeline configuration (parallel structure)
+// Pipeline represents a parsed CI/CD pipeline definition.
 type Pipeline struct {
 	Name   string  `yaml:"name,omitempty"`
 	Stages []Stage `yaml:"stages"`
 	Jobs   []Job   `yaml:"jobs"`
 }
 
-// Stage represents a stage definition (name only)
+// Stage represents a declared pipeline stage.
 type Stage struct {
 	Name string `yaml:"name"`
 }
@@ -37,7 +37,7 @@ func (s *Stage) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
-// Job represents a job with stage reference
+// Job represents a pipeline job and its execution requirements.
 type Job struct {
 	Name     string   `yaml:"name"`
 	Stage    string   `yaml:"stage"` // Reference to stage name
@@ -47,19 +47,20 @@ type Job struct {
 	Failures bool     `json:"failures" yaml:"failures"`
 }
 
-// Location represents a position in the YAML file
+// Location represents a position in a YAML document.
 type Location struct {
 	Line   int
 	Column int
 }
 
-// ValidationError represents an error with location information
+// ValidationError represents a validation error with file and location context.
 type ValidationError struct {
 	FilePath string
 	Location Location
 	Message  string
 }
 
+// Error renders the validation error in file:line:column: message format.
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("%s:%d:%d: %s", e.FilePath, e.Location.Line, e.Location.Column, e.Message)
 }

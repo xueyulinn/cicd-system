@@ -1,6 +1,6 @@
 package models
 
-// ExecutionPlan represents the execution order of stages and jobs (reusable across CLI and services).
+// ExecutionPlan represents the stage/job execution order for a pipeline run.
 type ExecutionPlan struct {
 	Stages []StageExecutionPlan `json:"stages" yaml:"stages"`
 }
@@ -23,7 +23,7 @@ type StagePlan struct {
 	JobByName  map[string]JobExecutionPlan `json:"-" yaml:"-"`
 }
 
-// JobExecutionPlan represents a job in execution order with image and script.
+// JobExecutionPlan represents one executable job in a stage plan or run plan.
 type JobExecutionPlan struct {
 	Name   string   `json:"name" yaml:"name"`
 	Image  string   `json:"image,omitempty" yaml:"image,omitempty"`

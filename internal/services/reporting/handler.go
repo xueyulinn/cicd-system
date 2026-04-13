@@ -14,10 +14,12 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 )
 
+// Handler serves reporting HTTP endpoints.
 type Handler struct {
 	service *Service
 }
 
+// NewHandler constructs a reporting handler and initializes its backing service.
 func NewHandler() (*Handler, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -29,19 +31,21 @@ func NewHandler() (*Handler, error) {
 	return &Handler{service: svc}, nil
 }
 
+// Close releases resources owned by the underlying reporting service.
 func (h *Handler) Close() {
 	if h.service != nil {
 		h.service.Close()
 	}
 }
 
+// RegisterRoutes registers the reporting service HTTP routes.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/report", h.handleReport)
 	mux.HandleFunc("/ready", h.handleReady)
 }
 
-// Check is DB is ready
+// handleReady reports reporting-service readiness based on report-store reachability.
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -62,6 +66,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+// handleHealth reports reporting-service liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -71,6 +76,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
+// handleReport parses report filters and returns the requested report view.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -109,6 +115,7 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, report)
 }
 
+// parseReportQuery parses supported report filters from the incoming HTTP request.
 func parseReportQuery(r *http.Request) (models.ReportQuery, error) {
 	query := models.ReportQuery{
 		Pipeline: strings.TrimSpace(r.URL.Query().Get("pipeline")),
