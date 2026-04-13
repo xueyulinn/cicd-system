@@ -27,13 +27,15 @@ const (
 	maxPublishAttempts = 3
 )
 
-func NewRabbitClient(cfg Config) (*RabbitClient, error) {
+func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-
-	client := &RabbitClient{cfg: cfg}
-	if err := client.reconnect(); err != nil {
+	if conn == nil {
+		return nil, fmt.Errorf("rabbit connection is nil")
+	}
+	client := &RabbitClient{cfg: cfg, conn: conn}
+	if err := client.reopenChannel(); err != nil {
 		return nil, err
 	}
 	if err := client.ensureQueue(cfg.JobQueue); err != nil {
@@ -216,26 +218,30 @@ func (c *RabbitClient) reconnect() error {
 		return err
 	}
 
+	if c.conn == nil || c.conn.IsClosed() {
+		return fmt.Errorf("rabbit connection is closed")
+	}
+	return c.reopenChannelLocked()
+}
+
+func (c *RabbitClient) reopenChannel() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reopenChannelLocked()
+}
+
+func (c *RabbitClient) reopenChannelLocked() error {
+	if c.conn == nil || c.conn.IsClosed() {
+		return fmt.Errorf("rabbit connection is closed")
+	}
 	if c.channel != nil {
 		_ = c.channel.Close()
 		c.channel = nil
 	}
-	if c.conn != nil {
-		_ = c.conn.Close()
-		c.conn = nil
-	}
-
-	conn, err := amqp.Dial(c.cfg.URL)
+	ch, err := c.conn.Channel()
 	if err != nil {
 		return err
 	}
-	ch, err := conn.Channel()
-	if err != nil {
-		_ = conn.Close()
-		return err
-	}
-
-	c.conn = conn
 	c.channel = ch
 	return nil
 }
@@ -252,10 +258,6 @@ func (c *RabbitClient) Close() error {
 		c.channel = nil
 	}
 
-	if c.conn != nil {
-		_ = c.conn.Close()
-		c.conn = nil
-	}
 	return nil
 }
 

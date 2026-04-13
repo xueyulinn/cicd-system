@@ -19,21 +19,23 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const executionClientName = "execution-service"
 
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
-	workerURL       string
-	validationURL   string
-	httpValidation  *http.Client
-	httpWorker      *http.Client
-	store           *store.Store
-	jobPublishers   []mq.Publisher
-	publishIdx      uint64
-	runtimeMu       sync.Mutex
-	runtimes        map[string]*pipelineRuntime // isolate pipeline runs on parallel
+	workerURL      string
+	validationURL  string
+	httpValidation *http.Client
+	httpWorker     *http.Client
+	store          *store.Store
+	mqConn         *amqp.Connection
+	jobPublishers  []mq.Publisher
+	publishIdx     uint64
+	runtimeMu      sync.Mutex
+	runtimes       map[string]*pipelineRuntime // isolate pipeline runs on parallel
 }
 
 // job identifier
@@ -104,20 +106,27 @@ func NewService(ctx context.Context) (*Service, error) {
 
 	// create MQ publishers
 	cfg := mq.LoadConfig()
-	publisherConcurrency := loadPublisherConcurrency()
-	jobPublishers, err := createJobPublishers(cfg, publisherConcurrency)
+	mqConn, err := amqp.Dial(cfg.URL)
 	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("fail to connect RabbitMQ: %w", err)
+	}
+	publisherConcurrency := loadPublisherConcurrency()
+	jobPublishers, err := createJobPublishers(cfg, mqConn, publisherConcurrency)
+	if err != nil {
+		_ = mqConn.Close()
 		st.Close()
 		return nil, fmt.Errorf("fail to initialize job publishers: %w", err)
 	}
 
 	return &Service{
-		workerURL:       config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
-		validationURL:   config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
+		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		// Validation calls are typically short; worker readiness and future HTTP paths may be long.
 		httpValidation: observability.NewInstrumentedHTTPClient(executionClientName, "validation", 2*time.Minute),
 		httpWorker:     observability.NewInstrumentedHTTPClient(executionClientName, "worker", 10*time.Minute),
 		store:          st,
+		mqConn:         mqConn,
 		jobPublishers:  jobPublishers,
 		runtimes:       make(map[string]*pipelineRuntime),
 	}, nil
@@ -149,6 +158,9 @@ func (s *Service) Close() {
 		if publisher != nil {
 			_ = publisher.Close()
 		}
+	}
+	if s.mqConn != nil {
+		_ = s.mqConn.Close()
 	}
 	if s.store != nil {
 		s.store.Close()
@@ -432,5 +444,3 @@ func buildJobConfigs(pipeline *models.Pipeline) map[jobKey]jobConfig {
 
 	return jobConfigs
 }
-
-
