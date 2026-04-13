@@ -67,6 +67,7 @@ type stageState struct {
 	queued         map[string]bool
 	completed      map[string]bool
 	jobConfigs     map[string]jobConfig
+	startedAt      time.Time // wall clock when the stage row was created; used for metrics
 }
 
 type initializedRun struct {
@@ -77,11 +78,13 @@ type initializedRun struct {
 }
 
 type pipelineRuntime struct {
-	pipeline    string
-	runNo       int
-	stageOrder  []string
-	stageStates map[string]*stageState
-	runInfo     runInfo
+	pipeline        string
+	runNo           int
+	stageOrder      []string
+	stageStates     map[string]*stageState
+	runInfo         runInfo
+	pipelineStart   time.Time
+	jobStartTimes   map[jobKey]time.Time
 }
 
 // NewService constructs an execution Service with DB, MQ, and HTTP dependencies initialized.
@@ -279,6 +282,31 @@ func (s *Service) deleteRuntime(pipeline string, runNo int) {
 	delete(s.runtimes, runtimeKey(pipeline, runNo))
 }
 
+// noteJobStarted records when a job entered running state (worker callback); used for job duration metrics.
+func (s *Service) noteJobStarted(pipeline string, runNo int, stageName, jobName string) {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	rt := s.runtimes[runtimeKey(pipeline, runNo)]
+	if rt == nil || rt.jobStartTimes == nil {
+		return
+	}
+	rt.jobStartTimes[jobKey{stage: stageName, name: jobName}] = time.Now().UTC()
+}
+
+// popJobStartTime returns and removes the job running start time for duration metrics.
+func (s *Service) popJobStartTime(pipeline string, runNo int, stageName, jobName string) time.Time {
+	s.runtimeMu.Lock()
+	defer s.runtimeMu.Unlock()
+	rt := s.runtimes[runtimeKey(pipeline, runNo)]
+	if rt == nil || rt.jobStartTimes == nil {
+		return time.Time{}
+	}
+	key := jobKey{stage: stageName, name: jobName}
+	t := rt.jobStartTimes[key]
+	delete(rt.jobStartTimes, key)
+	return t
+}
+
 func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 	for idx, name := range rt.stageOrder {
 		if name == current && idx+1 < len(rt.stageOrder) {
@@ -292,7 +320,7 @@ func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (*initializedRun, error) {
 	pipeline := prepared.Pipeline
 	executionPlan := prepared.ExecutionPlan
-	runResult, err := s.startPipelineRun(ctx, pipeline.Name, runInfo, requestKey)
+	runResult, runStart, err := s.startPipelineRun(ctx, pipeline.Name, runInfo, requestKey)
 
 	if err != nil {
 		return nil, fmt.Errorf("create pipeline run record: %w", err)
@@ -313,7 +341,7 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 	// initial ready jobs are dispatched here; later releases happen on job-success events.
 	for _, stage := range executionPlan.Stages {
 		if err := s.startStage(ctx, pipeline.Name, runNo, stage.Name); err != nil {
-			_ = s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusFailed)
+			_ = s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusFailed, runStart)
 			return nil, fmt.Errorf("create stage record failed: %w", err)
 		}
 
@@ -321,7 +349,9 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 		stagePlan := planner.BuildStagePlan(stage.Name, pipeline)
 
 		// maintain current running stage state
-		stageStates[stage.Name] = newStageState(stagePlan)
+		st := newStageState(stagePlan)
+		st.startedAt = time.Now().UTC()
+		stageStates[stage.Name] = st
 		stageOrder = append(stageOrder, stage.Name)
 
 		for _, job := range stage.Jobs {
@@ -330,24 +360,26 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 			stageStates[stage.Name].jobConfigs[job.Name] = cfg
 			allowFailure := cfg.allowFailures
 			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, allowFailure); err != nil {
-				_ = s.finishStage(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed)
-				_ = s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusFailed)
+				_ = s.finishStageWithMetrics(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed, stageStates[stage.Name].startedAt)
+				_ = s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusFailed, runStart)
 				return nil, fmt.Errorf("create job record failed: %w", err)
 			}
 		}
 	}
 
 	runtime := &pipelineRuntime{
-		pipeline:    pipeline.Name,
-		runNo:       runNo,
-		stageOrder:  stageOrder,
-		stageStates: stageStates,
-		runInfo:     runInfo,
+		pipeline:       pipeline.Name,
+		runNo:          runNo,
+		stageOrder:     stageOrder,
+		stageStates:    stageStates,
+		runInfo:        runInfo,
+		pipelineStart:  runStart,
+		jobStartTimes:  make(map[jobKey]time.Time),
 	}
 
 	// no stages found
 	if len(executionPlan.Stages) == 0 {
-		if err := s.finishPipelineRun(ctx, pipeline.Name, runNo, store.StatusSuccess); err != nil {
+		if err := s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusSuccess, runStart); err != nil {
 			return nil, fmt.Errorf("finish empty pipeline run: %w", err)
 		}
 		return &initializedRun{

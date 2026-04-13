@@ -9,7 +9,8 @@ import (
 )
 
 // startPipelineRun inserts a new pipeline run in queued state and returns run_no.
-func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo runInfo, requestKey string) (store.CreateRunResult, error) {
+// The returned time matches the run start_time written to the store for new runs.
+func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo runInfo, requestKey string) (store.CreateRunResult, time.Time, error) {
 	now := time.Now().UTC()
 	in := store.CreateRunInput{
 		Pipeline:   pipeline,
@@ -23,7 +24,29 @@ func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo
 	if strings.TrimSpace(in.GitRepo) == "" {
 		in.GitRepo = runInfo.WorkspacePath
 	}
-	return s.store.CreateRunOrGetActive(ctx, in)
+	result, err := s.store.CreateRunOrGetActive(ctx, in)
+	if err != nil {
+		return store.CreateRunResult{}, time.Time{}, err
+	}
+	return result, now, nil
+}
+
+// finishPipelineRunWithMetrics updates the run in the store then records Prometheus pipeline metrics.
+func (s *Service) finishPipelineRunWithMetrics(ctx context.Context, pipeline string, runNo int, status string, pipelineStart time.Time) error {
+	if err := s.finishPipelineRun(ctx, pipeline, runNo, status); err != nil {
+		return err
+	}
+	recordPipelineOutcome(pipeline, runNo, status, pipelineStart)
+	return nil
+}
+
+// finishStageWithMetrics updates the stage in the store then records stage duration histograms.
+func (s *Service) finishStageWithMetrics(ctx context.Context, pipeline string, runNo int, stage string, status string, stageStart time.Time) error {
+	if err := s.finishStage(ctx, pipeline, runNo, stage, status); err != nil {
+		return err
+	}
+	recordStageDuration(pipeline, runNo, stage, stageStart)
+	return nil
 }
 
 // finishRun records terminal run status and end_time.

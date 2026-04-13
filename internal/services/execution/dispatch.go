@@ -90,7 +90,7 @@ func (s *Service) enqueueInitialReadyJobs(ctx context.Context, pipelineName stri
 		if len(readyJobs) == 0 {
 			// Empty stages can be completed immediately so dispatch can advance.
 			if len(stage.Jobs) == 0 {
-				if err := s.finishStage(ctx, pipelineName, runNo, stage.Name, store.StatusSuccess); err != nil {
+				if err := s.finishStageWithMetrics(ctx, pipelineName, runNo, stage.Name, store.StatusSuccess, state.startedAt); err != nil {
 					return fmt.Errorf("finish empty stage %q: %w", stage.Name, err)
 				}
 				continue
@@ -121,7 +121,7 @@ func (s *Service) dispatchInitialReadyJobs(ctx context.Context, prepared Prepare
 	pipeline := prepared.Pipeline
 	executionPlan := prepared.ExecutionPlan
 	if err := s.enqueueInitialReadyJobs(ctx, pipeline.Name, initialized.runNo, executionPlan.Stages, initialized.runtime.stageStates, initialized.runtime.runInfo); err != nil {
-		_ = s.finishPipelineRun(ctx, pipeline.Name, initialized.runNo, store.StatusFailed)
+		_ = s.finishPipelineRunWithMetrics(ctx, pipeline.Name, initialized.runNo, store.StatusFailed, initialized.runtime.pipelineStart)
 		s.deleteRuntime(pipeline.Name, initialized.runNo)
 		return err
 	}
