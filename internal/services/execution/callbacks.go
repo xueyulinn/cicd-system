@@ -14,7 +14,11 @@ func (s *Service) HandleJobStarted(ctx context.Context, req api.JobStatusCallbac
 	if strings.TrimSpace(req.Pipeline) == "" || strings.TrimSpace(req.Stage) == "" || strings.TrimSpace(req.Job) == "" || req.RunNo == 0 {
 		return fmt.Errorf("pipeline, run_no, stage, and job are required")
 	}
-	return s.markJobRunning(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job)
+	if err := s.markJobRunning(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job); err != nil {
+		return err
+	}
+	s.noteJobStarted(req.Pipeline, req.RunNo, req.Stage, req.Job)
+	return nil
 }
 
 // HandleJobFinished updates job/stage/pipeline status and dispatches newly-ready jobs.
@@ -34,6 +38,8 @@ func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallba
 	if err := s.finishJob(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job, status); err != nil {
 		return err
 	}
+	jobStart := s.popJobStartTime(req.Pipeline, req.RunNo, req.Stage, req.Job)
+	recordJobOutcome(req.Pipeline, req.RunNo, req.Stage, req.Job, status, jobStart)
 
 	rt := s.getPipelineRuntime(req.Pipeline, req.RunNo)
 	if rt == nil {
@@ -56,10 +62,10 @@ func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallba
 			}
 		} else {
 			stage.markJobTerminal(req.Job)
-			if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusFailed); err != nil {
+			if err := s.finishStageWithMetrics(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusFailed, stage.startedAt); err != nil {
 				return err
 			}
-			if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusFailed); err != nil {
+			if err := s.finishPipelineRunWithMetrics(ctx, req.Pipeline, req.RunNo, store.StatusFailed, rt.pipelineStart); err != nil {
 				return err
 			}
 			s.deleteRuntime(req.Pipeline, req.RunNo)
@@ -77,14 +83,14 @@ func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallba
 		return nil
 	}
 
-	if err := s.finishStage(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusSuccess); err != nil {
+	if err := s.finishStageWithMetrics(ctx, req.Pipeline, req.RunNo, req.Stage, store.StatusSuccess, stage.startedAt); err != nil {
 		return err
 	}
 
 	nextStageName, ok := rt.nextStageName(req.Stage)
 
 	if !ok {
-		if err := s.finishPipelineRun(ctx, req.Pipeline, req.RunNo, store.StatusSuccess); err != nil {
+		if err := s.finishPipelineRunWithMetrics(ctx, req.Pipeline, req.RunNo, store.StatusSuccess, rt.pipelineStart); err != nil {
 			return err
 		}
 		s.deleteRuntime(req.Pipeline, req.RunNo)
@@ -102,7 +108,7 @@ func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallba
 	}
 
 	if nextStage.isStageComplete() {
-		if err := s.finishStage(ctx, req.Pipeline, req.RunNo, nextStageName, store.StatusSuccess); err != nil {
+		if err := s.finishStageWithMetrics(ctx, req.Pipeline, req.RunNo, nextStageName, store.StatusSuccess, nextStage.startedAt); err != nil {
 			return err
 		}
 	}
