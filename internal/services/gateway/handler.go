@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -36,6 +37,23 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/run", h.handleRun)
 	mux.HandleFunc("/report", h.handleReport)
 	mux.HandleFunc("/ready", h.handleReady)
+}
+
+func decodeYAMLContentRequest(r *http.Request) (string, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	var req api.ValidateRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return "", fmt.Errorf("invalid JSON: %w", err)
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		return "", fmt.Errorf("missing yaml_content field")
+	}
+
+	return req.YAMLContent, nil
 }
 
 // handleHealth reports gateway liveness only.
@@ -77,23 +95,11 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
 	defer func() { _ = r.Body.Close() }()
 
-	var req map[string]string
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-
-	yamlContent, ok := req["yaml_content"]
-	if !ok {
-		api.WriteJSONError(w, http.StatusBadRequest, "missing yaml_content field")
+	yamlContent, err := decodeYAMLContentRequest(r)
+	if err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -121,23 +127,11 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
 	defer func() { _ = r.Body.Close() }()
 
-	var req map[string]string
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-
-	yamlContent, ok := req["yaml_content"]
-	if !ok {
-		api.WriteJSONError(w, http.StatusBadRequest, "missing yaml_content field")
+	yamlContent, err := decodeYAMLContentRequest(r)
+	if err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
