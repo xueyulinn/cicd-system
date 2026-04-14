@@ -8,14 +8,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Pipeline represents the entire CI/CD pipeline configuration (parallel structure)
+// Pipeline represents a parsed CI/CD pipeline definition.
 type Pipeline struct {
 	Name   string  `yaml:"name,omitempty"`
 	Stages []Stage `yaml:"stages"`
 	Jobs   []Job   `yaml:"jobs"`
 }
 
-// Stage represents a stage definition (name only)
+// Stage represents a declared pipeline stage.
 type Stage struct {
 	Name string `yaml:"name"`
 }
@@ -39,7 +39,7 @@ func (s *Stage) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
-// Job represents a job with stage reference
+// Job represents a pipeline job and its execution requirements.
 type Job struct {
 	Name     string   `json:"name" yaml:"name"`
 	Stage    string   `json:"stage" yaml:"stage"`
@@ -49,13 +49,13 @@ type Job struct {
 	Failures bool     `json:"failures" yaml:"failures"`
 }
 
-// Location represents a position in the YAML file
+// Location represents a position in a YAML document.
 type Location struct {
 	Line   int
 	Column int
 }
 
-// ValidationError represents an error with location information
+// ValidationError represents a validation error with file and location context.
 type ValidationError struct {
 	FilePath string
 	Location Location
