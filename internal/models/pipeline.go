@@ -1,3 +1,5 @@
+// Package models defines the domain types shared across the CLI, services,
+// and store layers: pipeline configuration, execution plans, and report DTOs.
 package models
 
 import (
@@ -6,14 +8,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Pipeline represents the entire CI/CD pipeline configuration (parallel structure)
+// Pipeline represents a parsed CI/CD pipeline definition.
 type Pipeline struct {
 	Name   string  `yaml:"name,omitempty"`
 	Stages []Stage `yaml:"stages"`
 	Jobs   []Job   `yaml:"jobs"`
 }
 
-// Stage represents a stage definition (name only)
+// Stage represents a declared pipeline stage.
 type Stage struct {
 	Name string `yaml:"name"`
 }
@@ -37,29 +39,30 @@ func (s *Stage) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
-// Job represents a job with stage reference
+// Job represents a pipeline job and its execution requirements.
 type Job struct {
-	Name     string   `yaml:"name"`
-	Stage    string   `yaml:"stage"` // Reference to stage name
-	Image    string   `yaml:"image,omitempty"`
-	Script   []string `yaml:"script,omitempty"`
-	Needs    []string `yaml:"needs,omitempty"`
+	Name     string   `json:"name" yaml:"name"`
+	Stage    string   `json:"stage" yaml:"stage"`
+	Image    string   `json:"image,omitempty" yaml:"image,omitempty"`
+	Script   []string `json:"script,omitempty" yaml:"script,omitempty"`
+	Needs    []string `json:"needs,omitempty" yaml:"needs,omitempty"`
 	Failures bool     `json:"failures" yaml:"failures"`
 }
 
-// Location represents a position in the YAML file
+// Location represents a position in a YAML document.
 type Location struct {
 	Line   int
 	Column int
 }
 
-// ValidationError represents an error with location information
+// ValidationError represents a validation error with file and location context.
 type ValidationError struct {
 	FilePath string
 	Location Location
 	Message  string
 }
 
+// Error formats the validation error with file path, line, column, and message.
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("%s:%d:%d: %s", e.FilePath, e.Location.Line, e.Location.Column, e.Message)
 }

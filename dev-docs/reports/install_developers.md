@@ -17,7 +17,7 @@ This document describes how developers can build, run, and test the project from
 
 ### Install Docker
 
-If Docker is not installed, follow the instructions in [non-dev-install.md](non-dev-install.md#step-1-install-docker), or run:
+If Docker is not installed, follow the instructions in [install_non-developers.md](install_non-developers.md#step-1-install-docker), or run:
 
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -100,21 +100,37 @@ Verify:
 
 ## Step 4: Start Backend Services
 
-Build and start all services from source:
+Start the local infrastructure first:
 
 ```bash
-docker compose up -d --build
+docker compose --env-file compose.values.env up -d postgres rabbitmq db-migrate
 ```
 
-This builds and starts:
+This starts:
 
 - PostgreSQL
+- RabbitMQ
+- Database migration service
+
+Then start the Go services from source:
+
+```bash
+./scripts/start-services.sh
+```
+
+This starts:
+
 - API Gateway
 - Validation Service
 - Execution Service
 - Worker Service
 - Reporting Service
-- Database migration service
+
+If you prefer to run everything in containers instead of host Go processes, use:
+
+```bash
+docker compose --env-file compose.values.env up -d --build
+```
 
 The first build may take several minutes as it downloads Go dependencies and compiles each service.
 
@@ -125,16 +141,18 @@ The first build may take several minutes as it downloads Go dependencies and com
 Check container status:
 
 ```bash
-docker compose ps
+docker compose --env-file compose.values.env ps
 ```
 
-All services should show `Up` status. Then check the gateway health:
+PostgreSQL and RabbitMQ should show `Up` status. Then check the service endpoints:
 
 ```bash
 curl http://localhost:8000/health
+curl http://localhost:8001/ready
+curl http://localhost:8004/ready
 ```
 
-You should see a response indicating all services are healthy.
+You should see successful responses from the gateway, validation service, and reporting service. If `reporting-service` cannot connect to Postgres on host port `5432`, move the local Postgres host port to a free port such as `55432` and update `DATABASE_URL` / `REPORT_DB_URL` accordingly.
 
 ---
 
@@ -158,7 +176,7 @@ Run a pipeline:
 ./bin/cicd run --file .pipelines/pipeline.yaml
 ```
 
-For example pipelines (success, failure, validation error, reports), see the [README](README.md).
+For example pipelines (success, failure, validation error, reports), see the [README](../../README.md).
 
 ---
 
@@ -173,19 +191,19 @@ go test -v ./internal/... ./cmd/...
 ## Stop the Services
 
 ```bash
-docker compose down
+docker compose --env-file compose.values.env down
 ```
 
 To remove all data (database volumes, etc.):
 
 ```bash
-docker compose down -v
+docker compose --env-file compose.values.env down -v
 ```
 
 To rebuild a single service after code changes:
 
 ```bash
-docker compose up -d --build <service-name>
+docker compose --env-file compose.values.env up -d --build <service-name>
 ```
 
 ---
@@ -197,5 +215,6 @@ docker compose up -d --build <service-name>
 | `permission denied` when running `docker`           | Log out and log back in, or run `newgrp docker`               |
 | `make: command not found`                           | Run: `sudo apt install -y make build-essential`               |
 | `go: command not found`                             | Make sure Go is installed and PATH is set: `source ~/.bashrc` |
-| Services exit immediately after `docker compose up` | Check logs: `docker compose logs <service-name>`              |
-| CLI cannot connect to backend                       | Ensure services are running: `docker compose ps`              |
+| Services exit immediately after startup             | Check logs: `docker compose --env-file compose.values.env logs <service-name>` |
+| CLI cannot connect to backend                       | Ensure infrastructure is running: `docker compose --env-file compose.values.env ps` |
+| Reporting service fails to connect to Postgres      | Check for a host port conflict on `5432`; if needed, remap Postgres to another host port such as `55432` and update `DATABASE_URL` / `REPORT_DB_URL` |

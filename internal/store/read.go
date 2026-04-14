@@ -8,13 +8,25 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ErrNotFound is returned when a queried entity does not exist.
 var ErrNotFound = errors.New("not found")
+
+// Shared column list for pipeline_runs queries (keeps SELECT and Scan in sync).
+const runColumns = `pipeline, run_no, start_time, end_time, status,
+	COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''),
+	COALESCE(trace_id,''), COALESCE(request_key,'')`
+
+func scanRun(sc interface{ Scan(dest ...any) error }) (Run, error) {
+	var r Run
+	err := sc.Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status,
+		&r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
+	return r, err
+}
 
 // GetRunsByPipeline returns all runs for a pipeline, ordered by run_no ascending.
 func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,''), COALESCE(request_key,'')
-		 FROM pipeline_runs WHERE pipeline = $1 ORDER BY run_no ASC`,
+		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = $1 ORDER BY run_no ASC`,
 		pipeline,
 	)
 	if err != nil {
@@ -24,8 +36,7 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 
 	var runs []Run
 	for rows.Next() {
-		var r Run
-		err := rows.Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
+		r, err := scanRun(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -36,12 +47,11 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 
 // GetRun returns a single pipeline run by pipeline name and run_no. Returns ErrNotFound if not found.
 func (s *Store) GetRun(ctx context.Context, pipeline string, runNo int) (*Run, error) {
-	var r Run
-	err := s.pool.QueryRow(ctx,
-		`SELECT pipeline, run_no, start_time, end_time, status, COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''), COALESCE(trace_id,''), COALESCE(request_key,'')
-		 FROM pipeline_runs WHERE pipeline = $1 AND run_no = $2`,
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = $1 AND run_no = $2`,
 		pipeline, runNo,
-	).Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status, &r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
+	)
+	r, err := scanRun(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -90,7 +100,7 @@ func (s *Store) GetStagesForRun(ctx context.Context, pipeline string, runNo int,
 // stageFilter and jobFilter can be empty to mean "all". Results ordered by stage, then job.
 func (s *Store) GetJobsForRun(ctx context.Context, pipeline string, runNo int, stageFilter, jobFilter string) ([]Job, error) {
 	query := `SELECT pipeline, run_no, stage, job, start_time, end_time, status, COALESCE(failures, false) FROM job_runs WHERE pipeline = $1 AND run_no = $2`
-	args := []interface{}{pipeline, runNo}
+	args := []any{pipeline, runNo}
 	pos := 3
 	if stageFilter != "" {
 		query += fmt.Sprintf(" AND stage = $%d", pos)

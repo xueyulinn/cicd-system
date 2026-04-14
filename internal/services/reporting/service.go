@@ -11,10 +11,12 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
 
+// Service provides report queries backed by the report store.
 type Service struct {
 	store *store.Store
 }
 
+// NewService creates a reporting service using DATABASE_URL or REPORT_DB_URL.
 func NewService(ctx context.Context) (*Service, error) {
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
@@ -32,49 +34,64 @@ func NewService(ctx context.Context) (*Service, error) {
 	return &Service{store: st}, nil
 }
 
+// Close releases the underlying store connection.
 func (s *Service) Close() {
 	if s.store != nil {
 		s.store.Close()
 	}
 }
 
-type ServiceError struct {
+type serviceError struct {
 	StatusCode int
 	Message    string
 }
 
-func (e *ServiceError) Error() string {
+func (e *serviceError) Error() string {
 	return e.Message
 }
 
-func (s *Service) Ping(ctx context.Context) error{
+func badRequest(message string) *serviceError {
+	return &serviceError{StatusCode: 400, Message: message}
+}
+
+func notFound(message string) *serviceError {
+	return &serviceError{StatusCode: 404, Message: message}
+}
+
+func internalError(format string, args ...any) *serviceError {
+	return &serviceError{StatusCode: 500, Message: fmt.Sprintf(format, args...)}
+}
+
+// Ping reports whether the report store is ready to serve requests.
+func (s *Service) Ping(ctx context.Context) error {
 	if s.store == nil {
 		return errors.New("store is not initialized")
 	}
-	return s.store.Ping(ctx)  
+	return s.store.Ping(ctx)
 }
 
-func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*models.ReportResponse, *ServiceError) {
+// GetReport returns a pipeline-, run-, stage-, or job-scoped report view.
+func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*models.ReportResponse, *serviceError) {
 	if strings.TrimSpace(query.Pipeline) == "" {
-		return nil, &ServiceError{StatusCode: 400, Message: "pipeline is required"}
+		return nil, badRequest("pipeline is required")
 	}
 	if query.Run != nil && *query.Run <= 0 {
-		return nil, &ServiceError{StatusCode: 400, Message: "run must be a positive integer"}
+		return nil, badRequest("run must be a positive integer")
 	}
 	if query.Stage != "" && query.Run == nil {
-		return nil, &ServiceError{StatusCode: 400, Message: "run is required when stage is provided"}
+		return nil, badRequest("run is required when stage is provided")
 	}
 	if query.Job != "" && (query.Run == nil || query.Stage == "") {
-		return nil, &ServiceError{StatusCode: 400, Message: "run and stage are required when job is provided"}
+		return nil, badRequest("run and stage are required when job is provided")
 	}
 
 	if query.Run == nil {
 		runs, err := s.store.GetRunsByPipeline(ctx, query.Pipeline)
 		if err != nil {
-			return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read runs: %v", err)}
+			return nil, internalError("failed to read runs: %v", err)
 		}
 		if len(runs) == 0 {
-			return nil, &ServiceError{StatusCode: 404, Message: fmt.Sprintf("pipeline %q not found", query.Pipeline)}
+			return nil, notFound(fmt.Sprintf("pipeline %q not found", query.Pipeline))
 		}
 
 		resp := &models.ReportResponse{
@@ -90,9 +107,9 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 	run, err := s.store.GetRun(ctx, query.Pipeline, runNo)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, &ServiceError{StatusCode: 404, Message: fmt.Sprintf("run %d for pipeline %q not found", runNo, query.Pipeline)}
+			return nil, notFound(fmt.Sprintf("run %d for pipeline %q not found", runNo, query.Pipeline))
 		}
-		return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read run: %v", err)}
+		return nil, internalError("failed to read run: %v", err)
 	}
 
 	resp := &models.ReportResponse{
@@ -109,7 +126,7 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 	if query.Stage == "" {
 		stages, err := s.store.GetStagesForRun(ctx, query.Pipeline, runNo, "")
 		if err != nil {
-			return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read stages: %v", err)}
+			return nil, internalError("failed to read stages: %v", err)
 		}
 		resp.Pipeline.Stages = mapStages(stages)
 		return resp, nil
@@ -117,10 +134,10 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 
 	stages, err := s.store.GetStagesForRun(ctx, query.Pipeline, runNo, query.Stage)
 	if err != nil {
-		return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read stage: %v", err)}
+		return nil, internalError("failed to read stage: %v", err)
 	}
 	if len(stages) == 0 {
-		return nil, &ServiceError{StatusCode: 404, Message: fmt.Sprintf("stage %q not found for pipeline %q run %d", query.Stage, query.Pipeline, runNo)}
+		return nil, notFound(fmt.Sprintf("stage %q not found for pipeline %q run %d", query.Stage, query.Pipeline, runNo))
 	}
 
 	stageReport := models.ReportStage{
@@ -133,7 +150,7 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 	if query.Job == "" {
 		jobs, err := s.store.GetJobsForRun(ctx, query.Pipeline, runNo, query.Stage, "")
 		if err != nil {
-			return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read jobs: %v", err)}
+			return nil, internalError("failed to read jobs: %v", err)
 		}
 		stageReport.Jobs = mapJobs(jobs)
 		resp.Pipeline.Stage = []models.ReportStage{stageReport}
@@ -142,10 +159,10 @@ func (s *Service) GetReport(ctx context.Context, query models.ReportQuery) (*mod
 
 	jobs, err := s.store.GetJobsForRun(ctx, query.Pipeline, runNo, query.Stage, query.Job)
 	if err != nil {
-		return nil, &ServiceError{StatusCode: 500, Message: fmt.Sprintf("failed to read job: %v", err)}
+		return nil, internalError("failed to read job: %v", err)
 	}
 	if len(jobs) == 0 {
-		return nil, &ServiceError{StatusCode: 404, Message: fmt.Sprintf("job %q not found in stage %q for pipeline %q run %d", query.Job, query.Stage, query.Pipeline, runNo)}
+		return nil, notFound(fmt.Sprintf("job %q not found in stage %q for pipeline %q run %d", query.Job, query.Stage, query.Pipeline, runNo))
 	}
 
 	stageReport.Job = mapJobs(jobs)

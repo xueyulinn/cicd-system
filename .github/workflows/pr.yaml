@@ -4,7 +4,6 @@ permissions:
   contents: read
   pull-requests: read
 
-
 on:
   pull_request:
     paths:
@@ -12,19 +11,20 @@ on:
       - "internal/**"
       - "go.mod"
       - "go.sum"
+      - "migrations/**"
       - "**/*.sh"
       - ".github/workflows/**"
 
 env:
   GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v2.6"
-  COVERAGE_THRESHOLD: "70.0"
 
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.filter.outputs.go }}
+      migrations: ${{ steps.filter.outputs.migrations }}
       workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - uses: actions/checkout@v6
@@ -41,6 +41,8 @@ jobs:
               - "go.mod"
               - "go.sum"
               - "**/*.sh"
+            migrations:
+              - "migrations/**"
             workflows:
               - ".github/workflows/**"
 
@@ -58,6 +60,12 @@ jobs:
         run: |
           mkdir -p dist
           go build -v -o dist/e-team-cli ./cmd/cicd
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: e-team-cli-pr-${{ github.event.number }}
+          path: dist/e-team-cli
+          retention-days: 3
 
   test:
     runs-on: ubuntu-latest
@@ -70,7 +78,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Test (cli)
-        run: go test -v ./...
+        run: go test -v -json ./... | tee test-results.json
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-pr-${{ github.event.number }}
+          path: test-results.json
+          retention-days: 3
       - name: Run test scripts
         shell: bash
         run: |
@@ -104,6 +119,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: golangci-lint-report
+          name: golangci-lint-report-pr-${{ github.event.number }}
           path: golangci-lint-report.json
           retention-days: 1
+
+  docker-migrations:
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.migrations == 'true' || needs.changes.outputs.workflows == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build migrations image (syntax + COPY sanity)
+        run: docker build -f migrations/Dockerfile -t e-team-db-migrate:ci .

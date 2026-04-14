@@ -1,3 +1,5 @@
+// Package store is the data-access layer for the report database.
+// Execution and reporting services call its methods instead of using the DB directly.
 package store
 
 import (
@@ -6,8 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Store is the only package that talks to the report database.
-// Execution and report services call its methods instead of using the DB directly.
+// Store provides transactional access to the report database via a pgx connection pool.
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -33,6 +34,7 @@ func (s *Store) Close() {
 	}
 }
 
-func (s * Store) Ping(ctx context.Context) error {
+// Ping verifies the database connection is alive.
+func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }

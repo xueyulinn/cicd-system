@@ -116,6 +116,17 @@ docker compose up -d
 
 This will download and start all backend services. The first run may take a few minutes.
 
+If your machine already uses PostgreSQL on host port `5432`, update the compose bundle before starting:
+
+```bash
+# edit docker-compose.yaml and change:
+#   "5432:5432"
+# to:
+#   "55432:5432"
+```
+
+Then point any manual `DATABASE_URL` overrides at `127.0.0.1:55432` instead of `127.0.0.1:5432`.
+
 ---
 
 ## Step 4: Verify the Installation
@@ -134,7 +145,7 @@ curl http://localhost:8000/health
 
 You should see a successful response.
 
-For more detailed verification steps, see [verification.md](verification.md).
+For more detailed verification steps, see [`../verification-steps.md`](../verification-steps.md).
 
 ---
 
@@ -160,7 +171,7 @@ cicd dryrun .pipelines/pipeline.yaml
 cicd run --file .pipelines/pipeline.yaml
 ```
 
-For example pipelines that demonstrate success, failure, and validation errors, see the [README](README.md).
+For example pipelines that demonstrate success, failure, and validation errors, see the [README](../../README.md).
 
 ---
 
@@ -185,6 +196,7 @@ docker compose down -v
 | ---------------------------------------------- | ------------------------------------------------------------------------ |
 | `permission denied` when running `docker`      | Log out and log back in, or run `newgrp docker`                          |
 | `connection refused` when running CLI commands | Make sure backend is running: `cd ~/compose-bundle && docker compose ps` |
+| Reporting service cannot connect to Postgres | If port `5432` is already in use on the host, change the compose Postgres mapping to another host port such as `55432` before starting the system |
 | Containers show `Exited` status                | Check logs: `docker compose logs <service-name>`                         |
 | `cicd: command not found`                      | Run: `sudo mv cicd-linux-amd64 /usr/local/bin/cicd`                      |
 

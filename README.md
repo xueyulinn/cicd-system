@@ -2,6 +2,15 @@
 
 A Go-based CLI tool for validating and managing CI/CD pipeline configurations. This tool parses YAML pipeline files, verifies their structure and dependencies, and can execute pipelines locally through a microservices architecture.
 
+## Documentation Map
+
+- [Feature status](FeatureStatus.md)
+- [System design](dev-docs/design/high-level-design.md)
+- [CLI reference](dev-docs/cli-reference.md)
+- [Report database schema](dev-docs/design/design-db-schema.md)
+- [Control component API reference](dev-docs/control-component-api.md)
+- [Evaluator verification steps](dev-docs/verification-steps.md)
+
 ## Overview
 
 The e-team project is a CI/CD pipeline management system that provides:
@@ -237,7 +246,7 @@ The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by de
    ./bin/cicd run --file .pipelines/pipeline.yaml --branch main --commit HEAD
    ```
 
-   The CLI sends the pipeline YAML to the Execution Service (`http://localhost:8002` by default; override with `EXECUTION_URL`).
+   The CLI sends requests to the API Gateway (`http://localhost:8000` by default; override with `GATEWAY_URL`), which forwards them to the appropriate downstream service.
 
 ## Usage: How to Run and Observe Pipelines
 
@@ -280,8 +289,8 @@ cicd run --name pipeline.yaml --branch main --commit HEAD
 
 ### Commands to Run After Installation
 
-> All commands below are assumed to be run from the repository root `e-team/`.  
-> Make sure the components are installed and verified as described in `dev-docs/evaluator-verification.md`.
+> All commands below are assumed to be run from the repository root `e-team/`.
+> Make sure the components are installed and verified as described in `dev-docs/verification-steps.md`.
 
 #### Pipelines That Succeed
 
@@ -344,7 +353,7 @@ cicd run --name pipeline.yaml --branch main --commit HEAD
 1. **Prepare data by running a pipeline**:
 
    ```bash
-   ./scripts/verify-report-db.sh       # ensure report DB and schema are ready
+   docker compose --env-file compose.values.env up -d postgres db-migrate
    ./scripts/start-services.sh         # start services (if not already running)
    cicd run --file .pipelines/pipeline.yaml
    ```

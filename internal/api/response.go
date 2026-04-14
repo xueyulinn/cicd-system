@@ -14,6 +14,9 @@ func WriteJSONError(w http.ResponseWriter, statusCode int, message string) {
 	WriteJSON(w, statusCode, map[string]string{"error": message})
 }
 
+// WriteJSON writes v as a JSON response with the provided HTTP status code.
+// It sets Content-Type to application/json and falls back to http.Error if
+// the payload cannot be encoded.
 func WriteJSON(w http.ResponseWriter, statusCode int, v any) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(v); err != nil {
