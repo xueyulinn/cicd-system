@@ -31,7 +31,8 @@ func (s *Service) buildJobExecutionMessage(runNo int, pipeline, stage string, jo
 
 // enqueueJob publishes a single job execution message to MQ.
 func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessage) error {
-	if s.jobPublisher == nil {
+	publisher := s.nextPublisher()
+	if publisher == nil {
 		return fmt.Errorf("job publisher is not initialized")
 	}
 
@@ -48,7 +49,7 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 	publishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	if err := s.jobPublisher.PublishJob(publishCtx, msg); err != nil {
+	if err := publisher.PublishJob(publishCtx, msg); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err

@@ -10,12 +10,13 @@ import (
 	"sync"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const defaultWorkerConcurrent = 1
 
-var newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
-	mqClient, err := mq.NewRabbitClient(cfg)
+var newJobConsumer = func(cfg mq.Config, conn *amqp.Connection) (mq.Consumer, error) {
+	mqClient, err := mq.NewRabbitClientWithConn(cfg, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +76,14 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 }
 
-func createJobConsumers(cfg mq.Config, count int) ([]mq.Consumer, error) {
+func createJobConsumers(cfg mq.Config, conn *amqp.Connection, count int) ([]mq.Consumer, error) {
 	if count < 1 {
 		return nil, fmt.Errorf("worker concurrency must be >= 1")
 	}
 
 	consumers := make([]mq.Consumer, 0, count)
 	for i := 0; i < count; i++ {
-		consumer, err := newJobConsumer(cfg)
+		consumer, err := newJobConsumer(cfg, conn)
 		if err != nil {
 			for _, c := range consumers {
 				_ = c.Close()
