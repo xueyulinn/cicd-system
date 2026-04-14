@@ -11,9 +11,18 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 )
 
+type reportStore interface {
+	Close()
+	Ping(ctx context.Context) error
+	GetRunsByPipeline(ctx context.Context, pipeline string) ([]store.Run, error)
+	GetRun(ctx context.Context, pipeline string, runNo int) (*store.Run, error)
+	GetStagesForRun(ctx context.Context, pipeline string, runNo int, stageFilter string) ([]store.Stage, error)
+	GetJobsForRun(ctx context.Context, pipeline string, runNo int, stageFilter, jobFilter string) ([]store.Job, error)
+}
+
 // Service provides report queries backed by the report store.
 type Service struct {
-	store *store.Store
+	store reportStore
 }
 
 // NewService creates a reporting service using DATABASE_URL or REPORT_DB_URL.
