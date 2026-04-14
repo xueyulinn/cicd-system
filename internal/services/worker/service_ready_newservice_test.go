@@ -24,7 +24,7 @@ func newPingDockerClient(t *testing.T) (*client.Client, func()) {
 
 	cli, err := client.New(
 		client.WithHost(srv.URL),
-		client.WithVersion("1.53"),
+		client.WithAPIVersion("1.53"),
 		client.WithHTTPClient(srv.Client()),
 	)
 	if err != nil {
