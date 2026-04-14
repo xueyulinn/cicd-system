@@ -13,6 +13,7 @@ import (
 	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
 	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 	"github.com/moby/moby/client"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -29,6 +30,7 @@ type Service struct {
 	docker       *client.Client
 	jobTimeout   time.Duration
 	jobConsumers []mq.Consumer
+	mqConn       *amqp.Connection
 	executionURL string
 	httpClient   *http.Client
 	mqConfig     mq.Config
@@ -46,9 +48,15 @@ func NewService(ctx context.Context, jobTimeout time.Duration) (*Service, error)
 	}
 
 	cfg := mq.LoadConfig()
-	concurrency := loadWorkerConcurrency()
-	jobConsumers, err := createJobConsumers(cfg, concurrency)
+	mqConn, err := amqp.Dial(cfg.URL)
 	if err != nil {
+		_ = docker.Close()
+		return nil, fmt.Errorf("connect rabbitmq: %w", err)
+	}
+	concurrency := loadWorkerConcurrency()
+	jobConsumers, err := createJobConsumers(cfg, mqConn, concurrency)
+	if err != nil {
+		_ = mqConn.Close()
 		_ = docker.Close()
 		return nil, err
 	}
@@ -57,6 +65,7 @@ func NewService(ctx context.Context, jobTimeout time.Duration) (*Service, error)
 		docker:       docker,
 		jobTimeout:   jobTimeout,
 		jobConsumers: jobConsumers,
+		mqConn:       mqConn,
 		executionURL: config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
 		mqConfig:     cfg,
 		httpClient: &http.Client{
@@ -75,6 +84,9 @@ func (s *Service) Close() error {
 			_ = consumer.Close()
 		}
 	}
+	if s.mqConn != nil {
+		_ = s.mqConn.Close()
+	}
 	if s.docker != nil {
 		_ = s.docker.Close()
 	}
@@ -90,11 +102,9 @@ func (s *Service) Ready(ctx context.Context) error {
 		return fmt.Errorf("docker not ready: %w", err)
 	}
 
-	rabbitClient, err := mq.NewRabbitClient(s.mqConfig)
-	if err != nil {
+	if err := mq.PingMQ(ctx, s.mqConfig); err != nil {
 		return fmt.Errorf("rabbitmq not ready: %w", err)
 	}
-	defer func() { _ = rabbitClient.Close() }()
 
 	return nil
 }

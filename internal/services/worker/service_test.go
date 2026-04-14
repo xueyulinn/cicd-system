@@ -8,6 +8,7 @@ import (
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type fakeConsumer struct {
@@ -55,12 +56,12 @@ func TestCreateJobConsumers_CreatesRequestedCount(t *testing.T) {
 	defer func() { newJobConsumer = originalFactory }()
 
 	created := 0
-	newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
+	newJobConsumer = func(cfg mq.Config, _ *amqp.Connection) (mq.Consumer, error) {
 		created++
 		return &fakeConsumer{}, nil
 	}
 
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 2)
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
 	if err != nil {
 		t.Fatalf("createJobConsumers returned error: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
 
 	first := &fakeConsumer{}
 	call := 0
-	newJobConsumer = func(cfg mq.Config) (mq.Consumer, error) {
+	newJobConsumer = func(cfg mq.Config, _ *amqp.Connection) (mq.Consumer, error) {
 		call++
 		if call == 1 {
 			return first, nil
@@ -86,7 +87,7 @@ func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 2)
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
 	if err == nil {
 		t.Fatal("createJobConsumers error = nil, want non-nil")
 	}
@@ -99,7 +100,7 @@ func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
 }
 
 func TestCreateJobConsumers_InvalidCount(t *testing.T) {
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, 0)
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 0)
 	if err == nil {
 		t.Fatal("createJobConsumers error = nil, want non-nil")
 	}

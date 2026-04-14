@@ -8,12 +8,13 @@ import (
 	"strings"
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const defaultPublisherConcurrent = 1
 
-var newJobPublisher = func(cfg mq.Config) (mq.Publisher, error) {
-	mqClient, err := mq.NewRabbitClient(cfg)
+var newJobPublisher = func(cfg mq.Config, conn *amqp.Connection) (mq.Publisher, error) {
+	mqClient, err := mq.NewRabbitClientWithConn(cfg, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -26,14 +27,14 @@ var newJobPublisher = func(cfg mq.Config) (mq.Publisher, error) {
 	return jobPublisher, nil
 }
 
-func createJobPublishers(cfg mq.Config, count int) ([]mq.Publisher, error) {
+func createJobPublishers(cfg mq.Config, conn *amqp.Connection, count int) ([]mq.Publisher, error) {
 	if count < 1 {
 		return nil, fmt.Errorf("publisher concurrency must be >= 1")
 	}
 
 	publishers := make([]mq.Publisher, 0, count)
 	for i := 0; i < count; i++ {
-		publisher, err := newJobPublisher(cfg)
+		publisher, err := newJobPublisher(cfg, conn)
 		if err != nil {
 			for _, c := range publishers {
 				_ = c.Close()
@@ -44,7 +45,6 @@ func createJobPublishers(cfg mq.Config, count int) ([]mq.Publisher, error) {
 	}
 	return publishers, nil
 }
-
 
 func loadPublisherConcurrency() int {
 	raw := strings.TrimSpace(os.Getenv("PUBLISHER_CONCURRENCY"))
