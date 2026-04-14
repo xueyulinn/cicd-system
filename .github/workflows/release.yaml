@@ -3,14 +3,16 @@ name: Release
 on:
   push:
     tags:
-      - "*.*.*"   
+      - "*.*.*"
       - "*.*.*-*"
+
+permissions:
+  contents: write
+  packages: write
 
 env:
   GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v2.6"
-  COVERAGE_THRESHOLD: "70.0"
-  IMAGE_NAME: e-team/cicd
 
 jobs:
   validate_tag:
@@ -21,7 +23,7 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           echo "Tag: $tag"
           if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-+            echo "Invalid tag: '$tag'. Expected semantic tag like '1.2.3' or '1.2.3-beta'."
+            echo "Invalid tag: '$tag'. Expected semantic tag like '1.2.3' or '1.2.3-beta'."
             exit 1
           fi
           echo "Tag format looks good."
@@ -40,6 +42,11 @@ jobs:
         run: |
           mkdir -p dist
           go build -v -o dist/e-team-cli ./cmd/cicd
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: e-team-cli-${{ github.ref_name }}
+          path: dist/e-team-cli
 
   test:
     runs-on: ubuntu-latest
@@ -52,7 +59,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Test
-        run: go test -v ./...
+        run: go test -v -json ./... | tee test-results.json
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-${{ github.ref_name }}
+          path: test-results.json
       - name: Run test scripts
         shell: bash
         run: |
@@ -89,43 +102,110 @@ jobs:
           name: golangci-lint-report-${{ github.ref_name }}
           path: golangci-lint-report.json
 
-#   docker:
-#     runs-on: ubuntu-latest
-#     needs: [build_test, lint]
-#     permissions:
-#       contents: read
-#     steps:
-#       - uses: actions/checkout@v4
+  docs:
+    runs-on: ubuntu-latest
+    needs: [validate_tag]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install gomarkdoc
+        run: go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
+      - name: Generate Go documentation
+        run: |
+          mkdir -p docs/generated
+          gomarkdoc ./... > docs/generated/API.md
+      - name: Upload documentation
+        uses: actions/upload-artifact@v6
+        with:
+          name: code-documentation-${{ github.ref_name }}
+          path: docs/generated/
 
-#       - name: Validate Docker image name configured
-#         run: |
-#           if [[ "${{ env.IMAGE_NAME }}" == "yourdockerhubuser/gocli" ]]; then
-#             echo "Please set env.IMAGE_NAME to <dockerhub_user_or_org>/<repo>."
-#             exit 1
-#           fi
+  docker:
+    runs-on: ubuntu-latest
+    needs: [build, test, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api-gateway
+            dockerfile: cmd/api-gateway/Dockerfile
+          - image: validation-service
+            dockerfile: cmd/validation-service/Dockerfile
+          - image: execution-service
+            dockerfile: cmd/execution-service/Dockerfile
+          - image: worker-service
+            dockerfile: cmd/worker-service/Dockerfile
+          - image: reporting-service
+            dockerfile: cmd/reporting-service/Dockerfile
+          - image: db-migrate
+            dockerfile: migrations/Dockerfile
+    steps:
+      - uses: actions/checkout@v6
 
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
+      - name: Compute GHCR image base
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          repo=$(echo "$GITHUB_REPOSITORY" | cut -d/ -f2 | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_BASE=ghcr.io/${owner}/${repo}" >> "$GITHUB_ENV"
 
-#       - name: Login to Docker Hub
-#         uses: docker/login-action@v3
-#         with:
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-#       - name: Docker metadata (tags/labels)
-#         id: meta
-#         uses: docker/metadata-action@v5
-#         with:
-#           images: ${{ env.IMAGE_NAME }}
-#           tags: |
-#             type=raw,value=${{ github.ref_name }}
-#             type=raw,value=latest
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Build and push image
-#         uses: docker/build-push-action@v6
-#         with:
-#           context: .
-#           push: true
-#           tags: ${{ steps.meta.outputs.tags }}
-#           labels: ${{ steps.meta.outputs.labels }}
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=short
+            type=sha,prefix=sha-,format=long
+            type=ref,event=tag
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build, test, lint, docs, docker]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download binary
+        uses: actions/download-artifact@v6
+        with:
+          name: e-team-cli-${{ github.ref_name }}
+          path: dist/
+      - name: Download documentation
+        uses: actions/download-artifact@v6
+        with:
+          name: code-documentation-${{ github.ref_name }}
+          path: docs/generated/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/e-team-cli
+            docs/generated/API.md

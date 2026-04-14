@@ -1,16 +1,17 @@
-name: PR to Main
+name: Merge to Main
 
 permissions:
   contents: read
-  pull-requests: read
+  packages: write
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     paths:
       - "cmd/**"
       - "internal/**"
+      - "migrations/**"
       - "go.mod"
       - "go.sum"
       - "**/*.sh"
@@ -19,36 +20,10 @@ on:
 env:
   GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v2.6"
-  COVERAGE_THRESHOLD: "70.0"
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      go: ${{ steps.filter.outputs.go }}
-      workflows: ${{ steps.filter.outputs.workflows }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Detect changed areas
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            go:
-              - "cmd/**"
-              - "internal/**"
-              - "go.mod"
-              - "go.sum"
-              - "**/*.sh"
-            workflows:
-              - ".github/workflows/**"
-
   build:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -58,18 +33,15 @@ jobs:
       - name: Build
         run: |
           mkdir -p dist
-          go build -o dist/e-team-cli ./cmd/cicd
-
+          go build -v -o dist/e-team-cli ./cmd/cicd
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6
         with:
-          name: e-team-cli
+          name: e-team-cli-${{ github.sha }}
           path: dist/e-team-cli
 
   test:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -77,7 +49,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Test
-        run: go test -v ./...
+        run: go test -v -json ./... | tee test-results.json
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-${{ github.sha }}
+          path: test-results.json
       - name: Run test scripts
         shell: bash
         run: |
@@ -94,8 +72,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -111,5 +87,88 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: golangci-lint-report
+          name: golangci-lint-report-${{ github.sha }}
           path: golangci-lint-report.json
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install gomarkdoc
+        run: go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
+      - name: Generate Go documentation
+        run: |
+          mkdir -p docs/generated
+          gomarkdoc ./... > docs/generated/API.md
+      - name: Upload documentation
+        uses: actions/upload-artifact@v6
+        with:
+          name: code-documentation-${{ github.sha }}
+          path: docs/generated/
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [build, test, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api-gateway
+            dockerfile: cmd/api-gateway/Dockerfile
+          - image: validation-service
+            dockerfile: cmd/validation-service/Dockerfile
+          - image: execution-service
+            dockerfile: cmd/execution-service/Dockerfile
+          - image: worker-service
+            dockerfile: cmd/worker-service/Dockerfile
+          - image: reporting-service
+            dockerfile: cmd/reporting-service/Dockerfile
+          - image: db-migrate
+            dockerfile: migrations/Dockerfile
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute GHCR image base
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          repo=$(echo "$GITHUB_REPOSITORY" | cut -d/ -f2 | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_BASE=ghcr.io/${owner}/${repo}" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=short
+            type=sha,prefix=sha-,format=long
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

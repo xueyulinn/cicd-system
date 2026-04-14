@@ -261,23 +261,21 @@ func (v *PipelineVerifier) checkYAMLTypes() []error {
 	}
 
 	// Check pipeline name
-	if pipelineNode.Kind == yaml.MappingNode {
-		foundName := false
-		for i := 0; i < len(pipelineNode.Content); i += 2 {
-			if pipelineNode.Content[i].Value == "name" {
-				foundName = true
-				pipelineNameNode := pipelineNode.Content[i+1]
-				if pipelineNameNode.Kind != yaml.ScalarNode || pipelineNameNode.Tag != "!!str" {
-					errors = append(errors, v.formatError(models.Location{Line: pipelineNameNode.Line, Column: pipelineNameNode.Column},
-						"wrong type for `pipeline.name`. Expected string, got "+pipelineNameNode.Tag))
-				}
-				break
+	foundName := false
+	for i := 0; i < len(pipelineNode.Content); i += 2 {
+		if pipelineNode.Content[i].Value == "name" {
+			foundName = true
+			pipelineNameNode := pipelineNode.Content[i+1]
+			if pipelineNameNode.Kind != yaml.ScalarNode || pipelineNameNode.Tag != "!!str" {
+				errors = append(errors, v.formatError(models.Location{Line: pipelineNameNode.Line, Column: pipelineNameNode.Column},
+					"wrong type for `pipeline.name`. Expected string, got "+pipelineNameNode.Tag))
 			}
+			break
 		}
-		if !foundName {
-			errors = append(errors, v.formatError(models.Location{Line: pipelineNode.Line, Column: pipelineNode.Column},
-				"pipeline must have a `name` field"))
-		}
+	}
+	if !foundName {
+		errors = append(errors, v.formatError(models.Location{Line: pipelineNode.Line, Column: pipelineNode.Column},
+			"pipeline must have a `name` field"))
 	}
 
 	// Check stages section
@@ -329,125 +327,96 @@ func (v *PipelineVerifier) hasCriticalErrors(errors []error) bool {
 	return false
 }
 
-// validateJobs validates the structure and content of job nodes
+// validateJobs validates the structure and content of job nodes.
 func (v *PipelineVerifier) validateJobs(jobNodes []parser.JobNode) []error {
 	var errors []error
-
 	for _, jobNode := range jobNodes {
-		// Check that job name is a string
-		if jobNode.Key.Kind != yaml.ScalarNode || jobNode.Key.Tag != "!!str" {
-			loc := models.Location{
-				Line:   jobNode.Key.Line,
-				Column: jobNode.Key.Column,
-			}
-			errors = append(errors, v.formatError(loc,
-				fmt.Sprintf("wrong type for job name. Expected string, got %s", jobNode.Key.Tag)))
-			continue
+		errors = append(errors, v.validateSingleJob(jobNode)...)
+	}
+	return errors
+}
+
+func (v *PipelineVerifier) validateSingleJob(jobNode parser.JobNode) []error {
+	if jobNode.Key.Kind != yaml.ScalarNode || jobNode.Key.Tag != "!!str" {
+		loc := models.Location{Line: jobNode.Key.Line, Column: jobNode.Key.Column}
+		return []error{v.formatError(loc,
+			fmt.Sprintf("wrong type for job name. Expected string, got %s", jobNode.Key.Tag))}
+	}
+	if jobNode.Value.Kind != yaml.SequenceNode {
+		loc := models.Location{Line: jobNode.Key.Line, Column: jobNode.Key.Column}
+		return []error{v.formatError(loc,
+			fmt.Sprintf("job '%s' must be a sequence", jobNode.Name))}
+	}
+
+	var errors []error
+	for stepIdx, step := range jobNode.Value.Content {
+		errors = append(errors, v.validateJobStep(jobNode.Name, stepIdx, step)...)
+	}
+	return errors
+}
+
+func (v *PipelineVerifier) validateJobStep(jobName string, stepIdx int, step *yaml.Node) []error {
+	if step.Kind != yaml.MappingNode {
+		loc := models.Location{Line: step.Line, Column: step.Column}
+		return []error{v.formatError(loc,
+			fmt.Sprintf("step %d in job '%s' must be a mapping", stepIdx+1, jobName))}
+	}
+	if len(step.Content) != 2 {
+		loc := models.Location{Line: step.Line, Column: step.Column}
+		return []error{v.formatError(loc,
+			fmt.Sprintf("step %d in job '%s' must have exactly one field", stepIdx+1, jobName))}
+	}
+
+	fieldKey := step.Content[0]
+	fieldValue := step.Content[1]
+	return v.validateFieldType(jobName, fieldKey, fieldValue)
+}
+
+func (v *PipelineVerifier) validateFieldType(jobName string, fieldKey, fieldValue *yaml.Node) []error {
+	loc := models.Location{Line: fieldValue.Line, Column: fieldValue.Column}
+
+	switch fieldKey.Value {
+	case "stage", "image":
+		if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!str" {
+			return []error{v.formatError(loc,
+				fmt.Sprintf("wrong type for `%s` in job '%s'. Expected string, got %s", fieldKey.Value, jobName, fieldValue.Tag))}
 		}
-
-		// Check that job value is a sequence
-		if jobNode.Value.Kind != yaml.SequenceNode {
-			loc := models.Location{
-				Line:   jobNode.Key.Line,
-				Column: jobNode.Key.Column,
-			}
-			errors = append(errors, v.formatError(loc,
-				fmt.Sprintf("job '%s' must be a sequence", jobNode.Name)))
-			continue
+	case "script":
+		return v.validateScriptField(jobName, fieldValue)
+	case "needs":
+		if fieldValue.Kind != yaml.SequenceNode {
+			return []error{v.formatError(loc,
+				fmt.Sprintf("wrong type for `%s` in job '%s'. Expected sequence, got %s", fieldKey.Value, jobName, fieldValue.Tag))}
 		}
+	case "failures":
+		if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!bool" {
+			return []error{v.formatError(loc,
+				fmt.Sprintf("wrong type for `%s` in job '%s'. Expected boolean, got %s", fieldKey.Value, jobName, fieldValue.Tag))}
+		}
+	}
+	return nil
+}
 
-		// Validate each step in the job
-		for stepIdx, step := range jobNode.Value.Content {
-			if step.Kind != yaml.MappingNode {
-				loc := models.Location{
-					Line:   step.Line,
-					Column: step.Column,
-				}
-				errors = append(errors, v.formatError(loc,
-					fmt.Sprintf("step %d in job '%s' must be a mapping", stepIdx+1, jobNode.Name)))
-				continue
-			}
+func (v *PipelineVerifier) validateScriptField(jobName string, fieldValue *yaml.Node) []error {
+	loc := models.Location{Line: fieldValue.Line, Column: fieldValue.Column}
 
-			// Check that each step has exactly 2 key-value pairs
-			if len(step.Content) != 2 {
-				loc := models.Location{
-					Line:   step.Line,
-					Column: step.Column,
-				}
-				errors = append(errors, v.formatError(loc,
-					fmt.Sprintf("step %d in job '%s' must have exactly one field", stepIdx+1, jobNode.Name)))
-				continue
-			}
-
-			// Validate field types
-			fieldKey := step.Content[0]
-			fieldValue := step.Content[1]
-
-			switch fieldKey.Value {
-			case "stage", "image":
-				// These should be strings
-				if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!str" {
-					loc := models.Location{
-						Line:   fieldValue.Line,
-						Column: fieldValue.Column,
-					}
-					errors = append(errors, v.formatError(loc,
-						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected string, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
-				}
-			case "script":
-				// This should be a string OR sequence
-				if fieldValue.Kind != yaml.ScalarNode && fieldValue.Kind != yaml.SequenceNode {
-					loc := models.Location{
-						Line:   fieldValue.Line,
-						Column: fieldValue.Column,
-					}
-					errors = append(errors, v.formatError(loc,
-						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected string or sequence, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
-				}
-				// If it's a scalar, ensure it's a string
-				if fieldValue.Kind == yaml.ScalarNode && fieldValue.Tag != "!!str" {
-					loc := models.Location{
-						Line:   fieldValue.Line,
-						Column: fieldValue.Column,
-					}
-					errors = append(errors, v.formatError(loc,
-						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected string, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
-				}
-				// If it's a sequence, ensure all items are strings
-				if fieldValue.Kind == yaml.SequenceNode {
-					for i, item := range fieldValue.Content {
-						if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
-							loc := models.Location{
-								Line:   item.Line,
-								Column: item.Column,
-							}
-							errors = append(errors, v.formatError(loc,
-								fmt.Sprintf("wrong type for item %d in `%s` in job '%s'. Expected string, got %s", i+1, fieldKey.Value, jobNode.Name, item.Tag)))
-						}
-					}
-				}
-			case "needs":
-				// This should be a sequence only
-				if fieldValue.Kind != yaml.SequenceNode {
-					loc := models.Location{
-						Line:   fieldValue.Line,
-						Column: fieldValue.Column,
-					}
-					errors = append(errors, v.formatError(loc,
-						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected sequence, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
-				}
-			case "failures":
-				if fieldValue.Kind != yaml.ScalarNode || fieldValue.Tag != "!!bool" {
-					loc := models.Location{
-						Line:   fieldValue.Line,
-						Column: fieldValue.Column,
-					}
-					errors = append(errors, v.formatError(loc,
-						fmt.Sprintf("wrong type for `%s` in job '%s'. Expected boolean, got %s", fieldKey.Value, jobNode.Name, fieldValue.Tag)))
-				}
+	if fieldValue.Kind != yaml.ScalarNode && fieldValue.Kind != yaml.SequenceNode {
+		return []error{v.formatError(loc,
+			fmt.Sprintf("wrong type for `script` in job '%s'. Expected string or sequence, got %s", jobName, fieldValue.Tag))}
+	}
+	if fieldValue.Kind == yaml.ScalarNode && fieldValue.Tag != "!!str" {
+		return []error{v.formatError(loc,
+			fmt.Sprintf("wrong type for `script` in job '%s'. Expected string, got %s", jobName, fieldValue.Tag))}
+	}
+	var errors []error
+	if fieldValue.Kind == yaml.SequenceNode {
+		for i, item := range fieldValue.Content {
+			if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+				errors = append(errors, v.formatError(
+					models.Location{Line: item.Line, Column: item.Column},
+					fmt.Sprintf("wrong type for item %d in `script` in job '%s'. Expected string, got %s", i+1, jobName, item.Tag)))
 			}
 		}
 	}
-
 	return errors
 }
