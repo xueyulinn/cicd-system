@@ -140,6 +140,28 @@ The system adopts a **service-oriented architecture** where:
 - **PostgreSQL database** (port 5432) persists pipeline runs, stages, jobs, and execution logs
 - **Docker Engine** handles container lifecycle and image management
 
+## Deployment Topology
+
+The system supports the following deployment topologies:
+
+| Component | Local host process | Docker Compose | Kubernetes / Helm |
+|-----------|--------------------|----------------|-------------------|
+| CLI (`cicd`) | Yes | No | Optional client outside cluster |
+| API Gateway | Yes | Yes | Yes |
+| Validation Service | Yes | Yes | Yes |
+| Execution Service | Yes | Yes | Yes |
+| Worker Service | Yes | Yes | Yes |
+| Reporting Service | Yes | Yes | Yes |
+| PostgreSQL report store | External/local DB | Yes | Yes |
+| RabbitMQ | External/local broker | Yes | Yes |
+| Docker Engine for job execution | Yes | Host runtime for worker | Node runtime for worker |
+
+Notes:
+
+- In local development, the services can be started as host processes while PostgreSQL and RabbitMQ run in Docker Compose.
+- In Compose mode, all services can run as containers on one machine.
+- In Kubernetes mode, the stateless services run as Deployments, PostgreSQL can run in-cluster or externally, and RabbitMQ runs in-cluster.
+
 ## Pros and Cons
 
 ### Pros

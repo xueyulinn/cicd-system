@@ -55,22 +55,32 @@ If any service fails to start, the script prints an error and exits with a non-z
 From the repository root:
 
 ```bash
-./scripts/verify-report-db.sh
+docker compose --env-file compose.values.env up -d postgres db-migrate
 ```
 
-This script:
+This setup path:
 
-- Starts Postgres via `docker compose` (if not already running)
-- Applies the schema from `migrations/001_report_store_schema.sql`
-- Verifies that the tables `pipeline_runs`, `stage_runs`, and `job_runs` exist and are queryable
+- starts PostgreSQL and the migration container with the same values used by the Helm chart
+- applies all report database migrations
+
+Then verify connectivity:
+
+```bash
+docker compose --env-file compose.values.env exec -T postgres pg_isready -U cicd -d reportstore
+docker compose --env-file compose.values.env exec -T postgres psql -U cicd -d reportstore -c '\dt'
+```
+
+You should see the report tables `pipeline_runs`, `stage_runs`, and `job_runs`.
+
+If the host machine already uses port `5432`, update the local Compose host port mapping before running the services and point `DATABASE_URL` / `REPORT_DB_URL` at the chosen host port.
 
 You should see:
 
 ```text
-=== Report DB setup verified successfully ===
+/var/run/postgresql:5432 - accepting connections
 ```
 
-and the script should exit with status code `0`.  
+and the `\dt` output should list the report tables.  
 This confirms that the **report database and migrations are correctly configured**.
 
 ### 6.4 End‑to‑End Sanity Check: Run a Successful Pipeline
