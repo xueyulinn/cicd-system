@@ -36,3 +36,5 @@ const (
 	DefaultWorkerURL     = "http://localhost:8003"
 	DefaultReportingURL  = "http://localhost:8004"
 )
+
+const DefaultPipelineConfigPath = ".pipelines/pipeline.yaml"

@@ -10,6 +10,7 @@ import (
 
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
 	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
+	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,7 @@ var verifyCmd = &cobra.Command{
 
 func runVerify(cmd *cobra.Command, args []string) error {
 	// get config path
-	configPath := ".pipelines/pipeline.yaml"
+	configPath := config.DefaultPipelineConfigPath
 	if len(args) > 0 {
 		configPath = args[0]
 	}
