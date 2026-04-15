@@ -7,27 +7,6 @@ import (
 	"testing"
 )
 
-func TestRunDirect_SuccessAndParseError(t *testing.T) {
-	err := runDirect("pipeline.yaml", `pipeline:
-  name: "p"
-stages:
-  - build
-compile:
-  - stage: build
-  - image: alpine
-  - script:
-    - echo ok
-`, "main", "abc", "/tmp/ws")
-	if err != nil {
-		t.Fatalf("runDirect success err=%v", err)
-	}
-
-	err = runDirect("pipeline.yaml", "{", "main", "abc", "/tmp/ws")
-	if err == nil {
-		t.Fatal("expected parse error")
-	}
-}
-
 func TestGetWorkspacePath_SuccessAndFailure(t *testing.T) {
 	repoDir, cleanup := initTempGitRepo(t)
 	defer cleanup()

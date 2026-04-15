@@ -74,11 +74,6 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read run file at commit %q: %w", runCommit, err)
 	}
 
-	if testMode {
-		fmt.Printf("Run context: branch=%q commit=%q workspace=%q\n", runBranch, runCommit, workspacePath)
-		return runDirect(runFile, string(fileContent), runBranch, runCommit, workspacePath)
-	}
-
 	// Create gateway client
 	client := NewGatewayClient()
 
@@ -290,36 +285,6 @@ func getLatestCommitByBranch(branch string) (string, error) {
 	}
 
 	return "", fmt.Errorf("local branch %q not found: %w", branch, err)
-}
-
-// runDirect performs execution without gateway (for testing)
-func runDirect(configPath, yamlContent, branch, commit, workspacePath string) error {
-	// Create a temporary file for parsing
-	tmpFile, err := os.CreateTemp("", "test-*.yaml")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	if _, err := tmpFile.WriteString(yamlContent); err != nil {
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	p := parser.NewParser(tmpFile.Name())
-	pipeline, _, err := p.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", configPath, err.Error())
-		return err
-	}
-
-	// For test mode, just simulate a successful run
-	fmt.Printf("Running pipeline '%s' on branch '%s' at commit '%s'\n", pipeline.Name, branch, commit)
-	fmt.Printf("Workspace: %s\n", workspacePath)
-	fmt.Println("Run completed successfully.")
-	return nil
 }
 
 // getWorkspacePath returns the repository worktree root for the current
