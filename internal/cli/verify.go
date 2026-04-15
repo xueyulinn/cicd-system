@@ -28,12 +28,6 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		configPath = args[0]
 	}
 
-	// check Git repo
-	if err := checkGitRepo(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
-	}
-
 	// check if file exists
 	absPath, err := filepath.Abs(configPath)
 	if err != nil {
@@ -184,19 +178,4 @@ func collectYAMLFiles(dir string) ([]string, error) {
 	})
 
 	return files, err
-}
-
-// checkGitRepo verifies that we're in a git repository
-func checkGitRepo() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
-	gitDir := filepath.Join(cwd, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		return fmt.Errorf("not a git repository (or any parent up to mount point)")
-	}
-
-	return nil
 }

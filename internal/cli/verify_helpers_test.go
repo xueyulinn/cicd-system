@@ -38,35 +38,3 @@ func TestCollectYAMLFiles(t *testing.T) {
 	}
 }
 
-func TestCheckGitRepo(t *testing.T) {
-	orig, _ := os.Getwd()
-	defer func() { _ = os.Chdir(orig) }()
-
-	t.Run("not git repo", func(t *testing.T) {
-		d := t.TempDir()
-		wd, _ := os.Getwd()
-		defer func() { _ = os.Chdir(wd) }()
-		if err := os.Chdir(d); err != nil {
-			t.Fatalf("chdir: %v", err)
-		}
-		err := checkGitRepo()
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("git repo", func(t *testing.T) {
-		d := t.TempDir()
-		wd, _ := os.Getwd()
-		defer func() { _ = os.Chdir(wd) }()
-		if err := os.Mkdir(filepath.Join(d, ".git"), 0o755); err != nil {
-			t.Fatalf("mkdir .git: %v", err)
-		}
-		if err := os.Chdir(d); err != nil {
-			t.Fatalf("chdir: %v", err)
-		}
-		if err := checkGitRepo(); err != nil {
-			t.Fatalf("unexpected err=%v", err)
-		}
-	})
-}
