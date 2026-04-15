@@ -13,6 +13,7 @@ permissions:
 env:
   GO_VERSION: "1.25"
   GOLANGCI_LINT_VERSION: "v2.6"
+  MIN_COVERAGE: "70"
 
 jobs:
   validate_tag:
@@ -59,7 +60,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Test
-        run: go test -v -json ./... | tee test-results.json
+        run: go test -v -json -coverprofile=coverage.out -covermode=atomic ./... | tee test-results.json
+      - name: Enforce coverage threshold
+        run: bash scripts/ci-check-go-coverage.sh coverage.out
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v6
