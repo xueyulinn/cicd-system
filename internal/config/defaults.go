@@ -37,6 +37,5 @@ const (
 	DefaultReportingURL  = "http://localhost:8004"
 )
 
-const DefaultPipelineConfigPath = ".pipelines/pipeline.yaml"
 const DefaultPipelineDir = ".pipelines"
 const DefaultBranch = "main"

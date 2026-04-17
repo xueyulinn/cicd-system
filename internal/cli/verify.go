@@ -8,29 +8,24 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
 	"github.com/CS7580-SEA-SP26/e-team/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var verifyCmd = &cobra.Command{
-	Use:   "verify [config-file]",
-	Short: "Verify a pipeline configuration file",
-	Long:  "Verify that a pipeline configuration file is valid and well-formed",
+	Use:   "verify <pipeline file path>",
+	Short: "Verify a pipeline file",
+	Long:  "Verify that a pipeline file is ready to run",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runVerify,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
 	// get config path
-	configPath := config.DefaultPipelineConfigPath
-	if len(args) > 0 {
-		configPath = args[0]
-	}
+	configDir := config.DefaultPipelineDir
 
 	// check if file exists
-	absPath, err := filepath.Abs(configPath)
+	absPath, err := filepath.Abs(configDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to resolve path: %v\n", err)
 		return err
@@ -69,26 +64,6 @@ func runVerify(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// Test mode - use direct validation instead of gateway
-		testMode := os.Getenv("CICD_TEST_MODE") == "1"
-		if !testMode {
-			if strings.Contains(configPath, "TestRunDryRun") || strings.Contains(configPath, "TestDryRunCmd") || strings.Contains(configPath, "TestRunVerify") {
-				testMode = true
-			}
-		}
-		if testMode {
-			if err := runVerifyDirect(target, string(fileContent)); err != nil {
-				totalErrors++
-			} else {
-				if len(targets) == 1 {
-					fmt.Println("Configuration is valid ")
-				} else {
-					fmt.Printf("%s: Configuration is valid \n", target)
-				}
-			}
-			continue
-		}
-
 		// Call gateway for validation
 		response, err := client.Validate(string(fileContent))
 		if err != nil {
@@ -120,42 +95,6 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		fmt.Println("All configurations are valid ✓")
 	}
 
-	return nil
-}
-
-// runVerifyDirect performs validation without gateway (for testing)
-func runVerifyDirect(target, yamlContent string) error {
-	// Create a temporary file for parsing
-	tmpFile, err := os.CreateTemp("", "test-*.yaml")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	if _, err := tmpFile.WriteString(yamlContent); err != nil {
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	p := parser.NewParser(tmpFile.Name())
-	pipeline, rootNode, err := p.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", target, err.Error())
-		return err
-	}
-
-	v := verifier.NewPipelineVerifier(tmpFile.Name(), pipeline, rootNode)
-	errors := v.Verify()
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Fprintln(os.Stderr, err.Error())
-		}
-		return fmt.Errorf("validation failed")
-	}
-
-	fmt.Printf("%s: Configuration is valid ✓\n", target)
 	return nil
 }
 
