@@ -38,3 +38,5 @@ const (
 )
 
 const DefaultPipelineConfigPath = ".pipelines/pipeline.yaml"
+const DefaultPipelineDir = ".pipelines"
+const DefaultBranch = "main"

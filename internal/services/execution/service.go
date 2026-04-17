@@ -443,7 +443,6 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	}
 	s.putRuntime(initialized.runtime)
 
-	// multi-thread run
 	go func(prepared PreparedRun, initialized *initializedRun) {
 		dispatchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
