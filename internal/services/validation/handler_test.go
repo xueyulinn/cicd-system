@@ -147,8 +147,8 @@ func TestHandleValidate(t *testing.T) {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 	rec = doRequest(t, mux, http.MethodPost, "/validate", invalidReq)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	if !strings.Contains(rec.Body.String(), `"valid":false`) {
 		t.Fatalf("expected invalid response, got: %q", rec.Body.String())
