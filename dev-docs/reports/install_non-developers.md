@@ -116,16 +116,16 @@ docker compose up -d
 
 This will download and start all backend services. The first run may take a few minutes.
 
-If your machine already uses PostgreSQL on host port `5432`, update the compose bundle before starting:
+If your machine already uses MySQL 8 on host port `3306`, update the compose bundle before starting:
 
 ```bash
 # edit docker-compose.yaml and change:
-#   "5432:5432"
+#   "3306:3306"
 # to:
-#   "55432:5432"
+#   "33306:3306"
 ```
 
-Then point any manual `DATABASE_URL` overrides at `127.0.0.1:55432` instead of `127.0.0.1:5432`.
+Then point any manual `DATABASE_URL` overrides at `127.0.0.1:33306` instead of `127.0.0.1:3306`.
 
 ---
 
@@ -196,7 +196,7 @@ docker compose down -v
 | ---------------------------------------------- | ------------------------------------------------------------------------ |
 | `permission denied` when running `docker`      | Log out and log back in, or run `newgrp docker`                          |
 | `connection refused` when running CLI commands | Make sure backend is running: `cd ~/compose-bundle && docker compose ps` |
-| Reporting service cannot connect to Postgres | If port `5432` is already in use on the host, change the compose Postgres mapping to another host port such as `55432` before starting the system |
+| Reporting service cannot connect to MySQL | If port `3306` is already in use on the host, change the compose MySQL mapping to another host port such as `33306` before starting the system |
 | Containers show `Exited` status                | Check logs: `docker compose logs <service-name>`                         |
 | `cicd: command not found`                      | Run: `sudo mv cicd-linux-amd64 /usr/local/bin/cicd`                      |
 
@@ -220,3 +220,5 @@ If `sudo apt install -y gh` fails, use the official installation method:
 ```
 
 Then run `gh auth login` and follow the prompts.
+
+

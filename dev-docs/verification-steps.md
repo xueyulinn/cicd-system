@@ -55,32 +55,32 @@ If any service fails to start, the script prints an error and exits with a non-z
 From the repository root:
 
 ```bash
-docker compose --env-file compose.values.env up -d postgres db-migrate
+docker compose --env-file compose.values.env up -d mysql db-migrate
 ```
 
 This setup path:
 
-- starts PostgreSQL and the migration container with the same values used by the Helm chart
+- starts MySQL 8 and the migration container with the same values used by the Helm chart
 - applies all report database migrations
 
 Then verify connectivity:
 
 ```bash
-docker compose --env-file compose.values.env exec -T postgres pg_isready -U cicd -d reportstore
-docker compose --env-file compose.values.env exec -T postgres psql -U cicd -d reportstore -c '\dt'
+docker compose --env-file compose.values.env exec -T mysql mysqladmin ping -h 127.0.0.1 -ucicd -pcicd --silent
+docker compose --env-file compose.values.env exec -T mysql mysql -ucicd -pcicd reportstore -e "SHOW TABLES;"
 ```
 
 You should see the report tables `pipeline_runs`, `stage_runs`, and `job_runs`.
 
-If the host machine already uses port `5432`, update the local Compose host port mapping before running the services and point `DATABASE_URL` / `REPORT_DB_URL` at the chosen host port.
+If the host machine already uses port `3306`, update the local Compose host port mapping before running the services and point `DATABASE_URL` / `REPORT_DB_URL` at the chosen host port.
 
 You should see:
 
 ```text
-/var/run/postgresql:5432 - accepting connections
+mysqld is alive
 ```
 
-and the `\dt` output should list the report tables.  
+and the `SHOW TABLES` output should list the report tables.  
 This confirms that the **report database and migrations are correctly configured**.
 
 ### 6.4 End‑to‑End Sanity Check: Run a Successful Pipeline
@@ -100,4 +100,6 @@ Run completed successfully.
 
 and exit code `0`.  
 This confirms that the **CLI, services, and execution flow are wired together correctly**.
+
+
 

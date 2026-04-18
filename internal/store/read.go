@@ -2,10 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // ErrNotFound is returned when a queried entity does not exist.
@@ -25,8 +23,8 @@ func scanRun(sc interface{ Scan(dest ...any) error }) (Run, error) {
 
 // GetRunsByPipeline returns all runs for a pipeline, ordered by run_no ascending.
 func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = $1 ORDER BY run_no ASC`,
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = ? ORDER BY run_no ASC`,
 		pipeline,
 	)
 	if err != nil {
@@ -47,13 +45,13 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 
 // GetRun returns a single pipeline run by pipeline name and run_no. Returns ErrNotFound if not found.
 func (s *Store) GetRun(ctx context.Context, pipeline string, runNo int) (*Run, error) {
-	row := s.pool.QueryRow(ctx,
-		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = $1 AND run_no = $2`,
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+runColumns+` FROM pipeline_runs WHERE pipeline = ? AND run_no = ?`,
 		pipeline, runNo,
 	)
 	r, err := scanRun(row)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -64,18 +62,18 @@ func (s *Store) GetRun(ctx context.Context, pipeline string, runNo int) (*Run, e
 // GetStagesForRun returns all stages for a pipeline run, ordered by stage name.
 // If stageFilter is non-empty, only that stage is returned (one or zero rows).
 func (s *Store) GetStagesForRun(ctx context.Context, pipeline string, runNo int, stageFilter string) ([]Stage, error) {
-	var rows pgx.Rows
+	var rows *sql.Rows
 	var err error
 	if stageFilter != "" {
-		rows, err = s.pool.Query(ctx,
+		rows, err = s.db.QueryContext(ctx,
 			`SELECT pipeline, run_no, stage, start_time, end_time, status
-			 FROM stage_runs WHERE pipeline = $1 AND run_no = $2 AND stage = $3 ORDER BY stage`,
+			 FROM stage_runs WHERE pipeline = ? AND run_no = ? AND stage = ? ORDER BY stage`,
 			pipeline, runNo, stageFilter,
 		)
 	} else {
-		rows, err = s.pool.Query(ctx,
+		rows, err = s.db.QueryContext(ctx,
 			`SELECT pipeline, run_no, stage, start_time, end_time, status
-			 FROM stage_runs WHERE pipeline = $1 AND run_no = $2 ORDER BY stage`,
+			 FROM stage_runs WHERE pipeline = ? AND run_no = ? ORDER BY stage`,
 			pipeline, runNo,
 		)
 	}
@@ -99,21 +97,19 @@ func (s *Store) GetStagesForRun(ctx context.Context, pipeline string, runNo int,
 // GetJobsForRun returns all jobs for a pipeline run (optionally filtered by stage and/or job).
 // stageFilter and jobFilter can be empty to mean "all". Results ordered by stage, then job.
 func (s *Store) GetJobsForRun(ctx context.Context, pipeline string, runNo int, stageFilter, jobFilter string) ([]Job, error) {
-	query := `SELECT pipeline, run_no, stage, job, start_time, end_time, status, COALESCE(failures, false) FROM job_runs WHERE pipeline = $1 AND run_no = $2`
+	query := `SELECT pipeline, run_no, stage, job, start_time, end_time, status, COALESCE(failures, false) FROM job_runs WHERE pipeline = ? AND run_no = ?`
 	args := []any{pipeline, runNo}
-	pos := 3
 	if stageFilter != "" {
-		query += fmt.Sprintf(" AND stage = $%d", pos)
+		query += " AND stage = ?"
 		args = append(args, stageFilter)
-		pos++
 	}
 	if jobFilter != "" {
-		query += fmt.Sprintf(" AND job = $%d", pos)
+		query += " AND job = ?"
 		args = append(args, jobFilter)
 	}
 	query += ` ORDER BY stage, job`
 
-	rows, err := s.pool.Query(ctx, query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-{{- if and .Values.postgres.enabled .Values.migration.enabled }}
+{{- if and .Values.mysql.enabled .Values.migration.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -23,57 +23,52 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        - name: wait-for-postgres
-          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
-          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+        - name: wait-for-mysql
+          image: "{{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}"
+          imagePullPolicy: {{ .Values.mysql.image.pullPolicy }}
           command:
             - sh
             - -c
             - |
               set -e
-              until pg_isready -h {{ include "e-team.postgresName" . }} -p {{ .Values.postgres.service.port }} -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
-                echo "waiting for postgres..."
+              until mysqladmin --protocol=TCP -h {{ include "e-team.mysqlName" . }} -P {{ .Values.mysql.service.port }} -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" ping --silent; do
+                echo "waiting for mysql..."
                 sleep 3
               done
-              echo "postgres is accepting connections"
+              echo "mysql is accepting connections"
           env:
-            - name: POSTGRES_USER
+            - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_USER
-            - name: POSTGRES_DB
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_DB
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_PASSWORD
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_PASSWORD
       containers:
         - name: migrate
           image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag }}"
           imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
           env:
             - name: DB_HOST
-              value: {{ include "e-team.postgresName" . }}
+              value: {{ include "e-team.mysqlName" . }}
             - name: DB_PORT
-              value: {{ .Values.postgres.service.port | quote }}
+              value: {{ .Values.mysql.service.port | quote }}
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_USER
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_USER
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_DB
-            - name: PGPASSWORD
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_DATABASE
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "e-team.postgresSecretName" . }}
-                  key: POSTGRES_PASSWORD
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_PASSWORD
 {{- end }}

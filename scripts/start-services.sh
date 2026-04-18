@@ -3,10 +3,10 @@
 # Start all services script
 echo "Starting e-team services..."
 
-# Reporting and execution services need Postgres. Use default if not set (run ./scripts/verify-report-db.sh first).
+# Reporting and execution services need MySQL. Use default if not set (run ./scripts/verify-report-db.sh first).
 if [[ -z "${DATABASE_URL:-}" ]] && [[ -z "${REPORT_DB_URL:-}" ]]; then
-  export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
-  echo "Note: DATABASE_URL not set, using default (start Postgres with: ./scripts/verify-report-db.sh)"
+  export DATABASE_URL="cicd:cicd@tcp(localhost:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC"
+  echo "Note: DATABASE_URL not set, using default (start MySQL with: ./scripts/verify-report-db.sh)"
 fi
 
 # Start validation service

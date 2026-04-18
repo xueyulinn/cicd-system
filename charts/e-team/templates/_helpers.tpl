@@ -70,16 +70,16 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "amqp://%s:%s@%s:%v/" $u $p (include "e-team.rabbitmqName" .) .Values.rabbitmq.service.amqpPort -}}
 {{- end -}}
 
-{{- define "e-team.postgresName" -}}
-{{- printf "%s-postgres" (include "e-team.fullname" .) -}}
+{{- define "e-team.mysqlName" -}}
+{{- printf "%s-mysql" (include "e-team.fullname" .) -}}
 {{- end -}}
 
-{{- define "e-team.postgresHeadlessName" -}}
-{{- printf "%s-postgres-headless" (include "e-team.fullname" .) -}}
+{{- define "e-team.mysqlHeadlessName" -}}
+{{- printf "%s-mysql-headless" (include "e-team.fullname" .) -}}
 {{- end -}}
 
-{{- define "e-team.postgresSecretName" -}}
-{{- printf "%s-postgres-credentials" (include "e-team.fullname" .) -}}
+{{- define "e-team.mysqlSecretName" -}}
+{{- printf "%s-mysql-credentials" (include "e-team.fullname" .) -}}
 {{- end -}}
 
 {{- define "e-team.migrationJobName" -}}
@@ -127,49 +127,49 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 
 {{- define "e-team.databaseURL" -}}
-{{- if .Values.postgres.enabled -}}
-{{- printf "postgres://%s:%s@%s:%v/%s?sslmode=disable" .Values.postgres.auth.username .Values.postgres.auth.password (include "e-team.postgresName" .) .Values.postgres.service.port .Values.postgres.auth.database -}}
+{{- if .Values.mysql.enabled -}}
+{{- printf "%s:%s@tcp(%s:%v)/%s?parseTime=true&charset=utf8mb4&loc=UTC" .Values.mysql.auth.username .Values.mysql.auth.password (include "e-team.mysqlName" .) .Values.mysql.service.port .Values.mysql.auth.database -}}
 {{- else -}}
-{{- required "externalDatabase.url is required when postgres.enabled=false" .Values.externalDatabase.url -}}
+{{- required "externalDatabase.url is required when mysql.enabled=false" .Values.externalDatabase.url -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "e-team.databaseHost" -}}
-{{- if .Values.postgres.enabled -}}
-{{- include "e-team.postgresName" . -}}
+{{- if .Values.mysql.enabled -}}
+{{- include "e-team.mysqlName" . -}}
 {{- else -}}
-{{- required "externalDatabase.host is required when postgres.enabled=false and database wait init containers are enabled" .Values.externalDatabase.host -}}
+{{- required "externalDatabase.host is required when mysql.enabled=false and database wait init containers are enabled" .Values.externalDatabase.host -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "e-team.databasePort" -}}
-{{- if .Values.postgres.enabled -}}
-{{- .Values.postgres.service.port -}}
+{{- if .Values.mysql.enabled -}}
+{{- .Values.mysql.service.port -}}
 {{- else -}}
 {{- .Values.externalDatabase.port -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "e-team.databaseUser" -}}
-{{- if .Values.postgres.enabled -}}
-{{- .Values.postgres.auth.username -}}
+{{- if .Values.mysql.enabled -}}
+{{- .Values.mysql.auth.username -}}
 {{- else -}}
-{{- required "externalDatabase.username is required when postgres.enabled=false and database wait init containers are enabled" .Values.externalDatabase.username -}}
+{{- required "externalDatabase.username is required when mysql.enabled=false and database wait init containers are enabled" .Values.externalDatabase.username -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "e-team.databasePassword" -}}
-{{- if .Values.postgres.enabled -}}
-{{- .Values.postgres.auth.password -}}
+{{- if .Values.mysql.enabled -}}
+{{- .Values.mysql.auth.password -}}
 {{- else -}}
-{{- required "externalDatabase.password is required when postgres.enabled=false and database wait init containers are enabled" .Values.externalDatabase.password -}}
+{{- required "externalDatabase.password is required when mysql.enabled=false and database wait init containers are enabled" .Values.externalDatabase.password -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "e-team.databaseName" -}}
-{{- if .Values.postgres.enabled -}}
-{{- .Values.postgres.auth.database -}}
+{{- if .Values.mysql.enabled -}}
+{{- .Values.mysql.auth.database -}}
 {{- else -}}
-{{- required "externalDatabase.database is required when postgres.enabled=false and database wait init containers are enabled" .Values.externalDatabase.database -}}
+{{- required "externalDatabase.database is required when mysql.enabled=false and database wait init containers are enabled" .Values.externalDatabase.database -}}
 {{- end -}}
 {{- end -}}

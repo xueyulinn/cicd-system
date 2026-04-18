@@ -103,12 +103,12 @@ Verify:
 Start the local infrastructure first:
 
 ```bash
-docker compose --env-file compose.values.env up -d postgres rabbitmq db-migrate
+docker compose --env-file compose.values.env up -d mysql rabbitmq db-migrate
 ```
 
 This starts:
 
-- PostgreSQL
+- MySQL 8
 - RabbitMQ
 - Database migration service
 
@@ -144,7 +144,7 @@ Check container status:
 docker compose --env-file compose.values.env ps
 ```
 
-PostgreSQL and RabbitMQ should show `Up` status. Then check the service endpoints:
+MySQL 8 and RabbitMQ should show `Up` status. Then check the service endpoints:
 
 ```bash
 curl http://localhost:8000/health
@@ -152,7 +152,7 @@ curl http://localhost:8001/ready
 curl http://localhost:8004/ready
 ```
 
-You should see successful responses from the gateway, validation service, and reporting service. If `reporting-service` cannot connect to Postgres on host port `5432`, move the local Postgres host port to a free port such as `55432` and update `DATABASE_URL` / `REPORT_DB_URL` accordingly.
+You should see successful responses from the gateway, validation service, and reporting service. If `reporting-service` cannot connect to MySQL on host port `3306`, move the local MySQL host port to a free port such as `33306` and update `DATABASE_URL` / `REPORT_DB_URL` accordingly.
 
 ---
 
@@ -217,4 +217,6 @@ docker compose --env-file compose.values.env up -d --build <service-name>
 | `go: command not found`                             | Make sure Go is installed and PATH is set: `source ~/.bashrc` |
 | Services exit immediately after startup             | Check logs: `docker compose --env-file compose.values.env logs <service-name>` |
 | CLI cannot connect to backend                       | Ensure infrastructure is running: `docker compose --env-file compose.values.env ps` |
-| Reporting service fails to connect to Postgres      | Check for a host port conflict on `5432`; if needed, remap Postgres to another host port such as `55432` and update `DATABASE_URL` / `REPORT_DB_URL` |
+| Reporting service fails to connect to MySQL      | Check for a host port conflict on `3306`; if needed, remap MySQL to another host port such as `33306` and update `DATABASE_URL` / `REPORT_DB_URL` |
+
+

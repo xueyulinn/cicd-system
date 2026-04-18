@@ -61,7 +61,7 @@ graph LR
 %% Data Layer
 %% =====================
     subgraph DataLayer["Data Layer"]
-        DB["PostgreSQL"]
+        DB["MySQL 8"]
     end
 
 
@@ -137,7 +137,7 @@ The system adopts a **service-oriented architecture** where:
    - Reporting Service (port 8004): Query aggregation and result formatting
 - **Message Queue** (Redis/RabbitMQ) decouples the Execution Service from Worker Service through asynchronous job dispatch and status updates
 - **Worker Service** (port 8003) manages job execution through Docker containers and collecting logs
-- **PostgreSQL database** (port 5432) persists pipeline runs, stages, jobs, and execution logs
+- **MySQL 8 database** (port 3306) persists pipeline runs, stages, jobs, and execution logs
 - **Docker Engine** handles container lifecycle and image management
 
 ## Deployment Topology
@@ -152,15 +152,15 @@ The system supports the following deployment topologies:
 | Execution Service | Yes | Yes | Yes |
 | Worker Service | Yes | Yes | Yes |
 | Reporting Service | Yes | Yes | Yes |
-| PostgreSQL report store | External/local DB | Yes | Yes |
+| MySQL 8 report store | External/local DB | Yes | Yes |
 | RabbitMQ | External/local broker | Yes | Yes |
 | Docker Engine for job execution | Yes | Host runtime for worker | Node runtime for worker |
 
 Notes:
 
-- In local development, the services can be started as host processes while PostgreSQL and RabbitMQ run in Docker Compose.
+- In local development, the services can be started as host processes while MySQL 8 and RabbitMQ run in Docker Compose.
 - In Compose mode, all services can run as containers on one machine.
-- In Kubernetes mode, the stateless services run as Deployments, PostgreSQL can run in-cluster or externally, and RabbitMQ runs in-cluster.
+- In Kubernetes mode, the stateless services run as Deployments, MySQL 8 can run in-cluster or externally, and RabbitMQ runs in-cluster.
 
 ## Pros and Cons
 
@@ -224,7 +224,7 @@ Notes:
    - Potential for message duplication if acknowledgments fail (requires idempotent job processing)
 
 5. **Database as Log Sink Limitations**
-   - Storing raw execution logs directly in PostgreSQL can cause table bloat over time
+   - Storing raw execution logs directly in MySQL 8 can cause table bloat over time
    - Large log volumes can degrade query performance for pipeline status checks
    - Competing workload: transactional queries (pipeline status) vs. append-heavy log writes
    - May require eventual migration to dedicated log storage (e.g., S3, Elasticsearch)
@@ -255,5 +255,7 @@ This architecture was chosen for the following reasons:
 
 9. **Pragmatic Trade-offs for Project Scope**:
    - Using a lightweight message queue (Redis Streams or RabbitMQ) balances production-grade patterns with development simplicity
-   - Direct PostgreSQL log storage keeps the tech stack manageable, though production systems would typically use dedicated log aggregation solutions (ELK stack, Loki, CloudWatch)
+   - Direct MySQL 8 log storage keeps the tech stack manageable, though production systems would typically use dedicated log aggregation solutions (ELK stack, Loki, CloudWatch)
    - These trade-offs prioritize rapid development and clear demonstration of core CI/CD and distributed systems concepts
+
+
