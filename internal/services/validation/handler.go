@@ -60,17 +60,9 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := observability.WithTraceContext(r.Context(), slog.Default())
-
 	response := h.service.ValidateYAML(req.YAMLContent)
-
-	if response.Valid {
-		log.Info("validate ok")
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
-		log.Info("validate rejected", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	}
+	
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleDryRun validates YAML and returns execution plan

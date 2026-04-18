@@ -90,9 +90,50 @@ func postJSON[T any](client *http.Client, endpoint string, reqBody any, errorPre
 
 // ValidateRequest forwards validation request to validation service
 func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, error) {
-	return postJSON[api.ValidateResponse](c.httpValidation, c.validationURL+"/validate", map[string]string{
+	reqBody := map[string]string{
 		"yaml_content": yamlContent,
-	}, "validation service")
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := c.httpValidation.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call validation service: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var out api.ValidateResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
+		}
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Validation errors are business outcomes, not proxy failures.
+	// Some validation service deployments return 400 + structured error payload.
+	if resp.StatusCode == http.StatusBadRequest {
+		out.Valid = false
+		return &out, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		if len(out.Errors) > 0 {
+			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, out.Errors[0])
+		}
+		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return &out, nil
 }
 
 // DryRunRequest forwards dry run request to validation service

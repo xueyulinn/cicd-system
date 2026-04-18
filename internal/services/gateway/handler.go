@@ -113,12 +113,11 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if response.Valid {
-		log.Info("validate ok")
-		api.WriteJSON(w, http.StatusOK, response)
+		log.Info("verification succeeds")
 	} else {
-		log.Info("validate rejected", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
+		log.Info("verification rejected", "errors", response.Errors)
 	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleDryRun forwards dry run requests to validation service

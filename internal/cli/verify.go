@@ -8,155 +8,119 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
+	"github.com/CS7580-SEA-SP26/e-team/internal/common/gitutil"
 	"github.com/spf13/cobra"
 )
 
 var verifyCmd = &cobra.Command{
-	Use:   "verify [config-file]",
-	Short: "Verify a pipeline configuration file",
-	Long:  "Verify that a pipeline configuration file is valid and well-formed",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runVerify,
+	Use:                   "verify {pipeline-path|pipeline-directory}",
+	Short:                 "Validate a pipeline file or directory",
+	Long:                  "Validate a single pipeline YAML file, or recursively validate all pipeline YAML files under a directory. The command stops at the first failure and prints the exact error location.",
+	Example:               "cicd verify ./.pipelines/build.yaml\ncicd verify ./.pipelines",
+	Args:                  cobra.ExactArgs(1),
+	RunE:                  runVerify,
+	DisableFlagsInUseLine: true,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
-	// get config path
-	configPath := config.DefaultPipelineConfigPath
-	if len(args) > 0 {
-		configPath = args[0]
-	}
-
-	// check if file exists
-	absPath, err := filepath.Abs(configPath)
+	repo, err := gitutil.Open(".")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to resolve path: %v\n", err)
 		return err
 	}
+	rootDir := repo.Root()
+	pipelinePath := args[0]
 
-	info, err := os.Stat(absPath)
+	completePath := pipelinePath
+	if !filepath.IsAbs(pipelinePath) {
+		completePath = filepath.Join(rootDir, pipelinePath)
+	}
+	completePath = filepath.Clean(completePath)
+
+	info, err := os.Stat(completePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to stat path: %v\n", err)
-		return err
+		return fmt.Errorf("failed to get the info of path %q: %w", completePath, err)
 	}
 
-	targets := []string{absPath}
+	gatewayClient := NewGatewayClient()
 	if info.IsDir() {
-		targets, err = collectYAMLFiles(absPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to enumerate directory %s: %v\n", absPath, err)
-			return err
-		}
-		if len(targets) == 0 {
-			fmt.Fprintf(os.Stderr, "Error: no YAML files found in directory: %s\n", absPath)
-			return fmt.Errorf("no YAML files to validate")
-		}
+		return verifyPipelineDir(completePath, gatewayClient)
 	}
 
-	// Create gateway client
-	client := NewGatewayClient()
-
-	sort.Strings(targets)
-
-	var totalErrors int
-	for _, target := range targets {
-		// Read file content for each target
-		fileContent, err := os.ReadFile(target)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to read file: %v\n", err)
-			return err
-		}
-
-		// Test mode - use direct validation instead of gateway
-		testMode := os.Getenv("CICD_TEST_MODE") == "1"
-		if !testMode {
-			if strings.Contains(configPath, "TestRunDryRun") || strings.Contains(configPath, "TestDryRunCmd") || strings.Contains(configPath, "TestRunVerify") {
-				testMode = true
-			}
-		}
-		if testMode {
-			if err := runVerifyDirect(target, string(fileContent)); err != nil {
-				totalErrors++
-			} else {
-				if len(targets) == 1 {
-					fmt.Println("Configuration is valid ")
-				} else {
-					fmt.Printf("%s: Configuration is valid \n", target)
-				}
-			}
-			continue
-		}
-
-		// Call gateway for validation
-		response, err := client.Validate(string(fileContent))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", target, err.Error())
-			totalErrors++
-			continue
-		}
-
-		if !response.Valid {
-			for _, errMsg := range response.Errors {
-				fmt.Fprintln(os.Stderr, errMsg)
-			}
-			totalErrors += len(response.Errors)
-			continue
-		}
-
-		if len(targets) == 1 {
-			fmt.Println("Configuration is valid ")
-		} else {
-			fmt.Printf("%s: Configuration is valid \n", target)
-		}
+	valid, err := verifySinglePipeline(completePath, gatewayClient)
+	if err != nil {
+		return err
 	}
-
-	if totalErrors > 0 {
-		return fmt.Errorf("validation failed with %d error(s)", totalErrors)
-	}
-
-	if len(targets) > 1 {
-		fmt.Println("All configurations are valid ✓")
+	if valid {
+		fmt.Println("Configuration is valid")
 	}
 
 	return nil
 }
 
-// runVerifyDirect performs validation without gateway (for testing)
-func runVerifyDirect(target, yamlContent string) error {
-	// Create a temporary file for parsing
-	tmpFile, err := os.CreateTemp("", "test-*.yaml")
+func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
+	targets, err := collectYAMLFiles(dir)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return fmt.Errorf("failed to enumerate directory %q: %w", dir, err)
 	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	if _, err := tmpFile.WriteString(yamlContent); err != nil {
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+	if len(targets) == 0 {
+		return fmt.Errorf("no YAML files found in directory: %s", dir)
 	}
 
-	p := parser.NewParser(tmpFile.Name())
-	pipeline, rootNode, err := p.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", target, err.Error())
-		return err
-	}
+	sort.Strings(targets)
 
-	v := verifier.NewPipelineVerifier(tmpFile.Name(), pipeline, rootNode)
-	errors := v.Verify()
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Fprintln(os.Stderr, err.Error())
+	for _, target := range targets {
+		valid, err := verifySinglePipeline(target, gatewayClient)
+		if err != nil {
+			// Fast fail: stop at the first invalid file or validation request error.
+			return err
 		}
-		return fmt.Errorf("validation failed")
+
+		if valid {
+			fmt.Printf("%s: Configuration is valid\n", target)
+		}
 	}
 
-	fmt.Printf("%s: Configuration is valid ✓\n", target)
 	return nil
+}
+
+func verifySinglePipeline(pipelinePath string, gatewayClient *GatewayClient) (bool, error) {
+	fileContent, err := os.ReadFile(pipelinePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read file content %q: %w", pipelinePath, err)
+	}
+
+	response, err := gatewayClient.Validate(string(fileContent))
+	if err != nil {
+		return false, fmt.Errorf("failed to verify %q: %w", pipelinePath, err)
+	}
+
+	if response.Valid {
+		return true, nil
+	}
+
+	if len(response.Errors) == 0 {
+		fmt.Fprintf(os.Stderr, "%s: validation failed (no error details returned)\n", pipelinePath)
+		return false, fmt.Errorf("validation failed with %d error(s)", 1)
+	}
+
+	for _, errMsg := range response.Errors {
+		msg := strings.TrimSpace(errMsg)
+		if msg == "" {
+			fmt.Fprintf(os.Stderr, "%s: validation failed\n", pipelinePath)
+			continue
+		}
+
+		// Validation service returns locations with "content:<line>:<col>: ...".
+		if strings.HasPrefix(msg, "content:") {
+			msg = pipelinePath + ":" + strings.TrimPrefix(msg, "content:")
+		} else if !strings.Contains(msg, pipelinePath) {
+			msg = fmt.Sprintf("%s: %s", pipelinePath, msg)
+		}
+
+		fmt.Fprintln(os.Stderr, msg)
+	}
+
+	return false, fmt.Errorf("validation failed with %d error(s)", len(response.Errors))
 }
 
 func collectYAMLFiles(dir string) ([]string, error) {

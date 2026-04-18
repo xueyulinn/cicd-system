@@ -130,8 +130,11 @@ func TestHandleValidate(t *testing.T) {
 	}
 
 	rec = doGatewayRequest(t, mux, http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"invalid"}`))
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("invalid pipeline proxy status=%d, want %d", rec.Code, http.StatusBadGateway)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid pipeline proxy status=%d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), `"valid":false`) {
+		t.Fatalf("expected invalid response body, got: %s", rec.Body.String())
 	}
 
 	rec = doGatewayRequest(t, mux, http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"ok"}`))
