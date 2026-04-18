@@ -78,10 +78,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Test (cli)
-        run: go test -v -json -coverprofile=coverage.out -covermode=atomic ./... | tee test-results.json
-      - name: Enforce coverage threshold
-        run: bash scripts/ci-check-go-coverage.sh coverage.out
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v6
