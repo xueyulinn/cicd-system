@@ -13,7 +13,7 @@ sequenceDiagram
     participant Exec as Execution<br/>:8002
     participant Queue as Job Queue<br/>:5672
     participant Worker as Worker<br/>:8003
-    participant DB as PostgreSQL<br/>:5432
+    participant DB as MySQL 8<br/>:3306
     participant Docker as Docker
 
     Dev->>CLI: cicd run --file default.yaml
@@ -88,7 +88,7 @@ sequenceDiagram
     - If validation succeeds, pipeline execution begins
 
 3. **Pipeline Initialization** (Steps 8-9)
-    - Execution Service creates a new pipeline run record in PostgreSQL
+    - Execution Service creates a new pipeline run record in MySQL 8
     - Database returns a unique `run_id` for tracking
 
 4. **Job Dispatch and Execution** (Steps 10-23, looped per stage/job)
@@ -97,7 +97,7 @@ sequenceDiagram
         - Jobs are enqueued to the Job Queue (Redis/RabbitMQ) with execution details
         - Worker Service consumes jobs from the queue asynchronously
         - Worker pulls Docker image and creates container for job execution
-        - Container logs are streamed and stored in PostgreSQL
+        - Container logs are streamed and stored in MySQL 8
         - Worker publishes job completion status back to the queue
         - Execution Service receives status updates via queue subscription and updates database
 
@@ -110,5 +110,6 @@ sequenceDiagram
 
 - **Asynchronous Processing**: Job Queue decouples job dispatch from execution, allowing Workers to process jobs at their own pace
 - **Horizontal Scalability**: Multiple Worker instances can consume from the same queue for parallel job execution
-- **State Persistence**: All execution state (runs, stages, jobs, logs) is persisted in PostgreSQL for auditing and reporting
+- **State Persistence**: All execution state (runs, stages, jobs, logs) is persisted in MySQL 8 for auditing and reporting
 - **Event-Driven Updates**: Status changes flow through the queue as events, enabling loose coupling between services
+

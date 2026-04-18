@@ -77,7 +77,7 @@ graph TB
 %% Data Layer
 %% =====================
     subgraph DataLayer["Data Layer"]
-        DB["PostgreSQL"]
+        DB["MySQL 8"]
     end
 
 
@@ -265,7 +265,7 @@ graph TB
 %% Data Layer
 %% =====================
     subgraph DataLayer["Data Layer"]
-        DB["PostgreSQL"]
+        DB["MySQL 8"]
     end
 
 

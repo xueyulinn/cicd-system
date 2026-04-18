@@ -59,7 +59,7 @@ This document outlines the technology stack, tools, libraries, and frameworks us
 - `gopkg.in/yaml.v3` - YAML parsing and validation
 - `github.com/rabbitmq/amqp091-go` - RabbitMQ client
 - `gorm.io/gorm` - ORM for database operations
-- `gorm.io/driver/postgres` - PostgreSQL driver for GORM
+- `gorm.io/driver/mysql` - MySQL 8 driver for GORM
 - `github.com/google/uuid` - UUID generation for job IDs
 - `github.com/go-playground/validator/v10` - Struct validation
 - Standard library: `encoding/json`, `net/http`
@@ -120,7 +120,7 @@ This document outlines the technology stack, tools, libraries, and frameworks us
 ## Infrastructure Software
 
 ### Database
-- **PostgreSQL 15+**
+- **MySQL 8+**
     - Primary datastore for job metadata, execution history, and results
     - Chosen for ACID compliance, reliability, and excellent Go support via GORM
 
@@ -201,7 +201,7 @@ Alternative structure (if using separate repos):
     - **Minimum coverage requirement: 70%**
 
 3. **Integration Tests**
-    - Spin up test environment (PostgreSQL, RabbitMQ via Docker Compose)
+    - Spin up test environment (MySQL 8, RabbitMQ via Docker Compose)
     - Run end-to-end integration tests
     - Verify CLI → Coordinator → Runner flow
 
@@ -265,7 +265,7 @@ Alternative structure (if using separate repos):
     - Require branches to be up to date before merging
 
 ### Local Development
-- **Docker Compose** - For running PostgreSQL and RabbitMQ locally
+- **Docker Compose** - For running MySQL 8 and RabbitMQ locally
 - **Make** - Task automation (build, test, lint, run)
 - **Air** (optional) - Hot reload for Go applications during development
 
@@ -287,7 +287,7 @@ Alternative structure (if using separate repos):
 - Great ecosystem for DevOps tools (Docker SDK, excellent CLI frameworks)
 - Static binaries simplify deployment
 
-### Why PostgreSQL?
+### Why MySQL 8?
 - ACID compliance ensures data integrity
 - Mature, reliable, and widely supported
 - Excellent Go support via GORM
@@ -304,3 +304,4 @@ Alternative structure (if using separate repos):
 - Clean API and middleware support
 - Excellent documentation and community
 - Built-in JSON validation and binding
+

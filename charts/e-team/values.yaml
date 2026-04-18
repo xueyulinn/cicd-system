@@ -72,8 +72,8 @@ executionService:
   waitForDatabase:
     enabled: true
     image:
-      repository: postgres
-      tag: 16-alpine
+      repository: mysql
+      tag: "8.0"
       pullPolicy: IfNotPresent
   waitForRabbitmq:
     enabled: true
@@ -137,22 +137,23 @@ reportingService:
   waitForDatabase:
     enabled: true
     image:
-      repository: postgres
-      tag: 16-alpine
+      repository: mysql
+      tag: "8.0"
       pullPolicy: IfNotPresent
 
-postgres:
+mysql:
   enabled: true
   image:
-    repository: postgres
-    tag: 16-alpine
+    repository: mysql
+    tag: "8.0"
     pullPolicy: IfNotPresent
   auth:
+    rootPassword: cicd
     username: cicd
     password: cicd
     database: reportstore
   service:
-    port: 5432
+    port: 3306
   persistence:
     size: 10Gi
     accessModes:
@@ -169,7 +170,7 @@ postgres:
 externalDatabase:
   url: ""
   host: ""
-  port: 5432
+  port: 3306
   username: ""
   password: ""
   database: ""

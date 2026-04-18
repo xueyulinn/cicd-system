@@ -12,7 +12,7 @@
 - Execution service
 - Worker service
 - Reporting service
-- PostgreSQL-backed report store
+- MySQL 8-backed report store
 - Database schema migration SQL
 - Dockerfiles for backend services
 - Docker Compose configuration for backend services
@@ -25,7 +25,9 @@
 - `scripts/install.sh` supports Linux and macOS only; Windows environments such as Git Bash are not supported.
 - The current `docker-compose.yaml` still builds images locally and depends on repository-local files, so it is not yet a fully portable release bundle.
 - The `db-migrate` service builds from `migrations/Dockerfile` (SQL files baked into the image); changing migrations requires rebuilding that image.
-- PostgreSQL data persistence is not configured with a named volume, so recreated containers may lose database data.
+- MySQL 8 data persistence is not configured with a named volume, so recreated containers may lose database data.
 - `worker-service` depends on Docker socket access and runs as root in local containerized setups, which is convenient for development but not ideal for hardened environments.
 - Running the full stack still assumes the user is working from the repository directory.
 - The release/install flow for services is not yet unified into a single end-user command.
+
+

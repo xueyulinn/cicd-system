@@ -31,7 +31,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 | Execution Service    | 8002 | Runs pipelines, coordinates jobs |
 | Worker Service       | 8003 | Executes job steps             |
 | Reporting Service    | 8004 | Pipeline run reports           |
-| PostgreSQL           | 5432 | Report store database          |
+| MySQL 8           | 3306 | Report store database          |
 | Prometheus           | 9090 | Metrics collection & storage   |
 | Loki                 | 3100 | Log aggregation & storage      |
 | Tempo                | 3200 | Distributed tracing storage    |
@@ -49,12 +49,12 @@ The repository supports Kubernetes deployment for all current stateless services
 | Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
 | Reporting Service | Stateless | Yes | Same as API Gateway |
-| PostgreSQL report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
+| MySQL 8 report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
 
 ### Kubernetes Deployment Modes
 
-- **All-in-cluster**: install the Helm chart with `postgres.enabled=true` to run stateless services, Postgres, and the migration Job inside Kubernetes.
-- **Hybrid**: install the Helm chart with `postgres.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
+- **All-in-cluster**: install the Helm chart with `mysql.enabled=true` to run stateless services, MySQL, and the migration Job inside Kubernetes.
+- **Hybrid**: install the Helm chart with `mysql.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
 
 Service-to-service communication inside the cluster is done through Kubernetes Services and environment variables:
 
@@ -66,7 +66,7 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 
 For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/e-team/README.md).
 
-**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
 
 **Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/e-team/README.md`](charts/e-team/README.md).
 
@@ -353,7 +353,7 @@ cicd run --name pipeline.yaml --branch main --commit HEAD
 1. **Prepare data by running a pipeline**:
 
    ```bash
-   docker compose --env-file compose.values.env up -d postgres db-migrate
+   docker compose --env-file compose.values.env up -d mysql db-migrate
    ./scripts/start-services.sh         # start services (if not already running)
    cicd run --file .pipelines/pipeline.yaml
    ```
@@ -506,7 +506,7 @@ docker compose --env-file compose.values.env logs -f execution-service worker-se
 - `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
 - `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
 
-`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: Postgres, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `EXECUTION_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: MySQL, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `EXECUTION_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
 
 #### Local parallel execution (RabbitMQ + worker)
 
@@ -534,11 +534,11 @@ Use another terminal for CLI commands. To point the CLI at a different Execution
 
 ### Report store database
 
-For the `report` subcommand, execution and report services need a PostgreSQL database. With Docker Compose this is handled automatically (Postgres + migrations start together). For manual setup:
+For the `report` subcommand, execution and report services need a MySQL 8 database. With Docker Compose this is handled automatically (MySQL + migrations start together). For manual setup:
 
 ```bash
-docker compose --env-file compose.values.env up -d postgres db-migrate
-export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
+docker compose --env-file compose.values.env up -d mysql db-migrate
+export DATABASE_URL="cicd:cicd@tcp(localhost:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC"
 ```
 
 See [dev-docs/report-db-setup.md](dev-docs/report-db-setup.md) for connection config (`DATABASE_URL` or `REPORT_DB_URL`) and CI notes.
@@ -639,7 +639,7 @@ job-b:
 - **Language**: Go 1.25
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
-- **Database**: PostgreSQL 16 with pgx driver
+- **Database**: MySQL 8 with `go-sql-driver/mysql`
 - **Observability**: OpenTelemetry SDK, Prometheus, Loki, Tempo, Grafana
 - **Containers**: Docker, Docker Compose
 - **Kubernetes**: Helm, Kustomize, raw manifests
@@ -661,3 +661,5 @@ This project is licensed under the terms specified in the [LICENSE](LICENSE) fil
 ## Team
 
 This project is developed by the e-team for CS7580 SEA-SP26.
+
+

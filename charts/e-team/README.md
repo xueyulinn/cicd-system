@@ -12,7 +12,7 @@ Kubernetes-enabled by this chart:
 - `worker-service`
 - `reporting-service`
 - `rabbitmq` Deployment, Service, and credentials `Secret` when `rabbitmq.enabled=true` (AMQP for pipeline job dispatch; aligns with Docker Compose)
-- `postgres` StatefulSet, Service, Secret, and migration `Job` when `postgres.enabled=true`
+- `MySQL` StatefulSet, Service, Secret, and migration `Job` when `mysql.enabled=true`
 
 Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `EXECUTION_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
 
@@ -81,15 +81,15 @@ If the release already exists and you rebuilt local Minikube images, apply the l
 helm upgrade e-team ./charts/e-team -n e-team
 ```
 
-If you want to use an external Postgres instance instead of the in-cluster StatefulSet:
+If you want to use an external MySQL instance instead of the in-cluster StatefulSet:
 
 ```bash
 helm install e-team ./charts/e-team \
   -n e-team --create-namespace \
-  --set postgres.enabled=false \
-  --set externalDatabase.url='postgres://cicd:cicd@host:5432/reportstore?sslmode=disable' \
+  --set mysql.enabled=false \
+  --set externalDatabase.url='cicd:cicd@tcp(host:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC' \
   --set externalDatabase.host='host' \
-  --set externalDatabase.port=5432 \
+  --set externalDatabase.port=3306 \
   --set externalDatabase.username='cicd' \
   --set externalDatabase.password='cicd' \
   --set externalDatabase.database='reportstore'
@@ -101,7 +101,7 @@ helm install e-team ./charts/e-team \
 helm upgrade e-team ./charts/e-team -n e-team
 ```
 
-The migration job runs as a `post-install,post-upgrade` hook when `postgres.enabled=true`, so the Postgres Secret/Service/StatefulSet are created first and the hook waits for the database to become ready before applying SQL.
+The migration job runs as a `post-install,post-upgrade` hook when `mysql.enabled=true`, so the MySQL Secret/Service/StatefulSet are created first and the hook waits for the database to become ready before applying SQL.
 
 ## Uninstall
 
@@ -109,7 +109,7 @@ The migration job runs as a `post-install,post-upgrade` hook when `postgres.enab
 helm uninstall e-team -n e-team
 ```
 
-The chart is intended to preserve the PostgreSQL PVC so report data is not removed accidentally. Remove the PVC manually only if you want to destroy the stored report data.
+The chart is intended to preserve the MySQL PVC so report data is not removed accidentally. Remove the PVC manually only if you want to destroy the stored report data.
 
 ## Logs
 
@@ -279,5 +279,7 @@ At the time of writing, `run` reaches the Kubernetes execution and worker servic
 - Readiness probe returns `404`: you are likely using stale service images; rebuild the local Minikube images from this repository and run `helm upgrade`
 - Worker startup failures: confirm `/var/run/docker.sock` exists inside the node and the `hostPath` mount is allowed
 - `run` fails with Git clone/authentication errors: the worker is trying to clone the repository revision inside Kubernetes; public repos work more easily, while private repos need credentials injected into the worker
-- External DB mode misconfigured: when `postgres.enabled=false`, set `externalDatabase.url`; if the DB wait init containers remain enabled, also set `externalDatabase.host`, `port`, `username`, `password`, and `database`
+- External DB mode misconfigured: when `mysql.enabled=false`, set `externalDatabase.url`; if the DB wait init containers remain enabled, also set `externalDatabase.host`, `port`, `username`, `password`, and `database`
 - Observability pods fail to start: inspect `kubectl -n e-team logs deploy/e-team-e-team-grafana`, `kubectl -n e-team logs deploy/e-team-e-team-otel-collector`, and `kubectl -n e-team logs ds/e-team-e-team-promtail`
+
+

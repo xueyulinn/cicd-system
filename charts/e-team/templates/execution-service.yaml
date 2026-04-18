@@ -50,28 +50,28 @@ spec:
           image: "{{ .Values.executionService.waitForDatabase.image.repository }}:{{ .Values.executionService.waitForDatabase.image.tag }}"
           imagePullPolicy: {{ .Values.executionService.waitForDatabase.image.pullPolicy }}
           env:
-            - name: PGHOST
+            - name: DB_HOST
               value: {{ include "e-team.databaseHost" . | quote }}
-            - name: PGPORT
+            - name: DB_PORT
               value: {{ include "e-team.databasePort" . | quote }}
-            - name: PGUSER
+            - name: DB_USER
               value: {{ include "e-team.databaseUser" . | quote }}
-            - name: PGDATABASE
+            - name: DB_NAME
               value: {{ include "e-team.databaseName" . | quote }}
-            - name: PGPASSWORD
+            - name: DB_PASSWORD
               value: {{ include "e-team.databasePassword" . | quote }}
           command:
             - sh
             - -c
             - |
               set -e
-              echo "Waiting for Postgres..."
-              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+              echo "Waiting for MySQL..."
+              until mysqladmin --protocol=TCP -h "$DB_HOST" -P "$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" ping --silent; do
                 sleep 2
               done
               echo "Waiting for migrations (pipeline_runs)..."
-              until [ "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -A -c \
-                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pipeline_runs')::text" | tr -d '[:space:]')" = "true" ]; do
+              until [ "$(mysql --protocol=TCP -h "$DB_HOST" -P "$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e \
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'pipeline_runs'" | tr -d '[:space:]')" = "1" ]; do
                 sleep 2
               done
         {{- end }}

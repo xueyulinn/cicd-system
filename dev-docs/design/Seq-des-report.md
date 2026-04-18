@@ -2,7 +2,7 @@
 
 ## Workflow Overview
 
-This diagram illustrates how users query pipeline execution results through the reporting system. The Reporting Service aggregates data from PostgreSQL and returns formatted results based on user-specified filters.
+This diagram illustrates how users query pipeline execution results through the reporting system. The Reporting Service aggregates data from MySQL 8 and returns formatted results based on user-specified filters.
 
 ```mermaid
 sequenceDiagram
@@ -10,7 +10,7 @@ sequenceDiagram
     participant CLI as CLI
     participant GW as Gateway<br/>:8000
     participant Report as Report<br/>:8004
-    participant DB as PostgreSQL<br/>:5432
+    participant DB as MySQL 8<br/>:3306
 
     Dev->>CLI: cicd report --pipeline default<br/>--run 1 --stage build
     
@@ -59,7 +59,7 @@ sequenceDiagram
     - Gateway routes the request to Reporting Service
 
 2. **Pipeline Run Lookup** (Steps 4-5)
-    - Reporting Service queries PostgreSQL for the specified pipeline run
+    - Reporting Service queries MySQL 8 for the specified pipeline run
     - Two possible outcomes:
         - **Run exists**: Proceed to stage lookup
         - **Run not found**: Return 404 error immediately
@@ -87,3 +87,4 @@ The Reporting Service supports various query patterns:
 - **Full pipeline report**: `cicd report --pipeline default --run 1` (returns all stages and jobs)
 - **Stage-specific report**: `cicd report --pipeline default --run 1 --stage build` (returns jobs in 'build' stage)
 - **Latest run**: `cicd report --pipeline default` (omit run number to get most recent execution)
+
