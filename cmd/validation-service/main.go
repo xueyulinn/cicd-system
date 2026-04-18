@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,82 +16,44 @@ import (
 
 const serviceName = "validation-service"
 
-type routeRegistrar interface {
-	RegisterRoutes(mux *http.ServeMux)
-}
+func main() {
+	ctx := context.Background()
 
-type httpServer interface {
-	ListenAndServe() error
-	Shutdown(ctx context.Context) error
-}
-
-type dependencies struct {
-	initObservability     func(ctx context.Context, service string) (func(context.Context) error, error)
-	newHandler            func() routeRegistrar
-	metricsHandler        func() http.Handler
-	tracingMiddleware     func(service string, next http.Handler) http.Handler
-	httpMetricsMiddleware func(next http.Handler) http.Handler
-	getEnvOrDefault       func(key, fallback string) string
-	newServer             func(addr string, handler http.Handler) httpServer
-	notifySignals         func(c chan<- os.Signal, sig ...os.Signal)
-}
-
-func defaultDependencies() dependencies {
-	return dependencies{
-		initObservability: observability.Init,
-		newHandler: func() routeRegistrar {
-			return validation.NewHandler()
-		},
-		metricsHandler:        observability.MetricsHandler,
-		tracingMiddleware:     observability.TracingMiddleware,
-		httpMetricsMiddleware: observability.HTTPMetricsMiddleware,
-		getEnvOrDefault:       config.GetEnvOrDefault,
-		newServer: func(addr string, handler http.Handler) httpServer {
-			return &http.Server{
-				Addr:         addr,
-				Handler:      handler,
-				ReadTimeout:  15 * time.Second,
-				WriteTimeout: 15 * time.Second,
-				IdleTimeout:  60 * time.Second,
-			}
-		},
-		notifySignals: signal.Notify,
-	}
-}
-
-func run(ctx context.Context, deps dependencies) error {
-	shutdown, err := deps.initObservability(ctx, serviceName)
+	shutdown, err := observability.Init(ctx, serviceName)
 	if err != nil {
-		return fmt.Errorf("failed to init observability: %w", err)
+		slog.Error("failed to init observability", "error", err)
+		os.Exit(1)
 	}
 	defer func() { _ = shutdown(ctx) }()
 
-	handler := deps.newHandler()
+	handler := validation.NewHandler()
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	mux.Handle("/metrics", deps.metricsHandler())
+	mux.Handle("/metrics", observability.MetricsHandler())
 
-	wrapped := deps.httpMetricsMiddleware(deps.tracingMiddleware(serviceName, mux))
+	wrapped := observability.HTTPMetricsMiddleware(
+		observability.TracingMiddleware(serviceName, mux))
 
-	addr := ":" + deps.getEnvOrDefault("PORT", config.DefaultValidationPort)
-	server := deps.newServer(addr, wrapped)
-	listenErr := make(chan error, 1)
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultValidationPort)
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      wrapped,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 
 	go func() {
 		slog.Info("service starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			listenErr <- err
+			slog.Error("listen failed", "error", err)
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
-	deps.notifySignals(quit, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-quit:
-	case err := <-listenErr:
-		return fmt.Errorf("listen failed: %w", err)
-	}
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
 	slog.Info("service shutting down")
 
@@ -100,15 +61,8 @@ func run(ctx context.Context, deps dependencies) error {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("forced shutdown: %w", err)
-	}
-	slog.Info("service stopped")
-	return nil
-}
-
-func main() {
-	if err := run(context.Background(), defaultDependencies()); err != nil {
-		slog.Error("service exited with error", "error", err)
-		os.Exit(1)
+		slog.Error("forced shutdown", "error", err)
+	} else {
+		slog.Info("service stopped")
 	}
 }
