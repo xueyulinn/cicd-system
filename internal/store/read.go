@@ -21,6 +21,15 @@ func scanRun(sc interface{ Scan(dest ...any) error }) (Run, error) {
 	return r, err
 }
 
+func closeRows(rows any) {
+	switch r := rows.(type) {
+	case interface{ Close() error }:
+		_ = r.Close()
+	case interface{ Close() }:
+		r.Close()
+	}
+}
+
 // GetRunsByPipeline returns all runs for a pipeline, ordered by run_no ascending.
 func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -30,7 +39,7 @@ func (s *Store) GetRunsByPipeline(ctx context.Context, pipeline string) ([]Run, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	var runs []Run
 	for rows.Next() {
@@ -80,7 +89,7 @@ func (s *Store) GetStagesForRun(ctx context.Context, pipeline string, runNo int,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	var stages []Stage
 	for rows.Next() {
@@ -113,7 +122,7 @@ func (s *Store) GetJobsForRun(ctx context.Context, pipeline string, runNo int, s
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	var jobs []Job
 	for rows.Next() {
