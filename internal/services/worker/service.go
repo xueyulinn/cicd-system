@@ -7,20 +7,20 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/moby/moby/client"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/mq"
 	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
-	"github.com/moby/moby/client"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 const (
-	defaultJobTimeout = 5 * time.Minute
+	defaultJobTimeout = 10 * time.Minute
 
 	workerTracerName = "worker-service"
 )
@@ -36,42 +36,25 @@ type Service struct {
 	mqConfig     mq.Config
 }
 
-// NewService creates a worker service backed by Docker and RabbitMQ consumer groups.
-func NewService(ctx context.Context, jobTimeout time.Duration) (*Service, error) {
+// NewService constructs a worker service with lazy dependency initialization.
+func NewService(jobTimeout time.Duration) *Service {
 	if jobTimeout == 0 {
 		jobTimeout = defaultJobTimeout
 	}
 
-	docker, err := NewDockerClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create docker client: %w", err)
-	}
-
 	cfg := mq.LoadConfig()
-	mqConn, err := amqp.Dial(cfg.URL)
-	if err != nil {
-		_ = docker.Close()
-		return nil, fmt.Errorf("connect rabbitmq: %w", err)
-	}
-	concurrency := loadWorkerConcurrency()
-	jobConsumers, err := createJobConsumers(cfg, mqConn, concurrency)
-	if err != nil {
-		_ = mqConn.Close()
-		_ = docker.Close()
-		return nil, err
-	}
 
 	return &Service{
-		docker:       docker,
+		docker:       nil,
 		jobTimeout:   jobTimeout,
-		jobConsumers: jobConsumers,
-		mqConn:       mqConn,
+		jobConsumers: make([]mq.Consumer, 0),
+		mqConn:       nil,
 		executionURL: config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
 		mqConfig:     cfg,
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-	}, nil
+	}
 }
 
 // Close releases all underlying consumers and Docker resources held by Service.
@@ -84,11 +67,14 @@ func (s *Service) Close() error {
 			_ = consumer.Close()
 		}
 	}
+	s.jobConsumers = nil
 	if s.mqConn != nil {
 		_ = s.mqConn.Close()
+		s.mqConn = nil
 	}
 	if s.docker != nil {
 		_ = s.docker.Close()
+		s.docker = nil
 	}
 	return nil
 }

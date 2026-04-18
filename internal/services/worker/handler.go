@@ -11,20 +11,11 @@ import (
 // Handler exposes HTTP endpoints and lifecycle hooks for the worker service.
 type Handler struct {
 	service *Service
-	initErr error
 }
 
-// NewHandler constructs a handler and initializes worker dependencies eagerly.
-// If initialization fails, the handler still returns and surfaces the error via
-// readiness checks and Run.
+// NewHandler constructs a handler; dependencies are initialized lazily in Run.
 func NewHandler() *Handler {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	srv, err := NewService(ctx, 0)
-	if err != nil {
-		return &Handler{initErr: err}
-	}
+	srv := NewService(0)
 
 	return &Handler{
 		service: srv,
@@ -52,9 +43,6 @@ func (h *Handler) Run(ctx context.Context) error {
 	if h == nil {
 		return nil
 	}
-	if h.initErr != nil {
-		return h.initErr
-	}
 	if h.service == nil {
 		return nil
 	}
@@ -73,11 +61,6 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "worker service not ready: "+h.initErr.Error())
 		return
 	}
 
