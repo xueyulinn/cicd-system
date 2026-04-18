@@ -67,7 +67,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -89,5 +89,5 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ready"})
 }

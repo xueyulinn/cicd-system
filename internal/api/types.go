@@ -2,6 +2,12 @@
 // These types are the single source of truth for API contracts (validate, dryrun, run).
 package api
 
+// StatusResponse is the common response shape for simple status endpoints
+// such as /health and /ready.
+type StatusResponse struct {
+	Status string `json:"status"`
+}
+
 // ValidateRequest is the request body for POST /validate and POST /dryrun.
 type ValidateRequest struct {
 	YAMLContent string `json:"yaml_content"`

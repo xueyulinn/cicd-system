@@ -63,7 +63,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ready"})
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +72,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
@@ -150,5 +150,5 @@ func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn f
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ok"})
 }

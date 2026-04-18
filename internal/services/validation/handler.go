@@ -37,7 +37,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 // handleValidate validates YAML pipeline
@@ -61,7 +61,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := h.service.ValidateYAML(req.YAMLContent)
-	
+
 	api.WriteJSON(w, http.StatusOK, response)
 }
 
@@ -105,5 +105,5 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ready"})
 }

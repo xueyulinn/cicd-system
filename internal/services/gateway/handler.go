@@ -63,11 +63,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := map[string]interface{}{
-		"status": "healthy",
-	}
-
-	api.WriteJSON(w, http.StatusOK, response)
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 // handleServices returns status of all services
@@ -261,9 +257,12 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	response := map[string]interface{}{
-		"status":   overallStatus,
-		"services": services,
+	response := struct {
+		api.StatusResponse
+		Services map[string]string `json:"services"`
+	}{
+		StatusResponse: api.StatusResponse{Status: overallStatus},
+		Services:       services,
 	}
 
 	api.WriteJSON(w, statusCode, response)
