@@ -4,7 +4,7 @@
 -- Pipeline runs (one per execution)
 CREATE TABLE IF NOT EXISTS pipeline_runs (
     id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    pipeline    VARCHAR(512) NOT NULL,
+    pipeline    VARCHAR(255) NOT NULL,
     run_no      INT NOT NULL,
     start_time  DATETIME(6) NOT NULL,
     end_time    DATETIME(6) NULL,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 -- Stage runs (one per stage per run)
 CREATE TABLE IF NOT EXISTS stage_runs (
     id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    pipeline    VARCHAR(512) NOT NULL,
+    pipeline    VARCHAR(255) NOT NULL,
     run_no      INT NOT NULL,
     stage       VARCHAR(256) NOT NULL,
     start_time  DATETIME(6) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
 -- Job runs (one per job per run)
 CREATE TABLE IF NOT EXISTS job_runs (
     id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    pipeline    VARCHAR(512) NOT NULL,
+    pipeline    VARCHAR(255) NOT NULL,
     run_no      INT NOT NULL,
     stage       VARCHAR(256) NOT NULL,
     job         VARCHAR(256) NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
 
 -- Per-pipeline run number allocator used by execution service.
 CREATE TABLE IF NOT EXISTS pipeline_sequences (
-    pipeline    VARCHAR(512) NOT NULL,
+    pipeline    VARCHAR(255) NOT NULL,
     next_run_no INT NOT NULL DEFAULT 1,
     PRIMARY KEY (pipeline)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
