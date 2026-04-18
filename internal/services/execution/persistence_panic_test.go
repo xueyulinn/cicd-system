@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 func TestPersistenceMethodsPanicWithUninitializedStoreInstance(t *testing.T) {

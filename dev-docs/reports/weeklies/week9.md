@@ -4,27 +4,27 @@
 
 | Task | Weight | Assignee  | 
 | ---- |--------|-----------| 
-|[[Observability] Add HTTP client latency metrics and Grafana dashboard (server + client views)  ](https://github.com/CS7580-SEA-SP26/e-team/issues/268) | M      | Eugenia-Z | 
-|[[Observability] parallel execution and RabbitMQ async path (metrics, logs, traces)](https://github.com/CS7580-SEA-SP26/e-team/issues/270) |  M |Eugenia-Z|
-|[K8S: end-to-end stack including RabbitMQ and parallel-execution config](https://github.com/CS7580-SEA-SP26/e-team/issues/276) | M | Eugenia-Z |
-|[Align local dev: test pipelines and docker-compose.yaml](https://github.com/CS7580-SEA-SP26/e-team/issues/277) | S | Eugenia-Z|
-|[[Worker-Service] Add RabbitMQ Readiness Check to Worker Service Readiness Endpoint](https://github.com/CS7580-SEA-SP26/e-team/issues/274) | S | xueyulinn | 
-|[[Execution-Service] Add RabbitMQ Passive Readiness Check and Use It in Execution Service](https://github.com/CS7580-SEA-SP26/e-team/issues/272) | S | xueyulinn | 
-|[[Worker-Service] Worker service should support parallel MQ consumption with standard service lifecycle endpoints](https://github.com/CS7580-SEA-SP26/e-team/issues/267) | M | xueyulinn | 
-|[[Execution-Service] Execution service cannot reliably orchestrate worker lifecycle through callbacks and message publishing](https://github.com/CS7580-SEA-SP26/e-team/issues/265) | M | xueyulinn | 
-| [[MQ]Add RabbitMQ-based job message pipeline and tests](https://github.com/CS7580-SEA-SP26/e-team/issues/262) | M | xueyulinn|
-|[[Deduplication] Add tests for dedupe in services](https://github.com/CS7580-SEA-SP26/e-team/issues/291) | M | Asurkatha|
-|[[Deduplication] Add deduplication logic](https://github.com/CS7580-SEA-SP26/e-team/issues/290) | M | Asurkatha|
-|[Update ReadMe with additional features](https://github.com/CS7580-SEA-SP26/e-team/issues/293) | S | Asurkatha |
-|[[GitHubAuth] Add github creds support from the env var](https://github.com/CS7580-SEA-SP26/e-team/issues/292) | M | Asurkatha |
-|[GitHubAuth] Add worker auth documentation for private GitHub repos](https://github.com/CS7580-SEA-SP26/e-team/issues/289) | S | Asurkatha |
+|[[Observability] Add HTTP client latency metrics and Grafana dashboard (server + client views)  ](https://github.com/xueyulinn/cicd-system/issues/268) | M      | Eugenia-Z | 
+|[[Observability] parallel execution and RabbitMQ async path (metrics, logs, traces)](https://github.com/xueyulinn/cicd-system/issues/270) |  M |Eugenia-Z|
+|[K8S: end-to-end stack including RabbitMQ and parallel-execution config](https://github.com/xueyulinn/cicd-system/issues/276) | M | Eugenia-Z |
+|[Align local dev: test pipelines and docker-compose.yaml](https://github.com/xueyulinn/cicd-system/issues/277) | S | Eugenia-Z|
+|[[Worker-Service] Add RabbitMQ Readiness Check to Worker Service Readiness Endpoint](https://github.com/xueyulinn/cicd-system/issues/274) | S | xueyulinn | 
+|[[Execution-Service] Add RabbitMQ Passive Readiness Check and Use It in Execution Service](https://github.com/xueyulinn/cicd-system/issues/272) | S | xueyulinn | 
+|[[Worker-Service] Worker service should support parallel MQ consumption with standard service lifecycle endpoints](https://github.com/xueyulinn/cicd-system/issues/267) | M | xueyulinn | 
+|[[Execution-Service] Execution service cannot reliably orchestrate worker lifecycle through callbacks and message publishing](https://github.com/xueyulinn/cicd-system/issues/265) | M | xueyulinn | 
+| [[MQ]Add RabbitMQ-based job message pipeline and tests](https://github.com/xueyulinn/cicd-system/issues/262) | M | xueyulinn|
+|[[Deduplication] Add tests for dedupe in services](https://github.com/xueyulinn/cicd-system/issues/291) | M | Asurkatha|
+|[[Deduplication] Add deduplication logic](https://github.com/xueyulinn/cicd-system/issues/290) | M | Asurkatha|
+|[Update ReadMe with additional features](https://github.com/xueyulinn/cicd-system/issues/293) | S | Asurkatha |
+|[[GitHubAuth] Add github creds support from the env var](https://github.com/xueyulinn/cicd-system/issues/292) | M | Asurkatha |
+|[GitHubAuth] Add worker auth documentation for private GitHub repos](https://github.com/xueyulinn/cicd-system/issues/289) | S | Asurkatha |
 
 # Carry over tasks
 
 | Task | Weight | Assignee  |
 | ---- |--------|-----------|
-| [ Propagate trace context over RabbitMQ (MQ message / headers)  ](https://github.com/CS7580-SEA-SP26/e-team/issues/278)  | M      | Eugenia-Z |
-| [Automate Docker Image Build & Publish via GitHub Actions](https://github.com/CS7580-SEA-SP26/e-team/issues/281) | S      | Asurkatha 
+| [ Propagate trace context over RabbitMQ (MQ message / headers)  ](https://github.com/xueyulinn/cicd-system/issues/278)  | M      | Eugenia-Z |
+| [Automate Docker Image Build & Publish via GitHub Actions](https://github.com/xueyulinn/cicd-system/issues/281) | S      | Asurkatha 
 
 
 

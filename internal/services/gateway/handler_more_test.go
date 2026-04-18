@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
 func newGatewayTestHandler(t *testing.T, fn http.HandlerFunc) (*Handler, func()) {

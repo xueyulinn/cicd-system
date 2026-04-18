@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/gitutil"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/spf13/cobra"
 )
 

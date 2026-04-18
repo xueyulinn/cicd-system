@@ -1,4 +1,4 @@
-module github.com/CS7580-SEA-SP26/e-team
+module github.com/xueyulinn/cicd-system
 
 go 1.25.6
 

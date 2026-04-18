@@ -4,27 +4,27 @@
 
 | Task                                                                                                                                | Weight | Assignee  |
 | ----------------------------------------------------------------------------------------------------------------------------------- |------| --------- |
-| [[CLI] Run cmd inialization](https://github.com/CS7580-SEA-SP26/e-team/issues/109)                                                  | M    | xueyulinn |
-| [[CLI] Implement cicd run to send pipeline execution request via API Gateway](https://github.com/CS7580-SEA-SP26/e-team/issues/111) | S    | xueyulinn |
-| [[Execution Service]Create execution service](https://github.com/CS7580-SEA-SP26/e-team/issues/112)                                 | M    | xueyulinn |
-| [[Execution Service]Start execution service as an HTTP server](https://github.com/CS7580-SEA-SP26/e-team/issues/113)                | S    | xueyulinn |
-| [[Worker Layer] Worker Service Project Setup ](https://github.com/CS7580-SEA-SP26/e-team/issues/86)                                 | S    | Eugenia-Z |
-| [[Worker Layer] Docker Container Manager Implementation](https://github.com/CS7580-SEA-SP26/e-team/issues/87)                       | L    | Eugenia-Z |
-| [[Worker Layer] Job Processor Core Logic](https://github.com/CS7580-SEA-SP26/e-team/issues/88)                                      | M    | Eugenia-Z |
-| [[Worker Layer] Implement Worker HTTP Service](https://github.com/CS7580-SEA-SP26/e-team/issues/89)                                 | M    | Eugenia-Z |
-| [[Worker Layer] End-to-End Integration Test ](https://github.com/CS7580-SEA-SP26/e-team/issues/90)                                  | M    | Eugenia-Z |
-| [[Worker Layer] Documentation & Optimization](https://github.com/CS7580-SEA-SP26/e-team/issues/91)                                  | S    | Eugenia-Z |
-| [[Project Structure Refactoring] Refactor: Adopt Microservice Architecture](https://github.com/CS7580-SEA-SP26/e-team/issues/92)    | M    | Eugenia-Z |
-| [[Refactor] Extract Planner and Formatter from Dryrun](https://github.com/CS7580-SEA-SP26/e-team/issues/93)                         | M    | Eugenia-Z |
-| [[Bug Fix] Worker runs script via shell so pipeline commands work](https://github.com/CS7580-SEA-SP26/e-team/issues/116)            | S    | Eugenia-Z |
-| [[Worker Layer] Mount workspace and fix timeouts for end-to-end pipeline run](https://github.com/CS7580-SEA-SP26/e-team/issues/117) | S    | Eugenia-Z |
-| [[CLI] Enable shortcut commands without full path](https://github.com/CS7580-SEA-SP26/e-team/issues/105)                            | S    | Asurkatha |
-| [[API Gateway] Implement HTTP API Gateway service](https://github.com/CS7580-SEA-SP26/e-team/issues/100)                            | M    | Asurkatha |
-| [[Refactoring] Restructure codebase for microservices architecture](https://github.com/CS7580-SEA-SP26/e-team/issues/106)           | M    | Asurkatha |
-| [[API Gateway] Fix error message formatting in CLI output](https://github.com/CS7580-SEA-SP26/e-team/issues/104)                    | S    | Asurkatha |
-| [[Infrastructure] Add service management scripts](https://github.com/CS7580-SEA-SP26/e-team/issues/102)                             | S    | Asurkatha |
-| [[Validation Service] Implement HTTP Validation Service](https://github.com/CS7580-SEA-SP26/e-team/issues/101)                      | M    | Asurkatha |
-| [[CLI] Integrate CLI with API Gateway](https://github.com/CS7580-SEA-SP26/e-team/issues/103)                                        | S    | Asurkatha |
+| [[CLI] Run cmd inialization](https://github.com/xueyulinn/cicd-system/issues/109)                                                  | M    | xueyulinn |
+| [[CLI] Implement cicd run to send pipeline execution request via API Gateway](https://github.com/xueyulinn/cicd-system/issues/111) | S    | xueyulinn |
+| [[Execution Service]Create execution service](https://github.com/xueyulinn/cicd-system/issues/112)                                 | M    | xueyulinn |
+| [[Execution Service]Start execution service as an HTTP server](https://github.com/xueyulinn/cicd-system/issues/113)                | S    | xueyulinn |
+| [[Worker Layer] Worker Service Project Setup ](https://github.com/xueyulinn/cicd-system/issues/86)                                 | S    | Eugenia-Z |
+| [[Worker Layer] Docker Container Manager Implementation](https://github.com/xueyulinn/cicd-system/issues/87)                       | L    | Eugenia-Z |
+| [[Worker Layer] Job Processor Core Logic](https://github.com/xueyulinn/cicd-system/issues/88)                                      | M    | Eugenia-Z |
+| [[Worker Layer] Implement Worker HTTP Service](https://github.com/xueyulinn/cicd-system/issues/89)                                 | M    | Eugenia-Z |
+| [[Worker Layer] End-to-End Integration Test ](https://github.com/xueyulinn/cicd-system/issues/90)                                  | M    | Eugenia-Z |
+| [[Worker Layer] Documentation & Optimization](https://github.com/xueyulinn/cicd-system/issues/91)                                  | S    | Eugenia-Z |
+| [[Project Structure Refactoring] Refactor: Adopt Microservice Architecture](https://github.com/xueyulinn/cicd-system/issues/92)    | M    | Eugenia-Z |
+| [[Refactor] Extract Planner and Formatter from Dryrun](https://github.com/xueyulinn/cicd-system/issues/93)                         | M    | Eugenia-Z |
+| [[Bug Fix] Worker runs script via shell so pipeline commands work](https://github.com/xueyulinn/cicd-system/issues/116)            | S    | Eugenia-Z |
+| [[Worker Layer] Mount workspace and fix timeouts for end-to-end pipeline run](https://github.com/xueyulinn/cicd-system/issues/117) | S    | Eugenia-Z |
+| [[CLI] Enable shortcut commands without full path](https://github.com/xueyulinn/cicd-system/issues/105)                            | S    | Asurkatha |
+| [[API Gateway] Implement HTTP API Gateway service](https://github.com/xueyulinn/cicd-system/issues/100)                            | M    | Asurkatha |
+| [[Refactoring] Restructure codebase for microservices architecture](https://github.com/xueyulinn/cicd-system/issues/106)           | M    | Asurkatha |
+| [[API Gateway] Fix error message formatting in CLI output](https://github.com/xueyulinn/cicd-system/issues/104)                    | S    | Asurkatha |
+| [[Infrastructure] Add service management scripts](https://github.com/xueyulinn/cicd-system/issues/102)                             | S    | Asurkatha |
+| [[Validation Service] Implement HTTP Validation Service](https://github.com/xueyulinn/cicd-system/issues/101)                      | M    | Asurkatha |
+| [[CLI] Integrate CLI with API Gateway](https://github.com/xueyulinn/cicd-system/issues/103)                                        | S    | Asurkatha |
 # Carry over tasks
 
 Please note: the carry-over items in the backlog are intended to improve codebase design and quality; they do not indicate that existing functionality is incomplete.
@@ -32,11 +32,11 @@ Please note: the carry-over items in the backlog are intended to improve codebas
 
 | Task | Weight | Assignee |
 | -- |--------| ---- |
-| [Make validation/execution services configurable](https://github.com/CS7580-SEA-SP26/e-team/issues/120)   | S      | Asurkatha     |
-| [Execution service – integrate Git for workspace extraction](https://github.com/CS7580-SEA-SP26/e-team/issues/121) | M |xueyulinn|
-| [Consolidate HTTP request/response types in types.go](https://github.com/CS7580-SEA-SP26/e-team/issues/122) | S | Eugenia-Z | 
-| [Streamline error reporting format across services and CLI](https://github.com/CS7580-SEA-SP26/e-team/issues/123) | S | Eugenia-Z |
-| [Run command: call API gateway instead of execution service directly ](https://github.com/CS7580-SEA-SP26/e-team/issues/124) | S |Asurkatha|
+| [Make validation/execution services configurable](https://github.com/xueyulinn/cicd-system/issues/120)   | S      | Asurkatha     |
+| [Execution service – integrate Git for workspace extraction](https://github.com/xueyulinn/cicd-system/issues/121) | M |xueyulinn|
+| [Consolidate HTTP request/response types in types.go](https://github.com/xueyulinn/cicd-system/issues/122) | S | Eugenia-Z | 
+| [Streamline error reporting format across services and CLI](https://github.com/xueyulinn/cicd-system/issues/123) | S | Eugenia-Z |
+| [Run command: call API gateway instead of execution service directly ](https://github.com/xueyulinn/cicd-system/issues/124) | S |Asurkatha|
 
 
 

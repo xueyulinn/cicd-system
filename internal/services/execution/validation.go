@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/common/planner"
 )
 
 // PrepareRun validates the incoming YAML and returns static execution plan and pipeline dto.

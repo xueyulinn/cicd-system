@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 func expectPanic(t *testing.T, fn func()) {

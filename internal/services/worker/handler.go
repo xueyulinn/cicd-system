@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
 // Handler exposes HTTP endpoints and lifecycle hooks for the worker service.

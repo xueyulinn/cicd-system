@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 type reportStore interface {

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/spf13/cobra"
 )
 

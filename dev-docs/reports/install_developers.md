@@ -70,7 +70,7 @@ sudo apt install -y make build-essential
 ## Step 2: Get the Source Code
 
 ```bash
-git clone https://github.com/CS7580-SEA-SP26/e-team.git
+git clone https://github.com/xueyulinn/cicd-system.git
 cd e-team
 ```
 

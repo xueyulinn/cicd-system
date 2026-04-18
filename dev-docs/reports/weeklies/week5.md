@@ -5,7 +5,7 @@
 
 | Task                                                                                                                                               | Weight | Assignee  | 
 |----------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
-| [[Containerization] Containerize backend services with a single Docker Compose command](https://github.com/CS7580-SEA-SP26/e-team/issues/165)                               |M|xueyulinn|
+| [[Containerization] Containerize backend services with a single Docker Compose command](https://github.com/xueyulinn/cicd-system/issues/165)                               |M|xueyulinn|
 
 
 # Carry over tasks
@@ -23,8 +23,8 @@ Please note: the carry-over items in the backlog are intended to improve codebas
 
 # Design updates
 
-1. We have added database schema into the design doc. Please check it out [here](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/design-db-schema.md).
-2. Updated high level architecture diagram to include the data layer. [here](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/high-level-design.md)
+1. We have added database schema into the design doc. Please check it out [here](https://github.com/xueyulinn/cicd-system/blob/review/dev-docs/design/design-db-schema.md).
+2. Updated high level architecture diagram to include the data layer. [here](https://github.com/xueyulinn/cicd-system/blob/review/dev-docs/design/high-level-design.md)
 
 
 > | Task | Points|

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Install cicd CLI from GitHub Release assets.
-# Usage: curl -sSL https://raw.githubusercontent.com/CS7580-SEA-SP26/e-team/<branch>/scripts/install.sh | sh
+# Usage: curl -sSL https://raw.githubusercontent.com/xueyulinn/cicd-system/<branch>/scripts/install.sh | sh
 #    or: ./install.sh [--with-services] [--stack-dir DIR] [VERSION]
 # Without VERSION, uses latest release tag from GitHub API.
 
 set -e
 
-REPO="CS7580-SEA-SP26/e-team"
+REPO="xueyulinn/cicd-system"
 BINARY_NAME="cicd"
 # Install directory (override with CICD_BIN or PREFIX/bin)
 DEST_DIR="${CICD_BIN:-${PREFIX:-$HOME}/bin}"
