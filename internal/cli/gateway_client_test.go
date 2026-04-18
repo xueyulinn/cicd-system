@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestNewGatewayClient_UsesDefaultAndEnv(t *testing.T) {

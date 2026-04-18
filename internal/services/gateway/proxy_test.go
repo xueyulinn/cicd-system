@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

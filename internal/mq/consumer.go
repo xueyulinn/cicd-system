@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/messages"
 )
 
 // Service level abstraction

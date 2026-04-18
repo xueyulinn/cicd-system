@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 

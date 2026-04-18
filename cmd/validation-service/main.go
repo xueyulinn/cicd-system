@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
-	"github.com/CS7580-SEA-SP26/e-team/internal/services/validation"
+	"github.com/xueyulinn/cicd-system/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/services/validation"
 )
 
 const serviceName = "validation-service"

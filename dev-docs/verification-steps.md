@@ -7,7 +7,7 @@ This document describes how an evaluator can confirm that the CLI, services, and
 1. **Install from GitHub Release (recommended for evaluators)**
 
    ```bash
-   curl -sSL https://raw.githubusercontent.com/CS7580-SEA-SP26/e-team/main/scripts/install.sh | sh
+   curl -sSL https://raw.githubusercontent.com/xueyulinn/cicd-system/main/scripts/install.sh | sh
    ```
 
 2. **Or install from a local clone**

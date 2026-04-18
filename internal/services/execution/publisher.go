@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/xueyulinn/cicd-system/internal/mq"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

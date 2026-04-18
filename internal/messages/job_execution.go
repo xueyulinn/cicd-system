@@ -1,6 +1,6 @@
 package messages
 
-import "github.com/CS7580-SEA-SP26/e-team/internal/models"
+import "github.com/xueyulinn/cicd-system/internal/models"
 
 // JobExecutionMessage is the MQ payload published by execution service and
 // consumed by worker service for a single job run.

@@ -64,7 +64,7 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `WORKER_URL`
 - `DATABASE_URL`
 
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/e-team/README.md).
 
 **Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
 
@@ -198,7 +198,7 @@ All observability configuration files are committed under `observability/`. The 
 
 ```bash
 # Clone the repository
-git clone https://github.com/CS7580-SEA-SP26/e-team.git
+git clone https://github.com/xueyulinn/cicd-system.git
 cd e-team
 
 # Build (Windows / macOS / Linux)
@@ -254,7 +254,7 @@ This section describes how a user can run example pipelines and observe both suc
 
 ### Repository and Example Pipelines
 
-- **Repository**: `CS7580-SEA-SP26/e-team` (this repository).
+- **Repository**: `xueyulinn/cicd-system` (this repository).
 - **Source code**: Go implementation of the CLI and microservices under `cmd/` and `internal/`.
 - **Pipeline definitions**: YAML pipelines under the `.pipelines/` directory, including:
   - `.pipelines/pipeline.yaml`: a complete, **successful** example pipeline (`Default Pipeline`).

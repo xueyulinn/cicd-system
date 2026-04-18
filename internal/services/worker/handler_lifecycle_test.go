@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/xueyulinn/cicd-system/internal/mq"
 )
 
 func TestNewHandler_InitializationFailure(t *testing.T) {

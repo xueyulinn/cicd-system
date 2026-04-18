@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestFormatExecutionPlanYAML_StageOrder(t *testing.T) {

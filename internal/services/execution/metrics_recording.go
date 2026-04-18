@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 func recordPipelineOutcome(pipeline string, runNo int, status string, start time.Time) {

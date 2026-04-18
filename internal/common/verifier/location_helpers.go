@@ -1,8 +1,8 @@
 package verifier
 
 import (
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/models"
 	"gopkg.in/yaml.v3"
 )
 

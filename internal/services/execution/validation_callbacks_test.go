@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
 func TestValidatePipeline_HTTPErrorWithEmptyValidationErrors(t *testing.T) {

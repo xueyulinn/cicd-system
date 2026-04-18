@@ -9,7 +9,7 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 // RabbitClient is the low-level RabbitMQ transport used by higher-level

@@ -3,7 +3,7 @@
 package planner
 
 import (
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 // GenerateExecutionPlan builds an ExecutionPlan from a pipeline (stage order + job dependency resolution).

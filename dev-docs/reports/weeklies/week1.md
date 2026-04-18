@@ -5,31 +5,31 @@
 
 | Task                                                                                                                    | Weight | Assignee  | 
 |-------------------------------------------------------------------------------------------------------------------------|--------|-----------| 
-| [ [[Docs] Create initial high-level architecture design (CLI / REST Service / Data Store)] ]( https://github.com/CS7580-SEA-SP26/e-team/issues/8)                         | Small  | Eugenia-Z | 
-| [[Docs] Define project tech stack and CI/CD strategy            ](https://github.com/CS7580-SEA-SP26/e-team/issues/10)  | Small  | Eugenia-Z | 
-| [[CLI] Implement verify subcommand to validate pipeline YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/13)      | Medium | Eugenia-Z|
-| [[Data Model] Add Pipeline data structure ](https://github.com/CS7580-SEA-SP26/e-team/issues/33)                        | Medium | Eugenia-Z|
-| [[Validator] Validate pipeline structure and references](https://github.com/CS7580-SEA-SP26/e-team/issues/21)           | Medium | Eugenia-Z|
-| [[Validator] Detect dependency cycles in needs (DAG validation)](https://github.com/CS7580-SEA-SP26/e-team/issues/19)   | Medium | Eugenia-Z|
-| [[Validator] Validate needs references](https://github.com/CS7580-SEA-SP26/e-team/issues/18)                            | Medium | Eugenia-Z|
-| [[Error Reporting] Detect and report incorrect types for YAML keys.](https://github.com/CS7580-SEA-SP26/e-team/issues/9) | Small  |Eugenia-Z|
-| [[Error Reporting] Report Cycles in YAML](https://github.com/CS7580-SEA-SP26/e-team/issues/7)                           | Small  |Eugenia-Z|
-| [[Error Reporting] Standardize error format](https://github.com/CS7580-SEA-SP26/e-team/issues/6)                        | Small  | Eugenia-Z|
-| [[Test] Unit tests for validator rules using fixtures](https://github.com/CS7580-SEA-SP26/e-team/issues/22)             | Small  |Eugenia-Z|
-| [[Validator] Validate unique job names](https://github.com/CS7580-SEA-SP26/e-team/issues/17)                            | Small  |Eugenia-Z|
-| [[CLI] Enforce execution only at Git repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/11)              | Small  | xueyulinn
-| [[CLI] Enforce .pipelines directory at repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/12)            | Small  | xueyulinn
-| [[CLI] Support default pipeline file path for verify](https://github.com/CS7580-SEA-SP26/e-team/issues/14)              | Small  | xueyulinn
-| [[CLI] Validate file path is relative to repository root](https://github.com/CS7580-SEA-SP26/e-team/issues/15)          | Small  | xueyulinn
-| [[CLI] Add help and usage text for verify subcommand](https://github.com/CS7580-SEA-SP26/e-team/issues/16)              | Small  | xueyulinn
-| [[Github Config] Create Pipelines for this repo](https://github.com/CS7580-SEA-SP26/e-team/issues/23)                   | Small  | xueyulinn
-| [[Github Config] Fix bugs for repo pipelines](https://github.com/CS7580-SEA-SP26/e-team/issues/27)                      | Small  | xueyulinn
-| [[Test] Add pipeline YAML fixtures for validation scenarios](https://github.com/CS7580-SEA-SP26/e-team/issues/20)       | Small  | Asurkatha
-| [[CLI] Accept folder PATH as input](https://github.com/CS7580-SEA-SP26/e-team/issues/38)                                | Small  | Asurkatha
-| [[Testing] Balance tests to match the adjsuted format](https://github.com/CS7580-SEA-SP26/e-team/issues/46)             | Medium | Asurkatha
-| [[CLI] Adjust "cicd" as the head command](https://github.com/CS7580-SEA-SP26/e-team/issues/39)                          | Small  | Asurkatha
-| [[Refactor] Refactor code (parser.go, check_format.go)](https://github.com/CS7580-SEA-SP26/e-team/issues/42)            | Medium | Asurkatha
-| [[Error Reporting] Report error on needs with jobs from different jobs](https://github.com/CS7580-SEA-SP26/e-team/issues/43) | Small  | Asurkatha
+| [ [[Docs] Create initial high-level architecture design (CLI / REST Service / Data Store)] ]( https://github.com/xueyulinn/cicd-system/issues/8)                         | Small  | Eugenia-Z | 
+| [[Docs] Define project tech stack and CI/CD strategy            ](https://github.com/xueyulinn/cicd-system/issues/10)  | Small  | Eugenia-Z | 
+| [[CLI] Implement verify subcommand to validate pipeline YAML](https://github.com/xueyulinn/cicd-system/issues/13)      | Medium | Eugenia-Z|
+| [[Data Model] Add Pipeline data structure ](https://github.com/xueyulinn/cicd-system/issues/33)                        | Medium | Eugenia-Z|
+| [[Validator] Validate pipeline structure and references](https://github.com/xueyulinn/cicd-system/issues/21)           | Medium | Eugenia-Z|
+| [[Validator] Detect dependency cycles in needs (DAG validation)](https://github.com/xueyulinn/cicd-system/issues/19)   | Medium | Eugenia-Z|
+| [[Validator] Validate needs references](https://github.com/xueyulinn/cicd-system/issues/18)                            | Medium | Eugenia-Z|
+| [[Error Reporting] Detect and report incorrect types for YAML keys.](https://github.com/xueyulinn/cicd-system/issues/9) | Small  |Eugenia-Z|
+| [[Error Reporting] Report Cycles in YAML](https://github.com/xueyulinn/cicd-system/issues/7)                           | Small  |Eugenia-Z|
+| [[Error Reporting] Standardize error format](https://github.com/xueyulinn/cicd-system/issues/6)                        | Small  | Eugenia-Z|
+| [[Test] Unit tests for validator rules using fixtures](https://github.com/xueyulinn/cicd-system/issues/22)             | Small  |Eugenia-Z|
+| [[Validator] Validate unique job names](https://github.com/xueyulinn/cicd-system/issues/17)                            | Small  |Eugenia-Z|
+| [[CLI] Enforce execution only at Git repository root](https://github.com/xueyulinn/cicd-system/issues/11)              | Small  | xueyulinn
+| [[CLI] Enforce .pipelines directory at repository root](https://github.com/xueyulinn/cicd-system/issues/12)            | Small  | xueyulinn
+| [[CLI] Support default pipeline file path for verify](https://github.com/xueyulinn/cicd-system/issues/14)              | Small  | xueyulinn
+| [[CLI] Validate file path is relative to repository root](https://github.com/xueyulinn/cicd-system/issues/15)          | Small  | xueyulinn
+| [[CLI] Add help and usage text for verify subcommand](https://github.com/xueyulinn/cicd-system/issues/16)              | Small  | xueyulinn
+| [[Github Config] Create Pipelines for this repo](https://github.com/xueyulinn/cicd-system/issues/23)                   | Small  | xueyulinn
+| [[Github Config] Fix bugs for repo pipelines](https://github.com/xueyulinn/cicd-system/issues/27)                      | Small  | xueyulinn
+| [[Test] Add pipeline YAML fixtures for validation scenarios](https://github.com/xueyulinn/cicd-system/issues/20)       | Small  | Asurkatha
+| [[CLI] Accept folder PATH as input](https://github.com/xueyulinn/cicd-system/issues/38)                                | Small  | Asurkatha
+| [[Testing] Balance tests to match the adjsuted format](https://github.com/xueyulinn/cicd-system/issues/46)             | Medium | Asurkatha
+| [[CLI] Adjust "cicd" as the head command](https://github.com/xueyulinn/cicd-system/issues/39)                          | Small  | Asurkatha
+| [[Refactor] Refactor code (parser.go, check_format.go)](https://github.com/xueyulinn/cicd-system/issues/42)            | Medium | Asurkatha
+| [[Error Reporting] Report error on needs with jobs from different jobs](https://github.com/xueyulinn/cicd-system/issues/43) | Small  | Asurkatha
 # Carry over tasks
 
 > List all issues that were planned for this week but did not get DONE

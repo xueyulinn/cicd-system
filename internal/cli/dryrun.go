@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
+	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/common/planner"
+	"github.com/xueyulinn/cicd-system/internal/common/verifier"
 	"github.com/spf13/cobra"
 )
 

@@ -4,18 +4,18 @@
 
 | Task | Weight | Assignee  | 
 | ---- |--------|-----------| 
-|[[Design Alternatives] Summarize all the design alternatives discussed](https://github.com/CS7580-SEA-SP26/e-team/issues/64) | M      | Eugenia-Z | 
-|[[Design] Add Message Queue component to both HLD and Sequence Diagram](https://github.com/CS7580-SEA-SP26/e-team/issues/72)| S      | Eugenia-Z |
-|[[Design Docs] Wrap sequence diagrams and high level design in markdown file with detailed documentation](https://github.com/CS7580-SEA-SP26/e-team/issues/74)| S      | Eugenia-Z |
-|[[Bug fix] Remove CLI Usage on Invalid YAML files](https://github.com/CS7580-SEA-SP26/e-team/issues/63)| S      | Eugenia-Z|
-|[[Test]Add unit tests for verify command](https://github.com/CS7580-SEA-SP26/e-team/issues/76) | S      |Eugenia-Z|
-|[[DryRun] Design Model for dryrun output](https://github.com/CS7580-SEA-SP26/e-team/issues/51)|S        |xueyulinn| 
-|[[DryRun] Create dryrun command that extracts the valid YAML data](https://github.com/CS7580-SEA-SP26/e-team/issues/52)|S        |xueyulinn| 
-|[[DryRun] Adjust dryrun implementation for invalid files](https://github.com/CS7580-SEA-SP26/e-team/issues/53)|S        |xueyulinn| 
-|[[Bug Fix] Refactor dryrun and scheduler into internal packages](https://github.com/CS7580-SEA-SP26/e-team/issues/69)|S        |xueyulinn| 
-|[[Bug Fix] Restore Usage Info for Incorrect Subcommands](https://github.com/CS7580-SEA-SP26/e-team/issues/80)|S        |xueyulinn| 
-|[[System Diagram]Review and refine high-level system diagram for Sprint 2](https://github.com/CS7580-SEA-SP26/e-team/issues/61)|M        |Asurkatha| 
-|[[Sequence Diagram] Sequence Digration Integration & Finalization](https://github.com/CS7580-SEA-SP26/e-team/issues/56)|M        |Asurkatha| 
+|[[Design Alternatives] Summarize all the design alternatives discussed](https://github.com/xueyulinn/cicd-system/issues/64) | M      | Eugenia-Z | 
+|[[Design] Add Message Queue component to both HLD and Sequence Diagram](https://github.com/xueyulinn/cicd-system/issues/72)| S      | Eugenia-Z |
+|[[Design Docs] Wrap sequence diagrams and high level design in markdown file with detailed documentation](https://github.com/xueyulinn/cicd-system/issues/74)| S      | Eugenia-Z |
+|[[Bug fix] Remove CLI Usage on Invalid YAML files](https://github.com/xueyulinn/cicd-system/issues/63)| S      | Eugenia-Z|
+|[[Test]Add unit tests for verify command](https://github.com/xueyulinn/cicd-system/issues/76) | S      |Eugenia-Z|
+|[[DryRun] Design Model for dryrun output](https://github.com/xueyulinn/cicd-system/issues/51)|S        |xueyulinn| 
+|[[DryRun] Create dryrun command that extracts the valid YAML data](https://github.com/xueyulinn/cicd-system/issues/52)|S        |xueyulinn| 
+|[[DryRun] Adjust dryrun implementation for invalid files](https://github.com/xueyulinn/cicd-system/issues/53)|S        |xueyulinn| 
+|[[Bug Fix] Refactor dryrun and scheduler into internal packages](https://github.com/xueyulinn/cicd-system/issues/69)|S        |xueyulinn| 
+|[[Bug Fix] Restore Usage Info for Incorrect Subcommands](https://github.com/xueyulinn/cicd-system/issues/80)|S        |xueyulinn| 
+|[[System Diagram]Review and refine high-level system diagram for Sprint 2](https://github.com/xueyulinn/cicd-system/issues/61)|M        |Asurkatha| 
+|[[Sequence Diagram] Sequence Digration Integration & Finalization](https://github.com/xueyulinn/cicd-system/issues/56)|M        |Asurkatha| 
 
 # Carry over tasks
 
@@ -38,8 +38,8 @@
 
 # Design updates
 
-1. We have largely revamped our system design. Please see the details [High Level Design](https://github.com/CS7580-SEA-SP26/e-team/blob/8f77443566e770bcf0ad28132a889a5468c49275/dev-docs/design/high-level-design.md).
-2. Added Sequence Diagrams to the Markdown files with proper design documentation [pipeline sequence diagram](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/Seq-des-pipeline.md) and [report sequence diagram](https://github.com/CS7580-SEA-SP26/e-team/blob/review/dev-docs/design/Seq-des-report.md)
+1. We have largely revamped our system design. Please see the details [High Level Design](https://github.com/xueyulinn/cicd-system/blob/8f77443566e770bcf0ad28132a889a5468c49275/dev-docs/design/high-level-design.md).
+2. Added Sequence Diagrams to the Markdown files with proper design documentation [pipeline sequence diagram](https://github.com/xueyulinn/cicd-system/blob/review/dev-docs/design/Seq-des-pipeline.md) and [report sequence diagram](https://github.com/xueyulinn/cicd-system/blob/review/dev-docs/design/Seq-des-report.md)
 
 
 > | Task | Points|

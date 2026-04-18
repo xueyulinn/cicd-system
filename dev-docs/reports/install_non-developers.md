@@ -58,7 +58,7 @@ You should see "Hello from Docker!" in the output.
 
 All release assets are available on the GitHub release page:
 
-> https://github.com/CS7580-SEA-SP26/e-team/releases/tag/v0.1.0-beta
+> https://github.com/xueyulinn/cicd-system/releases/tag/v0.1.0-beta
 
 ### Option A: Download from the browser
 
@@ -83,7 +83,7 @@ Follow the prompts: select **GitHub.com** → **HTTPS** → **Login with a web b
 Then download all release assets:
 
 ```bash
-gh release download v0.1.0-beta --repo CS7580-SEA-SP26/e-team
+gh release download v0.1.0-beta --repo xueyulinn/cicd-system
 ```
 
 ### Install the CLI
