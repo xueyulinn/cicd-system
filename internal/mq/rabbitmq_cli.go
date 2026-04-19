@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -26,6 +27,8 @@ const (
 	reconnectDelay     = 1 * time.Second
 	maxPublishAttempts = 3
 )
+
+var ErrConnectionClosed = errors.New("rabbit connection closed")
 
 func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, error) {
 	if err := cfg.Validate(); err != nil {
@@ -84,15 +87,18 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 		return fmt.Errorf("rabbit client is nil")
 	}
 	if handler == nil {
-		return fmt.Errorf("consumer handler is required")
+		return fmt.Errorf("job consume handler is nil")
 	}
 
 	for {
 		deliveries, err := c.startConsume(queue)
 		if err != nil {
-			log.Printf("[mq] start consume failed queue=%s err=%v; reconnecting", queue, err)
+			log.Printf("[mq] consumer declared queue failed, queue=%s err=%v; reconnecting", queue, err)
 			if recErr := c.reconnect(); recErr != nil {
-				log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+				if errors.Is(recErr, ErrConnectionClosed) {
+					return fmt.Errorf("consume queue %q: %w", queue, recErr)
+				}
+				log.Printf("reconnect failed: %v", recErr)
 			}
 			if err := sleepWithContext(ctx, reconnectDelay); err != nil {
 				return err
@@ -119,6 +125,7 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 					log.Printf("[mq] nack delivery from queue=%s err=%v", queue, err)
 					continue
 				}
+				
 				if err := delivery.Ack(false); err != nil {
 					observability.RecordMQDeliveryOutcome(queue, "ack_error")
 					log.Printf("[mq] ack delivery failed queue=%s err=%v; reconnecting", queue, err)
@@ -130,7 +137,10 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 		}
 
 		if recErr := c.reconnect(); recErr != nil {
-			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+			if errors.Is(recErr, ErrConnectionClosed) {
+				return fmt.Errorf("consume queue %q: %w", queue, recErr)
+			}
+			log.Printf("reconnect failed: %v", recErr)
 		}
 		if err := sleepWithContext(ctx, reconnectDelay); err != nil {
 			return err
@@ -219,7 +229,7 @@ func (c *RabbitClient) reconnect() error {
 	}
 
 	if c.conn == nil || c.conn.IsClosed() {
-		return fmt.Errorf("rabbit connection is closed")
+		return ErrConnectionClosed
 	}
 	return c.reopenChannelLocked()
 }

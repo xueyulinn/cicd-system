@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,6 +37,7 @@ var newJobConsumer = func(cfg mq.Config, conn *amqp.Connection) (mq.Consumer, er
 var newDockerClient = NewDockerClient
 var dialRabbitMQ = amqp.Dial
 
+
 // Start blocks and consumes jobs from RabbitMQ until ctx is cancelled or consuming fails.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil {
@@ -44,7 +46,20 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.ensureDependencies(ctx); err != nil {
 		return err
 	}
-	return s.consumeJobs(ctx)
+	for{
+	 	err := s.consumeJobs(ctx)
+		if err == nil || ctx.Err() != nil {
+			return err
+		}
+		if errors.Is(err, mq.ErrConnectionClosed) {
+			s.Close()
+			if err := s.ensureDependencies(ctx); err != nil{
+				return err
+			}
+			continue
+		}
+		return err
+	}
 }
 
 func (s *Service) ensureDependencies(ctx context.Context) error {
