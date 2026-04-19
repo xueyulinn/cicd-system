@@ -37,7 +37,6 @@ var newJobConsumer = func(cfg mq.Config, conn *amqp.Connection) (mq.Consumer, er
 var newDockerClient = NewDockerClient
 var dialRabbitMQ = amqp.Dial
 
-
 // Start blocks and consumes jobs from RabbitMQ until ctx is cancelled or consuming fails.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil {
@@ -46,14 +45,14 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.ensureDependencies(ctx); err != nil {
 		return err
 	}
-	for{
-	 	err := s.consumeJobs(ctx)
+	for {
+		err := s.consumeJobs(ctx)
 		if err == nil || ctx.Err() != nil {
 			return err
 		}
 		if errors.Is(err, mq.ErrConnectionClosed) {
 			s.Close()
-			if err := s.ensureDependencies(ctx); err != nil{
+			if err := s.ensureDependencies(ctx); err != nil {
 				return err
 			}
 			continue
@@ -62,7 +61,13 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 }
 
+// ensureDependencies initializes Docker and MQ consumers with retry until ready
+// or until ctx is canceled. Fatal MQ configuration errors are returned directly.
 func (s *Service) ensureDependencies(ctx context.Context) error {
+	if err := s.mqConfig.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", mq.ErrFatal, err)
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -98,6 +103,9 @@ func (s *Service) ensureDependencies(ctx context.Context) error {
 			jobConsumers, err := createJobConsumers(s.mqConfig, conn)
 			if err != nil {
 				_ = conn.Close()
+				if errors.Is(err, mq.ErrFatal) {
+					return err
+				}
 				log.Printf("[worker] initialize job consumers failed: %v", err)
 				if err := waitForRetry(ctx, dependencyRetryDelay); err != nil {
 					return err
@@ -115,6 +123,8 @@ func (s *Service) ensureDependencies(ctx context.Context) error {
 	}
 }
 
+// consumeWorkers runs all consumers concurrently and waits for either the first
+// worker error, ctx cancellation, or all workers exiting cleanly.
 func consumeWorkers(ctx context.Context, consumers []mq.Consumer, handler func(context.Context, messages.JobExecutionMessage) error) error {
 	consumeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

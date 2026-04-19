@@ -2,7 +2,6 @@ package mq
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -28,14 +27,12 @@ const (
 	maxPublishAttempts = 3
 )
 
-var ErrConnectionClosed = errors.New("rabbit connection closed")
-
 func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, error) {
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFatal, err)
 	}
 	if conn == nil {
-		return nil, fmt.Errorf("rabbit connection is nil")
+		return nil, ErrConnectionClosed
 	}
 	client := &RabbitClient{cfg: cfg, conn: conn}
 	if err := client.reopenChannel(); err != nil {
@@ -50,18 +47,12 @@ func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, 
 
 // create queue if not exists
 func (c *RabbitClient) ensureQueue(queue string) error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.ensureQueueLocked(queue)
 }
 
 func (c *RabbitClient) ensureQueueLocked(queue string) error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	if queue == "" {
 		return fmt.Errorf("queue is required")
 	}
@@ -69,6 +60,7 @@ func (c *RabbitClient) ensureQueueLocked(queue string) error {
 		return fmt.Errorf("rabbit channel is nil")
 	}
 
+	// when the error return value is not nil, the queue could not be declared with these parameters, and the channel will be closed.
 	_, err := c.channel.QueueDeclare(
 		queue,
 		true,
@@ -94,13 +86,7 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 		deliveries, err := c.startConsume(queue)
 		if err != nil {
 			log.Printf("[mq] consumer declared queue failed, queue=%s err=%v; reconnecting", queue, err)
-			if recErr := c.reconnect(); recErr != nil {
-				if errors.Is(recErr, ErrConnectionClosed) {
-					return fmt.Errorf("consume queue %q: %w", queue, recErr)
-				}
-				log.Printf("reconnect failed: %v", recErr)
-			}
-			if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+			if err := c.reconnectAndWait(ctx, queue); err != nil {
 				return err
 			}
 			continue
@@ -125,7 +111,7 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 					log.Printf("[mq] nack delivery from queue=%s err=%v", queue, err)
 					continue
 				}
-				
+
 				if err := delivery.Ack(false); err != nil {
 					observability.RecordMQDeliveryOutcome(queue, "ack_error")
 					log.Printf("[mq] ack delivery failed queue=%s err=%v; reconnecting", queue, err)
@@ -136,16 +122,28 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 			}
 		}
 
-		if recErr := c.reconnect(); recErr != nil {
-			if errors.Is(recErr, ErrConnectionClosed) {
-				return fmt.Errorf("consume queue %q: %w", queue, recErr)
-			}
-			log.Printf("reconnect failed: %v", recErr)
-		}
-		if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+		if err := c.reconnectAndWait(ctx, queue); err != nil {
 			return err
 		}
 	}
+}
+
+// reopens channel and reports err if connection lost
+func (c *RabbitClient) reconnectAndWait(ctx context.Context, queue string) error {
+	if recErr := c.reconnect(); recErr != nil {
+		switch classifyError(recErr) {
+		case ConnLost, Fatal:
+			return fmt.Errorf("consume queue %q: %w", queue, recErr)
+		case CtxDone:
+			return recErr
+		case Retryable:
+			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+		}
+	}
+	if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+		return err
+	}
+	return nil
 }
 
 // implementation of Publish() for RawJobPublisher
@@ -218,14 +216,11 @@ func (c *RabbitClient) startConsume(queue string) (<-chan amqp.Delivery, error) 
 }
 
 func (c *RabbitClient) reconnect() error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if err := c.cfg.Validate(); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFatal, err)
 	}
 
 	if c.conn == nil || c.conn.IsClosed() {
@@ -235,9 +230,6 @@ func (c *RabbitClient) reconnect() error {
 }
 
 func (c *RabbitClient) reopenChannel() error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reopenChannelLocked()
@@ -245,7 +237,7 @@ func (c *RabbitClient) reopenChannel() error {
 
 func (c *RabbitClient) reopenChannelLocked() error {
 	if c.conn == nil || c.conn.IsClosed() {
-		return fmt.Errorf("rabbit connection is closed")
+		return ErrConnectionClosed
 	}
 	if c.channel != nil {
 		_ = c.channel.Close()
