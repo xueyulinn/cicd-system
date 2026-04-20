@@ -10,6 +10,7 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -36,7 +37,7 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		return fmt.Errorf("job publisher is not initialized")
 	}
 
-	tracer := observability.Tracer(executionClientName)
+	tracer := otel.Tracer(executionClientName)
 	ctx, span := tracer.Start(ctx, "mq.job.publish",
 		trace.WithAttributes(
 			attribute.String("pipeline", msg.Pipeline),

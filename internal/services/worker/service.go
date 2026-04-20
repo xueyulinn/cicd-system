@@ -12,8 +12,8 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/mq"
-	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -96,7 +96,7 @@ func (s *Service) Ready(ctx context.Context) error {
 }
 
 func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) (err error) {
-	tracer := observability.Tracer(workerTracerName)
+	tracer := otel.Tracer(workerTracerName)
 	ctx, span := tracer.Start(ctx, "mq.job.consume",
 		trace.WithAttributes(
 			attribute.String("pipeline", msg.Pipeline),
