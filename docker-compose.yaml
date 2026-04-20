@@ -1,8 +1,5 @@
-# MySQL 8 for report store (development).
-#
 # compose.values.env is generated from charts/e-team/values.yaml (single source of truth with Helm):
-#   image tags, MySQL credentials, RabbitMQ image/credentials/RABBITMQ_URL, WORKER_CONCURRENCY,
-#   EXECUTION_URL (worker → execution in Compose DNS).
+#   image tags, service/observability ports, service URLs, DB DSN, RabbitMQ auth/URL, OTel endpoint/protocol.
 # Regenerate: ruby scripts/gen-compose-env-from-values.rb
 # Start: docker compose --env-file compose.values.env up -d
 # Stop:  docker compose --env-file compose.values.env down
@@ -11,13 +8,12 @@
 services:
   rabbitmq:
     image: ${RABBITMQ_IMAGE}
-    container_name: e-team-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_AMQP_PORT}:${RABBITMQ_AMQP_PORT}"
+      - "${RABBITMQ_MANAGEMENT_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -26,14 +22,13 @@ services:
 
   mysql:
     image: ${MYSQL_IMAGE}
-    container_name: e-team-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT}:${MYSQL_PORT}"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
       interval: 5s
@@ -41,52 +36,46 @@ services:
       retries: 5
 
   db-migrate:
-    build:
-      context: .
-      dockerfile: migrations/Dockerfile
     image: ${MIGRATION_IMAGE}
-    container_name: e-team-db-migrate
     depends_on:
       mysql:
         condition: service_healthy
     environment:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       DB_HOST: mysql
-      DB_PORT: "3306"
+      DB_PORT: "${MYSQL_PORT}"
       DB_USER: ${MYSQL_USER}
       DB_NAME: ${MYSQL_DATABASE}
     restart: "no"
 
   api-gateway:
-    container_name: e-team-api-gateway
     image: ${API_GATEWAY_IMAGE}
     environment:
-      PORT: "8000"
-      VALIDATION_URL: http://validation-service:8001
-      EXECUTION_URL: http://execution-service:8002
-      REPORTING_URL: http://reporting-service:8004
+      PORT: "${API_GATEWAY_PORT}"
+      VALIDATION_URL: ${VALIDATION_URL}
+      EXECUTION_URL: ${EXECUTION_URL}
+      REPORTING_URL: ${REPORTING_URL}
       SERVICE_NAME: api-gateway
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
       - validation-service
       - execution-service
       - reporting-service
     ports:
-      - "8000:8000"
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
 
   execution-service:
-    container_name: e-team-execution-service
     image: ${EXECUTION_SERVICE_IMAGE}
     environment:
-      PORT: "8002"
-      DATABASE_URL: ${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE}?parseTime=true&charset=utf8mb4&loc=UTC
+      PORT: "${EXECUTION_SERVICE_PORT}"
+      DATABASE_URL: ${REPORT_DB_DSN}
       RABBITMQ_URL: ${RABBITMQ_URL}
-      VALIDATION_URL: http://validation-service:8001
-      WORKER_URL: http://worker-service:8003
+      VALIDATION_URL: ${VALIDATION_URL}
+      WORKER_URL: ${WORKER_URL}
       SERVICE_NAME: execution-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -97,35 +86,33 @@ services:
       worker-service:
         condition: service_started
     ports:
-      - "8002:8002"
+      - "${EXECUTION_SERVICE_PORT}:${EXECUTION_SERVICE_PORT}"
 
   validation-service:
-    container_name: e-team-validation-service
     image: ${VALIDATION_SERVICE_IMAGE}
     environment:
-      PORT: "8001"
+      PORT: "${VALIDATION_SERVICE_PORT}"
       SERVICE_NAME: validation-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     ports:
-      - "8001:8001"
+      - "${VALIDATION_SERVICE_PORT}:${VALIDATION_SERVICE_PORT}"
 
   worker-service:
-    container_name: e-team-worker-service
     image: ${WORKER_SERVICE_IMAGE}
     # Local-dev friendly: run as root so docker.sock works out of the box.
     user: "0:0"
     environment:
-      PORT: "8003"
+      PORT: "${WORKER_SERVICE_PORT}"
       RABBITMQ_URL: ${RABBITMQ_URL}
       EXECUTION_URL: ${EXECUTION_URL}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       SERVICE_NAME: worker-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     ports:
-      - "8003:8003"
+      - "${WORKER_SERVICE_PORT}:${WORKER_SERVICE_PORT}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -133,23 +120,21 @@ services:
         condition: service_healthy
 
   reporting-service:
-    container_name: e-team-reporting-service
     image: ${REPORTING_SERVICE_IMAGE}
     environment:
-      PORT: "8004"
-      DATABASE_URL: ${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE}?parseTime=true&charset=utf8mb4&loc=UTC
+      PORT: "${REPORTING_SERVICE_PORT}"
+      DATABASE_URL: ${REPORT_DB_DSN}
       SERVICE_NAME: reporting-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
     ports:
-      - "8004:8004"
+      - "${REPORTING_SERVICE_PORT}:${REPORTING_SERVICE_PORT}"
 
   prometheus:
     image: ${PROMETHEUS_IMAGE}
-    container_name: e-team-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -158,35 +143,32 @@ services:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT}:${PROMETHEUS_PORT}"
 
   loki:
     image: ${LOKI_IMAGE}
-    container_name: e-team-loki
     command:
       - -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
     ports:
-      - "3100:3100"
+      - "${LOKI_PORT}:${LOKI_PORT}"
 
   tempo:
     image: ${TEMPO_IMAGE}
-    container_name: e-team-tempo
     command:
       - -config.file=/etc/tempo/tempo.yml
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo-data:/var/tempo
     ports:
-      - "3200:3200"
-      - "4317:4317"
-      - "4318:4318"
+      - "${TEMPO_PORT}:${TEMPO_PORT}"
+      - "${TEMPO_OTLP_GRPC_PORT}:${TEMPO_OTLP_GRPC_PORT}"
+      - "${TEMPO_OTLP_HTTP_PORT}:${TEMPO_OTLP_HTTP_PORT}"
 
   otel-collector:
     image: ${OTEL_COLLECTOR_IMAGE}
-    container_name: e-team-otel-collector
     command:
       - --config=/etc/otelcol-contrib/config.yml
     volumes:
@@ -195,13 +177,12 @@ services:
       - loki
       - tempo
     ports:
-      - "4319:4318"
-      - "13133:13133"
-      - "8890:8889"
+      - "${OTEL_COLLECTOR_OTLP_HOST_PORT}:${OTEL_COLLECTOR_OTLP_HTTP_PORT}"
+      - "${OTEL_COLLECTOR_HEALTH_PORT}:${OTEL_COLLECTOR_HEALTH_PORT}"
+      - "${OTEL_COLLECTOR_METRICS_HOST_PORT}:${OTEL_COLLECTOR_METRICS_PORT}"
 
   promtail:
     image: ${PROMTAIL_IMAGE}
-    container_name: e-team-promtail
     command:
       - -config.file=/etc/promtail/promtail-config.yml
     volumes:
@@ -212,10 +193,9 @@ services:
 
   grafana:
     image: ${GRAFANA_IMAGE}
-    container_name: e-team-grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
     # Order matters: bind-mount dashboards AFTER the named volume so the host JSON
     # overlays /var/lib/grafana/dashboards (otherwise the volume can hide provisioned files).
     volumes:
@@ -227,7 +207,7 @@ services:
       - loki
       - tempo
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT}:${GRAFANA_PORT}"
 
 volumes:
   prometheus-data:
