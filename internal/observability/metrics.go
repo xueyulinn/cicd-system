@@ -2,7 +2,6 @@ package observability
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -140,31 +139,6 @@ func RecordExecutionJobEnqueued(pipeline, stage string) {
 // MetricsHandler returns an http.Handler that serves Prometheus metrics.
 func MetricsHandler() http.Handler {
 	return promhttp.Handler()
-}
-
-// HTTPMetricsMiddleware wraps an http.Handler and records request count + latency.
-func HTTPMetricsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		elapsed := time.Since(start).Seconds()
-
-		path := normalizePath(r.URL.Path)
-		code := http.StatusText(rec.code)
-		httpRequestsTotal.WithLabelValues(r.Method, path, code).Inc()
-		httpRequestDuration.WithLabelValues(r.Method, path).Observe(elapsed)
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	code int
-}
-
-func (r *statusRecorder) WriteHeader(code int) {
-	r.code = code
-	r.ResponseWriter.WriteHeader(code)
 }
 
 // normalizePath keeps known paths and collapses the rest to avoid high cardinality.

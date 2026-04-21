@@ -28,10 +28,13 @@ func main() {
 
 	handler := gateway.NewHandler()
 
+	// HTTP request multiplexer
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
+	// Register metrics handler provided by Prometheus
 	mux.Handle("/metrics", observability.MetricsHandler())
 
+	// wrapped handler with mertrics handler and trace handler
 	wrapped := observability.HTTPMetricsMiddleware(
 		observability.TracingMiddleware(serviceName, mux))
 
