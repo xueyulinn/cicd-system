@@ -86,6 +86,7 @@ func setupOTel(ctx context.Context, serviceName string) (func(context.Context) e
 
 func newPropagator() propagation.TextMapPropagator {
 	return propagation.NewCompositeTextMapPropagator(
+		// W3C trace context
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	)
@@ -101,6 +102,7 @@ func newTracerProvider(ctx context.Context, res *resource.Resource) (*sdktrace.T
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithBatcher(spanExporter),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.5))),
 	)
 	return tp, nil
 }

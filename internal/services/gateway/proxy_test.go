@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -167,7 +168,7 @@ func TestClientValidateDryRunRunRequests(t *testing.T) {
 		httpExecution:  srv.Client(),
 	}
 
-	v, err := c.ValidateRequest("pipeline: {}")
+	v, err := c.ValidateRequest(context.Background(), "pipeline: {}")
 	if err != nil || !v.Valid {
 		t.Fatalf("ValidateRequest err=%v resp=%+v", err, v)
 	}

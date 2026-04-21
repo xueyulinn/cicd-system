@@ -100,8 +100,9 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log := observability.WithTraceContext(r.Context(), slog.Default())
+	ctx := r.Context()
 
-	response, err := h.client.ValidateRequest(yamlContent)
+	response, err := h.client.ValidateRequest(ctx, yamlContent)
 	if err != nil {
 		log.Warn("validate proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())

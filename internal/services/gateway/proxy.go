@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,14 +31,13 @@ type Client struct {
 
 // NewClient creates a new gateway client with trace-propagating HTTP transport and client-side latency metrics per upstream.
 func NewClient() *Client {
-	timeout := 15 * time.Minute
 	return &Client{
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		executionURL:  config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
 		reportURL:     config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
-		httpValidation: observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", timeout),
-		httpExecution:  observability.NewInstrumentedHTTPClient(gatewayClientName, "execution", timeout),
-		httpReporting:  observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", timeout),
+		httpValidation: observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", 2 * time.Minute),
+		httpExecution:  observability.NewInstrumentedHTTPClient(gatewayClientName, "execution", 2 * time.Minute),
+		httpReporting:  observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", 2 * time.Minute),
 	}
 }
 
@@ -89,17 +89,19 @@ func postJSON[T any](client *http.Client, endpoint string, reqBody any, errorPre
 }
 
 // ValidateRequest forwards validation request to validation service
-func (c *Client) ValidateRequest(yamlContent string) (*api.ValidateResponse, error) {
-	reqBody := map[string]string{
-		"yaml_content": yamlContent,
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
+func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.ValidateResponse, error) {
+	reqBody, err := json.Marshal(map[string]string{"yaml_content": yamlContent})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("marshal validation request: %w", err)
+	}
+    req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("construct request failed: %w", err)
 	}
 
-	resp, err := c.httpValidation.Post(c.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.httpValidation.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
