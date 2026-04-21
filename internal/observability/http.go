@@ -9,11 +9,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// NewInstrumentedHTTPClient returns an *http.Client that propagates trace context and records
+// NewInstrumentedHTTPClient returns an *http.Client that propagates trace context and records for outbound http request.
 // Prometheus metrics (http_client_request_duration_seconds, http_client_requests_total) for each request.
 // client is the local service name (e.g. api-gateway); downstream is the logical downstream (e.g. validation).
 func NewInstrumentedHTTPClient(clientName string, downstream string, timeout time.Duration) *http.Client {
-	base := otelhttp.NewTransport(http.DefaultTransport)
+	base := otelhttp.NewTransport(http.DefaultTransport, otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+		return r.Method + " " + r.URL.Path
+	}))
 	return &http.Client{
 		Transport: newMetricsRoundTripper(clientName, downstream, base),
 		Timeout:   timeout,
