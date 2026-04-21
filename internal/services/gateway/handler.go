@@ -133,7 +133,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.DryRunRequest(yamlContent)
+	response, err := h.client.DryRunRequest(r.Context(), yamlContent)
 	if err != nil {
 		log.Warn("dryrun proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
@@ -171,7 +171,7 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.RunRequest(req)
+	response, err := h.client.RunRequest(r.Context(), req)
 	if err != nil {
 		log.Error("run proxy failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())

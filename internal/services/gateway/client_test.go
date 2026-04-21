@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +30,53 @@ func (errReadCloser) Read([]byte) (int, error) {
 
 func (errReadCloser) Close() error {
 	return nil
+}
+
+func postJSON[T any](client *http.Client, endpoint string, reqBody any, errorPrefix string) (*T, error) {
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call %s: %w", errorPrefix, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var typedErr T
+		if parseErr := json.Unmarshal(body, &typedErr); parseErr == nil {
+			switch v := any(typedErr).(type) {
+			case api.ValidateResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			case api.DryRunResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			case api.RunResponse:
+				if len(v.Errors) > 0 {
+					return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, v.Errors[0])
+				}
+			}
+		}
+		return nil, fmt.Errorf("%s returned status %d: %s", errorPrefix, resp.StatusCode, string(body))
+	}
+
+	var out T
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return &out, nil
 }
 
 func TestPostJSONMarshalError(t *testing.T) {
@@ -172,11 +222,11 @@ func TestClientValidateDryRunRunRequests(t *testing.T) {
 	if err != nil || !v.Valid {
 		t.Fatalf("ValidateRequest err=%v resp=%+v", err, v)
 	}
-	d, err := c.DryRunRequest("pipeline: {}")
+	d, err := c.DryRunRequest(context.Background(), "pipeline: {}")
 	if err != nil || !d.Valid || d.Output != "plan" {
 		t.Fatalf("DryRunRequest err=%v resp=%+v", err, d)
 	}
-	r, err := c.RunRequest(api.RunRequest{YAMLContent: "pipeline: {}", Branch: "main", Commit: "abc"})
+	r, err := c.RunRequest(context.Background(), api.RunRequest{YAMLContent: "pipeline: {}", Branch: "main", Commit: "abc"})
 	if err != nil || r.Status != "queued" {
 		t.Fatalf("RunRequest err=%v resp=%+v", err, r)
 	}

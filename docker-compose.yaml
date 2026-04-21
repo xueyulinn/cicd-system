@@ -60,8 +60,8 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
       - validation-service
-      - execution-service
-      - reporting-service
+      # - execution-service
+      # - reporting-service
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
 
