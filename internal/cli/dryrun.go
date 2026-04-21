@@ -3,12 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/common/parser"
 	"github.com/xueyulinn/cicd-system/internal/common/planner"
 	"github.com/xueyulinn/cicd-system/internal/common/verifier"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -17,12 +19,12 @@ const (
 )
 
 var dryRunCmd = &cobra.Command{
-	Use:   "dryrun [config-file]",
-	Short: "Dry-run a pipeline configuration file",
-	Long:  "Validate a pipeline configuration file and print the execution order for stages and jobs",
-	Args:  cobra.MaximumNArgs(1),
+	Use:   "dryrun pipeline-path",
+	Short: "Dryrun a pipeline file",
+	Long:  "Validate a pipeline file first then outputs the execution order for jobs",
+	Args:  cobra.ExactArgs(1),
 	// validate the configuration file first
-	PreRunE: runVerifyQuiet,
+	PreRunE: runVerify,
 	RunE:    runDryRun,
 }
 
@@ -31,14 +33,21 @@ func init() {
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
-	// Get config path
-	configPath := ".pipelines/pipeline.yaml"
-	if len(args) > 0 {
-		configPath = args[0]
+	repo, err := gitutil.Open(".")
+	if err != nil {
+		return err
 	}
+	rootDir := repo.Root()
+	pipelinePath := args[0]
+
+	completePath := pipelinePath
+	if !filepath.IsAbs(pipelinePath) {
+		completePath = filepath.Join(rootDir, pipelinePath)
+	}
+	completePath = filepath.Clean(completePath)
 
 	// Read file content
-	fileContent, err := os.ReadFile(configPath)
+	fileContent, err := os.ReadFile(completePath)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}
@@ -46,27 +55,10 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	// Create gateway client
 	client := NewGatewayClient()
 
-	// Test mode - use direct dry run instead of gateway
-	// Check if we're in test mode or being called from a test
-	testMode := os.Getenv("CICD_TEST_MODE") == "1"
-	
-	// If not in test mode, check if we're being called from a test function
-	if !testMode {
-		// Simple heuristic: if configPath is a temp file, we're probably in a test
-		if strings.Contains(configPath, "TestRunDryRun") || strings.Contains(configPath, "TestDryRunCmd") || strings.Contains(configPath, "TestRunVerify") {
-			testMode = true
-		}
-	}
-	
-	if testMode {
-		return runDryrunDirect(configPath, string(fileContent))
-	}
-
 	// Call gateway for dry run
 	response, err := client.DryRun(string(fileContent))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", configPath, err.Error())
-		return fmt.Errorf("dry run failed with %d error(s)", 1)
+		return fmt.Errorf("dry run failed, error: %w", err)
 	}
 
 	if !response.Valid {
