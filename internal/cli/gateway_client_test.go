@@ -89,7 +89,19 @@ func TestGatewayClientDryRun_Run_Report(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/dryrun":
-			_ = json.NewEncoder(w).Encode(api.DryRunResponse{Valid: true, Output: "ok"})
+			_ = json.NewEncoder(w).Encode(api.DryRunResponse{
+				Valid: true,
+				ExecutionPlan: &models.ExecutionPlan{
+					Stages: []models.StageExecutionPlan{
+						{
+							Name: "build",
+							Jobs: []models.JobExecutionPlan{
+								{Name: "compile"},
+							},
+						},
+					},
+				},
+			})
 		case "/run":
 			_ = json.NewEncoder(w).Encode(api.RunResponse{Pipeline: "demo", RunNo: 7, Status: "queued"})
 		case "/report":
@@ -109,7 +121,7 @@ func TestGatewayClientDryRun_Run_Report(t *testing.T) {
 	c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
 
 	dry, err := c.DryRun("pipeline: {}")
-	if err != nil || dry == nil || !dry.Valid || dry.Output != "ok" {
+	if err != nil || dry == nil || !dry.Valid || dry.ExecutionPlan == nil || len(dry.ExecutionPlan.Stages) != 1 || dry.ExecutionPlan.Stages[0].Name != "build" {
 		t.Fatalf("dry=%#v err=%v", dry, err)
 	}
 

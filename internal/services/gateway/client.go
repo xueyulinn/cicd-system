@@ -41,7 +41,7 @@ func NewClient() *Client {
 	}
 }
 
-// ValidateRequest forwards validation request to validation service
+// ValidateRequest forwards validation request to validation service and decodes the JSON response.
 func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.ValidateResponse, error) {
 	reqBody, err := json.Marshal(map[string]string{"yaml_content": yamlContent})
 	if err != nil {
@@ -51,7 +51,6 @@ func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.
 	if err != nil {
 		return nil, fmt.Errorf("construct request failed: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpValidation.Do(req)
@@ -76,7 +75,6 @@ func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.
 	}
 
 	// Validation errors are business outcomes, not proxy failures.
-	// Some validation service deployments return 400 + structured error payload.
 	if resp.StatusCode == http.StatusBadRequest {
 		out.Valid = false
 		return &out, nil
@@ -91,13 +89,36 @@ func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.
 	return &out, nil
 }
 
-// DryRunRequest forwards dry run request to validation service.
+// ForwardValidate proxies validation responses from downstream directly to upstream response writer.
+func (c *Client) ForwardValidate(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", r.Body)
+	if err != nil {
+		return fmt.Errorf("construct request failed: %w", err)
+	}
+
+	resp, err := c.httpValidation.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call validation service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("copy downstream response failed: %w", err)
+	}
+	return nil
+}
+
+// DryRunRequest forwards dry run request to validation service and decodes the JSON response.
 func (c *Client) DryRunRequest(ctx context.Context, yamlContent string) (*api.DryRunResponse, error) {
 	reqBody, err := json.Marshal(map[string]string{"yaml_content": yamlContent})
 	if err != nil {
 		return nil, fmt.Errorf("marshal dryrun request: %w", err)
 	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/dryrun", bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("construct request failed: %w", err)
@@ -133,6 +154,30 @@ func (c *Client) DryRunRequest(ctx context.Context, yamlContent string) (*api.Dr
 	}
 
 	return &out, nil
+}
+
+// ForwardDryRun proxies dryrun responses from downstream directly to upstream response writer.
+func (c *Client) ForwardDryRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/dryrun", r.Body)
+	if err != nil {
+		return fmt.Errorf("construct request failed: %w", err)
+	}
+
+	resp, err := c.httpValidation.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call dryrun service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("copy downstream response failed: %w", err)
+	}
+	return nil
 }
 
 // RunRequest forwards run request to execution service.

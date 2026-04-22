@@ -201,7 +201,7 @@ func TestClientValidateDryRunRunRequests(t *testing.T) {
 			_, _ = w.Write([]byte(`{"valid":true}`))
 		case "/dryrun":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"valid":true,"output":"plan"}`))
+			_, _ = w.Write([]byte(`{"valid":true,"execution_plan":{"stages":[]}}`))
 		case "/run":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"queued"}`))
@@ -223,7 +223,7 @@ func TestClientValidateDryRunRunRequests(t *testing.T) {
 		t.Fatalf("ValidateRequest err=%v resp=%+v", err, v)
 	}
 	d, err := c.DryRunRequest(context.Background(), "pipeline: {}")
-	if err != nil || !d.Valid || d.Output != "plan" {
+	if err != nil || !d.Valid || d.ExecutionPlan == nil {
 		t.Fatalf("DryRunRequest err=%v resp=%+v", err, d)
 	}
 	r, err := c.RunRequest(context.Background(), api.RunRequest{YAMLContent: "pipeline: {}", Branch: "main", Commit: "abc"})

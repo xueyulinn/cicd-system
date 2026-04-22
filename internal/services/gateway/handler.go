@@ -85,7 +85,6 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, response)
 }
 
-// handleValidate forwards validation requests to validation service
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -93,31 +92,15 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = r.Body.Close() }()
 
-	yamlContent, err := decodeYAMLContentRequest(r)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	log := observability.WithTraceContext(r.Context(), slog.Default())
-	ctx := r.Context()
 
-	response, err := h.client.ValidateRequest(ctx, yamlContent)
-	if err != nil {
-		log.Warn("validate proxy failed", "error", err)
+	if err := h.client.ForwardValidate(r.Context(), w, r); err != nil {
+		log.Warn("validate forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
-	if response.Valid {
-		log.Info("verification succeeds")
-	} else {
-		log.Info("verification rejected", "errors", response.Errors)
-	}
-	api.WriteJSON(w, http.StatusOK, response)
 }
 
-// handleDryRun forwards dry run requests to validation service
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -125,31 +108,15 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = r.Body.Close() }()
 
-	yamlContent, err := decodeYAMLContentRequest(r)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.DryRunRequest(r.Context(), yamlContent)
-	if err != nil {
-		log.Warn("dryrun proxy failed", "error", err)
+	if err := h.client.ForwardDryRun(r.Context(), w, r); err != nil {
+		log.Warn("dryrun forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
-	if response.Valid {
-		log.Info("dryrun ok")
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
-		log.Info("dryrun rejected", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	}
 }
 
-// handleRun forwards run requests to execution service
 func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -187,7 +154,6 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleReport forwards report requests to reporting service.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))

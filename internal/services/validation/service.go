@@ -72,19 +72,10 @@ func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
 		}
 	}
 
-	// Convert execution plan to YAML output
-	output, err := marshalExecutionPlan(plan)
-	if err != nil {
-		return api.DryRunResponse{
-			Valid:  false,
-			Errors: []string{fmt.Sprintf("failed to marshal execution plan: %v", err)},
-		}
-	}
-
 	return api.DryRunResponse{
 		Valid:  true,
 		Errors: []string{},
-		Output: output,
+		ExecutionPlan: plan,
 	}
 }
 
