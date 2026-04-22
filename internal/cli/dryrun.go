@@ -19,17 +19,18 @@ const (
 var formatting string
 
 var dryRunCmd = &cobra.Command{
-	Use:   "dryrun pipeline-path",
-	Short: "Dryrun a pipeline file",
-	Long:  "Validate a pipeline file first then outputs the execution order for jobs",
-	Args:  cobra.ExactArgs(1),
-	// validate the configuration file first
+	Use:     "dryrun pipeline-path [--format yaml|json]",
+	Short:   "Validate a pipeline and preview its execution plan",
+	Long:    "Validates the specified pipeline file and prints the execution plan without running any jobs. Output defaults to YAML and can be changed with --format json.",
+	Example: "cicd dryrun .pipelines/pipeline.yaml\ncicd dryrun .pipelines/pipeline.yaml --format json",
+	Args:    cobra.ExactArgs(1),
 	PreRunE: runVerifyQuiet,
 	RunE:    runDryRun,
+	DisableFlagsInUseLine: true,
 }
 
 func init() {
-	dryRunCmd.Flags().StringVarP(&formatting, "format", "f", formatYAML, "Output format: yaml or json")
+	dryRunCmd.Flags().StringVarP(&formatting, "format", "f", formatYAML, "Execution plan output format: yaml or json")
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
