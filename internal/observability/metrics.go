@@ -47,7 +47,7 @@ var (
 
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
-		Help:    "HTTP request latency (inbound, server handler).",
+		Help:    "Inbound HTTP request latency (inbound, server handler).",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path"})
 
@@ -89,7 +89,7 @@ var (
 	}, []string{"pipeline", "stage"})
 )
 
-// RegisterMetrics registers all CI/CD and HTTP metrics with the default registry.
+// RegisterMetrics registers all metrics with the default registry.
 // Safe to call once at startup.
 func RegisterMetrics() {
 	prometheus.MustRegister(

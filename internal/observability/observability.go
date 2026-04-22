@@ -5,9 +5,9 @@ import (
 	"log/slog"
 )
 
-// Init sets up logging, metrics, and tracing for a service.
+// Bootstrap sets up logging, metrics, and tracing for a service.
 // Returns a shutdown function that flushes pending traces.
-func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
+func Bootstrap(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
 	RegisterMetrics()
 
 	shutdown, err = setupOTel(ctx, serviceName)

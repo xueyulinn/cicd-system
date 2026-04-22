@@ -20,7 +20,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	shutdown, err := observability.Init(ctx, serviceName)
+	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
 		slog.Error("failed to init observability", "error", err)
 		os.Exit(1)

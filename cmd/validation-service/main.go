@@ -19,7 +19,7 @@ const serviceName = "validation-service"
 func main() {
 	ctx := context.Background()
 
-	shutdown, err := observability.Init(ctx, serviceName)
+	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
 		slog.Error("failed to init observability", "error", err)
 		os.Exit(1)
