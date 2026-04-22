@@ -21,6 +21,11 @@ processors:
 exporters:
   otlphttp/tempo:
     endpoint: http://tempo:4318
+  prometheus:
+    # exports endpoint for Prometheus
+    endpoint: "0.0.0.0:8889"
+    translation_strategy: "UnderscoreEscapingWithoutSuffixes"
+
   debug:
     verbosity: basic
 
@@ -31,4 +36,8 @@ service:
       receivers: [otlp]
       processors: [resource, batch]
       exporters: [otlphttp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [prometheus, debug]
 
