@@ -1,166 +1,160 @@
 package observability
 
 import (
-	"io"
+	"crypto/tls"
 	"net/http"
-	"net/http/httptest"
-	"os"
+	"net/url"
 	"testing"
-
-	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
 )
 
-func TestMain(m *testing.M) {
-	// Global default registry; safe once per package test process.
-	RegisterMetrics()
-	os.Exit(m.Run())
-}
-
-func Test_normalizePath(t *testing.T) {
+func TestSchemeFromRequest(t *testing.T) {
 	tests := []struct {
-		in, want string
+		name string
+		req  *http.Request
+		want string
 	}{
-		{"/health", "/health"},
-		{"/ready", "/ready"},
-		{"/metrics", "/metrics"},
-		{"/run", "/run"},
-		{"/unknown/v1/foo", "/other"},
-	}
-	for _, tc := range tests {
-		if got := normalizePath(tc.in); got != tc.want {
-			t.Errorf("normalizePath(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestRecordExecutionReadyBatchSize_negativeBecomesZero(t *testing.T) {
-	before := histogramSampleCount(t, "cicd_execution_ready_batch_size")
-	RecordExecutionReadyBatchSize(-3)
-	after := histogramSampleCount(t, "cicd_execution_ready_batch_size")
-	if after != before+1 {
-		t.Fatalf("expected one new histogram observation, before=%d after=%d", before, after)
-	}
-}
-
-func TestRecordMQJobPublished_outcomes(t *testing.T) {
-	q := "test-queue"
-	beforeS := counterValue(t, "cicd_mq_jobs_published_total", map[string]string{"queue": q, "outcome": "success"})
-	beforeF := counterValue(t, "cicd_mq_jobs_published_total", map[string]string{"queue": q, "outcome": "failure"})
-	RecordMQJobPublished(q, true)
-	RecordMQJobPublished(q, false)
-	if got := counterValue(t, "cicd_mq_jobs_published_total", map[string]string{"queue": q, "outcome": "success"}); got != beforeS+1 {
-		t.Errorf("success counter: want %f got %f", beforeS+1, got)
-	}
-	if got := counterValue(t, "cicd_mq_jobs_published_total", map[string]string{"queue": q, "outcome": "failure"}); got != beforeF+1 {
-		t.Errorf("failure counter: want %f got %f", beforeF+1, got)
-	}
-}
-
-func TestRecordMQDeliveryOutcome(t *testing.T) {
-	q := "q2"
-	out := "acked"
-	before := counterValue(t, "cicd_mq_delivery_outcomes_total", map[string]string{"queue": q, "outcome": out})
-	RecordMQDeliveryOutcome(q, out)
-	if got := counterValue(t, "cicd_mq_delivery_outcomes_total", map[string]string{"queue": q, "outcome": out}); got != before+1 {
-		t.Errorf("delivery counter: want %f got %f", before+1, got)
-	}
-}
-
-func TestRecordExecutionJobEnqueued(t *testing.T) {
-	labels := map[string]string{"pipeline": "p-test", "stage": "build"}
-	before := counterValue(t, "cicd_execution_jobs_enqueued_total", labels)
-	RecordExecutionJobEnqueued("p-test", "build")
-	if got := counterValue(t, "cicd_execution_jobs_enqueued_total", labels); got != before+1 {
-		t.Errorf("enqueued counter: want %f got %f", before+1, got)
-	}
-}
-
-func TestHTTPMetricsMiddleware_recordsRequest(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	})
-	h := HTTPMetricsMiddleware(next)
-
-	pathLabels := map[string]string{"method": "GET", "path": "/health", "code": http.StatusText(http.StatusTeapot)}
-	before := counterValue(t, "http_requests_total", pathLabels)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusTeapot {
-		t.Fatalf("status %d", rec.Code)
+		{
+			name: "nil request defaults to http",
+			req:  nil,
+			want: "http",
+		},
+		{
+			name: "url scheme takes precedence",
+			req: &http.Request{
+				URL: &url.URL{Scheme: "http"},
+				TLS: &tls.ConnectionState{},
+			},
+			want: "http",
+		},
+		{
+			name: "url scheme https",
+			req: &http.Request{
+				URL: &url.URL{Scheme: "https"},
+			},
+			want: "https",
+		},
+		{
+			name: "tls implies https when scheme missing",
+			req: &http.Request{
+				URL: &url.URL{},
+				TLS: &tls.ConnectionState{},
+			},
+			want: "https",
+		},
+		{
+			name: "missing scheme and tls defaults to http",
+			req: &http.Request{
+				URL: &url.URL{},
+			},
+			want: "http",
+		},
+		{
+			name: "nil url with tls defaults to https",
+			req: &http.Request{
+				TLS: &tls.ConnectionState{},
+			},
+			want: "https",
+		},
 	}
 
-	if got := counterValue(t, "http_requests_total", pathLabels); got != before+1 {
-		t.Errorf("http_requests_total: want %f got %f", before+1, got)
-	}
-}
-
-func counterValue(t *testing.T, name string, wantLabels map[string]string) float64 {
-	t.Helper()
-	mfs, err := prometheus.DefaultGatherer.Gather()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, mf := range mfs {
-		if mf.GetName() != name {
-			continue
-		}
-		for _, m := range mf.GetMetric() {
-			if labelsMatch(m.GetLabel(), wantLabels) {
-				return m.GetCounter().GetValue()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := schemeFromRequest(tt.req); got != tt.want {
+				t.Fatalf("schemeFromRequest() = %q, want %q", got, tt.want)
 			}
-		}
+		})
 	}
-	return 0
 }
 
-func histogramSampleCount(t *testing.T, name string) uint64 {
-	t.Helper()
-	mfs, err := prometheus.DefaultGatherer.Gather()
-	if err != nil {
-		t.Fatal(err)
+func TestParseProto(t *testing.T) {
+	tests := []struct {
+		name        string
+		proto       string
+		wantName    string
+		wantVersion string
+	}{
+		{
+			name:        "http 1.1",
+			proto:       "HTTP/1.1",
+			wantName:    "http",
+			wantVersion: "1.1",
+		},
+		{
+			name:        "http2",
+			proto:       "HTTP/2.0",
+			wantName:    "http",
+			wantVersion: "2.0",
+		},
+		{
+			name:        "custom protocol",
+			proto:       "GRPC/2",
+			wantName:    "grpc",
+			wantVersion: "2",
+		},
+		{
+			name:        "trims spaces and lowercases",
+			proto:       "  HTTP/1.0  ",
+			wantName:    "http",
+			wantVersion: "1.0",
+		},
+		{
+			name:        "missing separator falls back",
+			proto:       "HTTP2",
+			wantName:    "http",
+			wantVersion: "",
+		},
+		{
+			name:        "empty falls back",
+			proto:       "",
+			wantName:    "http",
+			wantVersion: "",
+		},
 	}
-	for _, mf := range mfs {
-		if mf.GetName() != name {
-			continue
-		}
-		var total uint64
-		for _, m := range mf.GetMetric() {
-			total += m.GetHistogram().GetSampleCount()
-		}
-		return total
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotName, gotVersion := parseProto(tt.proto)
+			if gotName != tt.wantName || gotVersion != tt.wantVersion {
+				t.Fatalf("parseProto(%q) = (%q, %q), want (%q, %q)", tt.proto, gotName, gotVersion, tt.wantName, tt.wantVersion)
+			}
+		})
 	}
-	return 0
 }
 
-func labelsMatch(lps []*dto.LabelPair, want map[string]string) bool {
-	if len(lps) != len(want) {
-		return false
+func TestServerFromRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *http.Request
+		want string
+	}{
+		{
+			name: "extract hostname from absolute URL",
+			req: &http.Request{
+				URL: &url.URL{
+					Scheme: "https",
+					Host:   "api.example.com:8443",
+				},
+			},
+			want: "api.example.com",
+		},
+		{
+			name: "empty when URL missing",
+			req:  &http.Request{},
+			want: "",
+		},
+		{
+			name: "empty when request is nil",
+			req:  nil,
+			want: "",
+		},
 	}
-	got := make(map[string]string, len(lps))
-	for _, lp := range lps {
-		got[lp.GetName()] = lp.GetValue()
-	}
-	for k, v := range want {
-		if got[k] != v {
-			return false
-		}
-	}
-	return true
-}
 
-func TestMetricsHandler_servesPrometheusText(t *testing.T) {
-	h := MetricsHandler()
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	body, _ := io.ReadAll(rec.Body)
-	if len(body) < 100 {
-		t.Fatalf("metrics body too short: %d", len(body))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := serverFromRequest(tt.req)
+			if got != tt.want {
+				t.Fatalf("serverFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -32,7 +32,6 @@ func main() {
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	mux.Handle("/metrics", observability.MetricsHandler())
 
 	wrapped := observability.HTTPMetricsMiddleware(
 		observability.TracingMiddleware(serviceName, mux))

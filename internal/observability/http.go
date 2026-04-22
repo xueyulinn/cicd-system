@@ -2,7 +2,6 @@ package observability
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -10,7 +9,7 @@ import (
 )
 
 // NewInstrumentedHTTPClient returns an *http.Client that propagates trace context and records for outbound http request.
-// Prometheus metrics (http_client_request_duration_seconds, http_client_requests_total) for each request.
+// OTel metrics (http.client.request.duration) for each request.
 // client is the local service name (e.g. api-gateway); downstream is the logical downstream (e.g. validation).
 func NewInstrumentedHTTPClient(clientName string, downstream string, timeout time.Duration) *http.Client {
 	wrapped := otelhttp.NewTransport(http.DefaultTransport, otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
@@ -24,8 +23,8 @@ func NewInstrumentedHTTPClient(clientName string, downstream string, timeout tim
 
 // Customized RoundTripper by overriding RoundTrip
 type metricsRoundTripper struct {
-	next     http.RoundTripper
-	clientName   string
+	next       http.RoundTripper
+	clientName string
 	downstream string
 }
 
@@ -41,14 +40,8 @@ func (t *metricsRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	// Create span for outbound request
 	resp, err := t.next.RoundTrip(req)
 	elapsed := time.Since(start).Seconds()
+	recordHttpClientRequestDuration(req, resp, err, elapsed)
 
-	code := "error"
-	if err == nil && resp != nil {
-		code = strconv.Itoa(resp.StatusCode)
-	}
-
-	httpClientRequestsTotal.WithLabelValues(t.clientName, t.downstream, code).Inc()
-	httpClientRequestDurationSeconds.WithLabelValues(t.clientName, t.downstream).Observe(elapsed)
 	return resp, err
 }
 
@@ -72,10 +65,7 @@ func HTTPMetricsMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 		elapsed := time.Since(start).Seconds()
 
-		path := normalizePath(r.URL.Path)
-		code := strconv.Itoa(rec.code)
-		httpRequestsTotal.WithLabelValues(r.Method, path, code).Inc()
-		httpRequestDuration.WithLabelValues(r.Method, path).Observe(elapsed)
+		recordHttpServerRequestDuration(rec, r, elapsed)
 	})
 }
 

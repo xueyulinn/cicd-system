@@ -1,144 +1,200 @@
 package observability
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
-// CI/CD pipeline metrics (required by spec).
+var meter = otel.Meter("github.com/xueyulinn/cicd-system/internal/observability")
+
+// HTTP OTel metrics.
 var (
-	PipelineRunsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cicd_pipeline_runs_total",
-		Help: "Total pipeline executions.",
-	}, []string{"pipeline", "run_no", "status"})
-
-	PipelineDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cicd_pipeline_duration_seconds",
-		Help:    "End-to-end pipeline execution time.",
-		Buckets: []float64{5, 10, 30, 60, 120, 300, 600, 1800},
-	}, []string{"pipeline", "run_no"})
-
-	StageDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cicd_stage_duration_seconds",
-		Help:    "Per-stage execution time.",
-		Buckets: []float64{5, 10, 30, 60, 120, 300, 600},
-	}, []string{"pipeline", "run_no", "stage"})
-
-	JobDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "cicd_job_duration_seconds",
-		Help:    "Per-job execution time.",
-		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
-	}, []string{"pipeline", "run_no", "stage", "job"})
-
-	JobRunsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cicd_job_runs_total",
-		Help: "Total job executions.",
-	}, []string{"pipeline", "run_no", "stage", "job", "status"})
+	httpServerRequestDuration metric.Float64Histogram
+	httpClientRequestDuration metric.Float64Histogram
 )
 
-// httpRequestsTotal and httpRequestDuration are per-service HTTP metrics.
-var (
-	httpRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_requests_total",
-		Help: "Total HTTP requests by method, path, and status code.",
-	}, []string{"method", "path", "code"})
+func metricsBootStrap() {
+	var err error
 
-	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_request_duration_seconds",
-		Help:    "Inbound HTTP request latency (inbound, server handler).",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "path"})
-
-	// HTTPClientRequestDurationSeconds measures outbound HTTP from this process (client perspective).
-	// Labels: client = calling service name, upstream = logical peer (e.g. validation, execution).
-	httpClientRequestDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_client_request_duration_seconds",
-		Help:    "Outbound HTTP request latency (client perspective).",
-		Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800},
-	}, []string{"client", "upstream"})
-
-	httpClientRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_client_requests_total",
-		Help: "Outbound HTTP requests by client, upstream, and HTTP status (or error).",
-	}, []string{"client", "upstream", "code"})
-)
-
-// Async execution / RabbitMQ metrics (parallel-ready batches and worker queue).
-var (
-	cicdMQJobsPublishedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cicd_mq_jobs_published_total",
-		Help: "Job messages published to RabbitMQ (success or failure).",
-	}, []string{"queue", "outcome"})
-
-	cicdMQDeliveryOutcomesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cicd_mq_delivery_outcomes_total",
-		Help: "RabbitMQ consumer outcomes per delivery (ack, nack with requeue, or ack error).",
-	}, []string{"queue", "outcome"})
-
-	cicdExecutionReadyBatchSize = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "cicd_execution_ready_batch_size",
-		Help:    "Number of jobs dispatched together in one enqueue batch (parallel-ready within a stage).",
-		Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
-	})
-
-	cicdExecutionJobsEnqueuedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "cicd_execution_jobs_enqueued_total",
-		Help: "Jobs successfully enqueued to the worker queue after publish.",
-	}, []string{"pipeline", "stage"})
-)
-
-// RegisterMetrics registers all metrics with the default registry.
-// Safe to call once at startup.
-func RegisterMetrics() {
-	prometheus.MustRegister(
-		PipelineRunsTotal,
-		PipelineDurationSeconds,
-		StageDurationSeconds,
-		JobDurationSeconds,
-		JobRunsTotal,
-		httpRequestsTotal,
-		httpRequestDuration,
-		httpClientRequestDurationSeconds,
-		httpClientRequestsTotal,
-		cicdMQJobsPublishedTotal,
-		cicdMQDeliveryOutcomesTotal,
-		cicdExecutionReadyBatchSize,
-		cicdExecutionJobsEnqueuedTotal,
+	httpServerRequestDuration, err = meter.Float64Histogram("http.server.request.duration",
+		metric.WithDescription("Duration of HTTP server requests."),
+		metric.WithUnit("s"),
 	)
-}
-
-// RecordMQJobPublished records publish success or failure for a queue.
-func RecordMQJobPublished(queue string, success bool) {
-	outcome := "failure"
-	if success {
-		outcome = "success"
+	if err != nil {
+		panic(err)
 	}
-	cicdMQJobsPublishedTotal.WithLabelValues(queue, outcome).Inc()
-}
 
-// RecordMQDeliveryOutcome records how a single delivery was handled (acked, nack+requeue, or ack error).
-func RecordMQDeliveryOutcome(queue, outcome string) {
-	cicdMQDeliveryOutcomesTotal.WithLabelValues(queue, outcome).Inc()
-}
-
-// RecordExecutionReadyBatchSize records how many jobs were ready in one dispatch batch.
-func RecordExecutionReadyBatchSize(n int) {
-	if n < 0 {
-		n = 0
+	httpClientRequestDuration, err = meter.Float64Histogram("http.client.request.duration",
+		metric.WithDescription("Duration of HTTP client requests."),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		panic(err)
 	}
-	cicdExecutionReadyBatchSize.Observe(float64(n))
 }
 
-// RecordExecutionJobEnqueued increments after a successful publish for one job.
-func RecordExecutionJobEnqueued(pipeline, stage string) {
-	cicdExecutionJobsEnqueuedTotal.WithLabelValues(pipeline, stage).Inc()
+func recordHttpServerRequestDuration(rec *statusRecorder, r *http.Request, elapsed float64) {
+	ctx := context.Background()
+	code := http.StatusInternalServerError
+	method := ""
+	route := ""
+	protoName, protoVersion := "http", ""
+	scheme := schemeFromRequest(r)
+
+	if r != nil {
+		ctx = r.Context()
+		method = strings.TrimSpace(r.Method)
+		if method == "" {
+			method = "_OTHER"
+		}
+		if r.URL != nil {
+			route = normalizePath(r.URL.Path)
+		}
+		protoName, protoVersion = parseProto(r.Proto)
+	}
+	if rec != nil {
+		code = rec.code
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("http.request.method", method),
+		attribute.String("url.scheme", scheme),
+		attribute.Int("http.response.status_code", code),
+		attribute.String("http.route", route),
+		attribute.String("network.protocol.name", protoName),
+		attribute.String("network.protocol.version", protoVersion),
+	}
+	if code >= http.StatusBadRequest {
+		attrs = append(attrs, attribute.String("error.type", strconv.Itoa(code)))
+	}
+
+	httpServerRequestDuration.Record(ctx, elapsed, metric.WithAttributes(attrs...))
 }
 
-// MetricsHandler returns an http.Handler that serves Prometheus metrics.
-func MetricsHandler() http.Handler {
-	return promhttp.Handler()
+func recordHttpClientRequestDuration(req *http.Request, resp *http.Response, err error, elapsed float64) {
+	reqForAttrs := requestForClientAttrs(req, resp)
+	ctx := context.Background()
+	if reqForAttrs != nil {
+		ctx = reqForAttrs.Context()
+	}
+
+	protoName, protoVersion := "http", ""
+	if resp != nil {
+		protoName, protoVersion = parseProto(resp.Proto)
+	} else if reqForAttrs != nil {
+		protoName, protoVersion = parseProto(reqForAttrs.Proto)
+	}
+
+	method := "_OTHER"
+	if reqForAttrs != nil && strings.TrimSpace(reqForAttrs.Method) != "" {
+		method = strings.TrimSpace(reqForAttrs.Method)
+	}
+
+	serverAddr, serverPort := serverAddressPort(reqForAttrs)
+
+	attrs := []attribute.KeyValue{
+		attribute.String("http.request.method", method),
+		attribute.String("network.protocol.name", protoName),
+		attribute.String("network.protocol.version", protoVersion),
+	}
+	if serverAddr != "" {
+		attrs = append(attrs, attribute.String("server.address", serverAddr))
+	}
+	if serverPort > 0 {
+		attrs = append(attrs, attribute.Int("server.port", serverPort))
+	}
+	if resp != nil {
+		attrs = append(attrs, attribute.Int("http.response.status_code", resp.StatusCode))
+		if resp.StatusCode >= http.StatusBadRequest {
+			attrs = append(attrs, attribute.String("error.type", strconv.Itoa(resp.StatusCode)))
+		}
+	} else if err != nil {
+		attrs = append(attrs, attribute.String("error.type", classifyHTTPClientError(err)))
+	}
+
+	httpClientRequestDuration.Record(ctx, elapsed, metric.WithAttributes(attrs...))
+}
+
+func requestForClientAttrs(req *http.Request, resp *http.Response) *http.Request {
+	if req != nil {
+		return req
+	}
+	if resp != nil {
+		return resp.Request
+	}
+	return nil
+}
+
+func serverFromRequest(r *http.Request) string {
+	addr, _ := serverAddressPort(r)
+	return addr
+}
+
+func serverAddressPort(r *http.Request) (string, int) {
+	if r == nil || r.URL == nil {
+		return "", 0
+	}
+
+	address := r.URL.Hostname()
+	port := 0
+	if p := r.URL.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			port = n
+		}
+	}
+	if port == 0 {
+		port = defaultPortForScheme(schemeFromRequest(r))
+	}
+	return address, port
+}
+
+func defaultPortForScheme(scheme string) int {
+	switch strings.ToLower(strings.TrimSpace(scheme)) {
+	case "https":
+		return 443
+	case "http":
+		return 80
+	default:
+		return 0
+	}
+}
+
+func schemeFromRequest(r *http.Request) string {
+	if r == nil {
+		return "http"
+	}
+	if r.URL != nil && r.URL.Scheme != "" {
+		return r.URL.Scheme
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func parseProto(proto string) (string, string) {
+	protoName := "http"
+	protoVersion := ""
+	if parts := strings.SplitN(strings.ToLower(strings.TrimSpace(proto)), "/", 2); len(parts) == 2 {
+		protoName = parts[0]
+		protoVersion = parts[1]
+	}
+	return protoName, protoVersion
+}
+
+func classifyHTTPClientError(err error) string {
+	var timeoutErr interface{ Timeout() bool }
+	if errors.As(err, &timeoutErr) && timeoutErr.Timeout() {
+		return "timeout"
+	}
+	return "transport_error"
 }
 
 // normalizePath keeps known paths and collapses the rest to avoid high cardinality.

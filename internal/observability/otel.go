@@ -108,7 +108,6 @@ func newTracerProvider(ctx context.Context, res *resource.Resource) (*sdktrace.T
 }
 
 func newMeterProvider(ctx context.Context, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
-	// Create trace exporter using environment variables
 	reader, err := autoexport.NewMetricReader(ctx)
 	if err != nil {
 		return nil, err
@@ -122,7 +121,6 @@ func newMeterProvider(ctx context.Context, res *resource.Resource) (*sdkmetric.M
 }
 
 func newLoggerProvider(ctx context.Context, res *resource.Resource) (*sdklog.LoggerProvider, error) {
-	// Create trace exporter using environment variables
 	logExporter, err := autoexport.NewLogExporter(ctx)
 	if err != nil {
 		return nil, err
