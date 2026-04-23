@@ -12,9 +12,10 @@ receivers:
 
 processors:
   batch: {}
+  # adds more resources (resource that can not be got at sdk)
   resource:
     attributes:
-      - action: upsert
+      - action: upsert # replaces old one or inserts
         key: deployment.environment
         value: docker-compose
 
@@ -25,7 +26,8 @@ exporters:
     # exports endpoint for Prometheus
     endpoint: "0.0.0.0:8889"
     translation_strategy: "UnderscoreEscapingWithoutSuffixes"
-
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
   debug:
     verbosity: basic
 
@@ -40,4 +42,8 @@ service:
       receivers: [otlp]
       processors: [resource, batch]
       exporters: [prometheus, debug]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/loki, debug]
 

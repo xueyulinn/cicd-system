@@ -12,11 +12,12 @@ common:
 
 schema_config:
   configs:
-    - from: 2024-01-01
+    - from: 2026-01-01
       store: tsdb
       object_store: filesystem
       schema: v13
       index:
+        # index_2024-04-22 
         prefix: index_
         period: 24h
 
@@ -25,11 +26,14 @@ storage_config:
     directory: /loki/chunks
 
 limits_config:
+  # enable log to contain key-value metadata e.g. Otel log attributes
   allow_structured_metadata: true
   volume_enabled: true
+  retention_period: 672h # 28 days retention
 
 compactor:
   working_directory: /loki/compactor
 
 analytics:
+  # not report data used to Grafana
   reporting_enabled: false
