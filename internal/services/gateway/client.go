@@ -19,23 +19,23 @@ const gatewayClientName = "api-gateway"
 
 // Client handles communication with downstream services
 type Client struct {
-	validationURL  string
-	executionURL   string
-	reportURL      string
-	httpValidation *http.Client
-	httpExecution  *http.Client
-	httpReporting  *http.Client
+	validationURL      string
+	orchestratorURL    string
+	reportURL          string
+	validationClient   *http.Client
+	orchestratorClient *http.Client
+	reportingClient    *http.Client
 }
 
 // NewClient creates a new gateway client with trace-propagating HTTP transport and client-side latency metrics per upstream.
 func NewClient() *Client {
 	return &Client{
-		validationURL:  config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		executionURL:   config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
-		reportURL:      config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
-		httpValidation: observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", 2*time.Minute),
-		httpExecution:  observability.NewInstrumentedHTTPClient(gatewayClientName, "execution", 2*time.Minute),
-		httpReporting:  observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", 2*time.Minute),
+		validationURL:      config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		orchestratorURL:    config.GetEnvOrDefaultURL("ORCHESTRATOR_URL", config.DefaultOrchestratorURL),
+		reportURL:          config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
+		validationClient:   observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", 2*time.Minute),
+		orchestratorClient: observability.NewInstrumentedHTTPClient(gatewayClientName, "orchestrator", 2*time.Minute),
+		reportingClient:    observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", 2*time.Minute),
 	}
 }
 
@@ -46,7 +46,7 @@ func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *
 		return fmt.Errorf("construct request failed: %w", err)
 	}
 
-	resp, err := c.httpValidation.Do(req)
+	resp, err := c.validationClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to call validation service: %w", err)
 	}
@@ -70,7 +70,7 @@ func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 		return fmt.Errorf("construct request failed: %w", err)
 	}
 
-	resp, err := c.httpValidation.Do(req)
+	resp, err := c.validationClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to call dryrun service: %w", err)
 	}
@@ -87,17 +87,17 @@ func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 	return nil
 }
 
-// RunRequest forwards run request to execution service.
+// RunRequest forwards run request to orchestrator service.
 func (c *Client) forwardRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.executionURL+"/run", r.Body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.orchestratorURL+"/run", r.Body)
 	if err != nil {
 		return fmt.Errorf("construct request failed: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpExecution.Do(req)
+	resp, err := c.orchestratorClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to call execution service: %w", err)
+		return fmt.Errorf("failed to call orchestrator service: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -128,7 +128,7 @@ func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse
 		params.Set("job", query.Job)
 	}
 
-	resp, err := c.httpReporting.Get(c.reportURL + "/report?" + params.Encode())
+	resp, err := c.reportingClient.Get(c.reportURL + "/report?" + params.Encode())
 	if err != nil {
 		return nil, http.StatusBadGateway, fmt.Errorf("failed to call reporting service: %w", err)
 	}

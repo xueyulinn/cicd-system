@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/planner"
 	"github.com/xueyulinn/cicd-system/internal/config"
@@ -19,10 +20,9 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/mq"
 	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-const executionClientName = "execution-service"
+const orchestratorClientName = "orchestrator-service"
 
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
@@ -82,24 +82,21 @@ type initializedRun struct {
 }
 
 type pipelineRuntime struct {
-	pipeline        string
-	runNo           int
-	stageOrder      []string
-	stageStates     map[string]*stageState
-	runInfo         runInfo
-	pipelineStart   time.Time
-	jobStartTimes   map[jobKey]time.Time
+	pipeline      string
+	runNo         int
+	stageOrder    []string
+	stageStates   map[string]*stageState
+	runInfo       runInfo
+	pipelineStart time.Time
+	jobStartTimes map[jobKey]time.Time
 }
 
-// NewService constructs an execution Service with DB, MQ, and HTTP dependencies initialized.
+// NewService constructs an orchestrator service with DB, MQ, and HTTP dependencies initialized.
 func NewService(ctx context.Context) (*Service, error) {
 	// create DB client
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
-		connURL = strings.TrimSpace(os.Getenv("REPORT_DB_URL"))
-	}
-	if connURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL or REPORT_DB_URL is required")
+		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
 	st, err := store.New(ctx, connURL)
@@ -125,9 +122,8 @@ func NewService(ctx context.Context) (*Service, error) {
 	return &Service{
 		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		// Validation calls are typically short; worker readiness and future HTTP paths may be long.
-		httpValidation: observability.NewInstrumentedHTTPClient(executionClientName, "validation", 2*time.Minute),
-		httpWorker:     observability.NewInstrumentedHTTPClient(executionClientName, "worker", 10*time.Minute),
+		httpValidation: observability.NewInstrumentedHTTPClient(orchestratorClientName, "validation", 2*time.Minute),
+		httpWorker:     observability.NewInstrumentedHTTPClient(orchestratorClientName, "worker", 10*time.Minute),
 		store:          st,
 		mqConn:         mqConn,
 		jobPublishers:  jobPublishers,
@@ -178,11 +174,11 @@ func (s *Service) nextPublisher() mq.Publisher {
 	return s.jobPublishers[idx%uint64(len(s.jobPublishers))]
 }
 
-// Ready reports whether the execution service can serve requests.
+// Ready reports whether the orchestrator service can serve requests.
 // The service depends on the report store and the worker service.
 func (s *Service) Ready(ctx context.Context) error {
 	if s == nil {
-		return fmt.Errorf("execution service is not initialized")
+		return fmt.Errorf("orchestrator service is not initialized")
 	}
 	if s.store == nil {
 		return fmt.Errorf("report store is not initialized")
@@ -387,13 +383,13 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 	}
 
 	runtime := &pipelineRuntime{
-		pipeline:       pipeline.Name,
-		runNo:          runNo,
-		stageOrder:     stageOrder,
-		stageStates:    stageStates,
-		runInfo:        runInfo,
-		pipelineStart:  runStart,
-		jobStartTimes:  make(map[jobKey]time.Time),
+		pipeline:      pipeline.Name,
+		runNo:         runNo,
+		stageOrder:    stageOrder,
+		stageStates:   stageStates,
+		runInfo:       runInfo,
+		pipelineStart: runStart,
+		jobStartTimes: make(map[jobKey]time.Time),
 	}
 
 	// no stages found

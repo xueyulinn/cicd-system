@@ -212,10 +212,10 @@ func TestClientForwardValidateDryRunRun(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{
-		validationURL:  srv.URL,
-		executionURL:   srv.URL,
-		httpValidation: srv.Client(),
-		httpExecution:  srv.Client(),
+		validationURL:      srv.URL,
+		orchestratorURL:    srv.URL,
+		validationClient:   srv.Client(),
+		orchestratorClient: srv.Client(),
 	}
 
 	validateReq := httptest.NewRequest(http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
@@ -283,8 +283,8 @@ func TestReportRequestScenarios(t *testing.T) {
 
 		run := 3
 		c := &Client{
-			reportURL:     srv.URL,
-			httpReporting: srv.Client(),
+			reportURL:       srv.URL,
+			reportingClient: srv.Client(),
 		}
 		resp, status, err := c.ReportRequest(models.ReportQuery{
 			Pipeline: "p",
@@ -300,7 +300,7 @@ func TestReportRequestScenarios(t *testing.T) {
 	t.Run("http call error", func(t *testing.T) {
 		c := &Client{
 			reportURL: "http://example.com",
-			httpReporting: &http.Client{
+			reportingClient: &http.Client{
 				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 					return nil, errors.New("dial error")
 				}),
@@ -319,7 +319,7 @@ func TestReportRequestScenarios(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{reportURL: srv.URL, httpReporting: srv.Client()}
+		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
 		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
 		if err == nil || status != http.StatusBadRequest || !strings.Contains(err.Error(), "bad request") {
 			t.Fatalf("expected parsed error, got status=%d err=%v", status, err)
@@ -333,7 +333,7 @@ func TestReportRequestScenarios(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{reportURL: srv.URL, httpReporting: srv.Client()}
+		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
 		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
 		if err == nil || status != http.StatusServiceUnavailable || !strings.Contains(err.Error(), "returned status 503") {
 			t.Fatalf("expected status text error, got status=%d err=%v", status, err)
@@ -343,7 +343,7 @@ func TestReportRequestScenarios(t *testing.T) {
 	t.Run("read response error", func(t *testing.T) {
 		c := &Client{
 			reportURL: "http://example.com",
-			httpReporting: &http.Client{
+			reportingClient: &http.Client{
 				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
@@ -365,7 +365,7 @@ func TestReportRequestScenarios(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{reportURL: srv.URL, httpReporting: srv.Client()}
+		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
 		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
 		if err == nil || status != http.StatusBadGateway || !strings.Contains(err.Error(), "failed to unmarshal response") {
 			t.Fatalf("expected unmarshal error, got status=%d err=%v", status, err)

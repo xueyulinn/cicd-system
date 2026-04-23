@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
-// Handler exposes HTTP endpoints for execution service operations.
+// Handler exposes HTTP endpoints for orchestrator service operations.
 type Handler struct {
 	service *Service
 	initErr error
@@ -28,14 +28,14 @@ func NewHandler() *Handler {
 	}
 }
 
-// Close releases resources held by the underlying execution service.
+// Close releases resources held by the underlying orchestrator service.
 func (h *Handler) Close() {
 	if h.service != nil {
 		h.service.Close()
 	}
 }
 
-// RegisterRoutes registers execution service HTTP routes on mux.
+// RegisterRoutes registers orchestrator service HTTP routes on mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.handleHealth)
 	mux.HandleFunc("/run", h.handleExecution)
@@ -51,7 +51,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+h.initErr.Error())
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := h.service.Ready(ctx); err != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+err.Error())
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+err.Error())
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+h.initErr.Error())
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn f
 	}
 
 	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "execution service not ready: "+h.initErr.Error())
+		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 

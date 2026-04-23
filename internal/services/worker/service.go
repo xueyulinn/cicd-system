@@ -27,13 +27,13 @@ const (
 
 // Service runs the worker consumers and dependency checks.
 type Service struct {
-	docker       *client.Client
-	jobTimeout   time.Duration
-	jobConsumers []mq.Consumer
-	mqConn       *amqp.Connection
-	executionURL string
-	httpClient   *http.Client
-	mqConfig     mq.Config
+	docker          *client.Client
+	jobTimeout      time.Duration
+	jobConsumers    []mq.Consumer
+	mqConn          *amqp.Connection
+	orchestratorURL string
+	httpClient      *http.Client
+	mqConfig        mq.Config
 }
 
 // NewService constructs a worker service with lazy dependency initialization.
@@ -45,12 +45,12 @@ func NewService(jobTimeout time.Duration) *Service {
 	cfg := mq.LoadConfig()
 
 	return &Service{
-		docker:       nil,
-		jobTimeout:   jobTimeout,
-		jobConsumers: make([]mq.Consumer, 0),
-		mqConn:       nil,
-		executionURL: config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
-		mqConfig:     cfg,
+		docker:          nil,
+		jobTimeout:      jobTimeout,
+		jobConsumers:    make([]mq.Consumer, 0),
+		mqConn:          nil,
+		orchestratorURL: config.GetEnvOrDefaultURL("ORCHESTRATOR_URL", config.DefaultOrchestratorURL),
+		mqConfig:        cfg,
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},

@@ -75,10 +75,10 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"services": map[string]string{
-			"validation": h.client.validationURL,
-			"execution":  h.client.executionURL,
-			"reporting":  h.client.reportURL,
-			"gateway":    getGatewayPublicURL(),
+			"validation":   h.client.validationURL,
+			"orchestrator": h.client.orchestratorURL,
+			"reporting":    h.client.reportURL,
+			"gateway":      getGatewayPublicURL(),
 		},
 	}
 
@@ -178,9 +178,9 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	services := map[string]string{
-		"validation": "unknown",
-		"reporting":  "unknown",
-		"execution":  "unknown",
+		"validation":   "unknown",
+		"reporting":    "unknown",
+		"orchestrator": "unknown",
 	}
 
 	if resp, err := h.client.checkValidationReady(); err == nil {
@@ -189,8 +189,8 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if resp, err := h.client.checkReportReady(); err == nil {
 		services["reporting"] = resp
 	}
-	if resp, err := h.client.checkExecutionReady(); err == nil {
-		services["execution"] = resp
+	if resp, err := h.client.checkOrchestratorReady(); err == nil {
+		services["orchestrator"] = resp
 	}
 
 	overallStatus := "ready"
@@ -215,7 +215,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Client) checkValidationReady() (string, error) {
-	resp, err := c.httpValidation.Get(c.validationURL + "/ready")
+	resp, err := c.validationClient.Get(c.validationURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -231,7 +231,7 @@ func (c *Client) checkValidationReady() (string, error) {
 }
 
 func (c *Client) checkReportReady() (string, error) {
-	resp, err := c.httpReporting.Get(c.reportURL + "/ready")
+	resp, err := c.reportingClient.Get(c.reportURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -245,8 +245,8 @@ func (c *Client) checkReportReady() (string, error) {
 	return "not ready", nil
 }
 
-func (c *Client) checkExecutionReady() (string, error) {
-	resp, err := c.httpExecution.Get(c.executionURL + "/ready")
+func (c *Client) checkOrchestratorReady() (string, error) {
+	resp, err := c.orchestratorClient.Get(c.orchestratorURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}

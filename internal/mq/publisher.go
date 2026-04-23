@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/xueyulinn/cicd-system/internal/messages"
-	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 // Publisher publishes job messages for worker consumption.
@@ -45,15 +44,15 @@ func NewJobPublisher(client RawPublisher, cfg Config) (*JobPublisher, error) {
 func (p *JobPublisher) PublishJob(ctx context.Context, msg messages.JobExecutionMessage) error {
 	body, err := json.Marshal(msg)
 	if err != nil {
-		observability.RecordMQJobPublished(p.queue, false)
+		// observability.RecordMQJobPublished(p.queue, false)
 		return fmt.Errorf("marshal job execution message: %w", err)
 	}
 
 	if err := p.client.Publish(ctx, p.queue, body); err != nil {
-		observability.RecordMQJobPublished(p.queue, false)
+		// observability.RecordMQJobPublished(p.queue, false)
 		return fmt.Errorf("publish job execution message: %w", err)
 	}
-	observability.RecordMQJobPublished(p.queue, true)
+	// observability.RecordMQJobPublished(p.queue, true)
 	return nil
 }
 

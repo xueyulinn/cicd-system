@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func (s *Service) finishPipelineRunWithMetrics(ctx context.Context, pipeline str
 	if err := s.finishPipelineRun(ctx, pipeline, runNo, status); err != nil {
 		return err
 	}
-	recordPipelineOutcome(pipeline, runNo, status, pipelineStart)
+	// recordPipelineOutcome(pipeline, runNo, status, pipelineStart)
 	return nil
 }
 
@@ -45,7 +45,7 @@ func (s *Service) finishStageWithMetrics(ctx context.Context, pipeline string, r
 	if err := s.finishStage(ctx, pipeline, runNo, stage, status); err != nil {
 		return err
 	}
-	recordStageDuration(pipeline, runNo, stage, stageStart)
+	// recordStageDuration(pipeline, runNo, stage, stageStart)
 	return nil
 }
 

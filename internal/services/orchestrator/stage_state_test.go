@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"reflect"
@@ -60,7 +60,7 @@ func TestNewStageStateAndReadyFlow(t *testing.T) {
 
 func TestMarkJobSucceeded_IdempotentAfterCompletion(t *testing.T) {
 	plan := models.StagePlan{
-		Jobs: []models.JobExecutionPlan{{Name: "only"}},
+		Jobs:       []models.JobExecutionPlan{{Name: "only"}},
 		Dependents: map[string][]string{},
 		InDegree:   map[string]int{"only": 0},
 		JobByName:  map[string]models.JobExecutionPlan{"only": {Name: "only"}},

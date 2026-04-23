@@ -43,7 +43,7 @@ func (s *Service) postJobCallback(ctx context.Context, path string, payload api.
 		return fmt.Errorf("marshal callback payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.executionURL+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.orchestratorURL+path, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create callback request: %w", err)
 	}

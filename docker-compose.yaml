@@ -53,27 +53,27 @@ services:
     environment:
       PORT: "${API_GATEWAY_PORT}"
       VALIDATION_URL: ${VALIDATION_URL}
-      EXECUTION_URL: ${EXECUTION_URL}
+      ORCHESTRATOR_URL: ${ORCHESTRATOR_URL}
       REPORTING_URL: ${REPORTING_URL}
       SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
       - validation-service
-      # - execution-service
+      - orchestrator-service
       # - reporting-service
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
 
-  execution-service:
-    image: ${EXECUTION_SERVICE_IMAGE}
+  orchestrator-service:
+    image: ${ORCHESTRATOR_SERVICE_IMAGE}
     environment:
-      PORT: "${EXECUTION_SERVICE_PORT}"
+      PORT: "${ORCHESTRATOR_SERVICE_PORT}"
       DATABASE_URL: ${REPORT_DB_DSN}
       RABBITMQ_URL: ${RABBITMQ_URL}
       VALIDATION_URL: ${VALIDATION_URL}
       WORKER_URL: ${WORKER_URL}
-      SERVICE_NAME: execution-service
+      SERVICE_NAME: orchestrator-service
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
     depends_on:
@@ -86,7 +86,7 @@ services:
       worker-service:
         condition: service_started
     ports:
-      - "${EXECUTION_SERVICE_PORT}:${EXECUTION_SERVICE_PORT}"
+      - "${ORCHESTRATOR_SERVICE_PORT}:${ORCHESTRATOR_SERVICE_PORT}"
 
   validation-service:
     image: ${VALIDATION_SERVICE_IMAGE}
@@ -105,7 +105,7 @@ services:
     environment:
       PORT: "${WORKER_SERVICE_PORT}"
       RABBITMQ_URL: ${RABBITMQ_URL}
-      EXECUTION_URL: ${EXECUTION_URL}
+      ORCHESTRATOR_URL: ${ORCHESTRATOR_URL}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       SERVICE_NAME: worker-service

@@ -8,14 +8,14 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /out/execution-service ./cmd/execution-service
+RUN CGO_ENABLED=0 go build -o /out/orchestrator-service ./cmd/orchestrator-service
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /out/execution-service /app/execution-service
+COPY --from=builder /out/orchestrator-service /app/orchestrator-service
 
 EXPOSE 8002
 
-ENTRYPOINT ["/app/execution-service"]
+ENTRYPOINT ["/app/orchestrator-service"]

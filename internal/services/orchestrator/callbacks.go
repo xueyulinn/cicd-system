@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -38,8 +38,8 @@ func (s *Service) HandleJobFinished(ctx context.Context, req api.JobStatusCallba
 	if err := s.finishJob(ctx, req.Pipeline, req.RunNo, req.Stage, req.Job, status); err != nil {
 		return err
 	}
-	jobStart := s.popJobStartTime(req.Pipeline, req.RunNo, req.Stage, req.Job)
-	recordJobOutcome(req.Pipeline, req.RunNo, req.Stage, req.Job, status, jobStart)
+	// jobStart := s.popJobStartTime(req.Pipeline, req.RunNo, req.Stage, req.Job)
+	// recordJobOutcome(req.Pipeline, req.RunNo, req.Stage, req.Job, status, jobStart)
 
 	rt := s.getPipelineRuntime(req.Pipeline, req.RunNo)
 	if rt == nil {

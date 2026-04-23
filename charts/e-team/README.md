@@ -14,9 +14,9 @@ Kubernetes-enabled by this chart:
 - `rabbitmq` Deployment, Service, and credentials `Secret` when `rabbitmq.enabled=true` (AMQP for pipeline job dispatch; aligns with Docker Compose)
 - `MySQL` StatefulSet, Service, Secret, and migration `Job` when `mysql.enabled=true`
 
-Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `EXECUTION_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
+Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `ORCHESTRATOR_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
 
-**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `EXECUTION_URL`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
+**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `ORCHESTRATOR_URL`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
 
 Not Kubernetes-enabled in this chart:
 
@@ -29,7 +29,7 @@ Build the current repo images into Minikube before installing the chart:
 ```bash
 minikube image build -t e-team-api-gateway:latest -f cmd/api-gateway/Dockerfile .
 minikube image build -t e-team-validation-service:latest -f cmd/validation-service/Dockerfile .
-minikube image build -t e-team-execution-service:latest -f cmd/execution-service/Dockerfile .
+minikube image build -t e-team-execution-service:latest -f cmd/orchestrator-service/Dockerfile .
 minikube image build -t e-team-worker-service:latest -f cmd/worker-service/Dockerfile .
 minikube image build -t e-team-reporting-service:latest -f cmd/reporting-service/Dockerfile .
 minikube image build -t e-team-db-migrate:latest -f migrations/Dockerfile .
@@ -219,7 +219,7 @@ minikube addons enable ingress
 ```bash
 minikube image build -t e-team-api-gateway:latest -f cmd/api-gateway/Dockerfile .
 minikube image build -t e-team-validation-service:latest -f cmd/validation-service/Dockerfile .
-minikube image build -t e-team-execution-service:latest -f cmd/execution-service/Dockerfile .
+minikube image build -t e-team-execution-service:latest -f cmd/orchestrator-service/Dockerfile .
 minikube image build -t e-team-worker-service:latest -f cmd/worker-service/Dockerfile .
 minikube image build -t e-team-reporting-service:latest -f cmd/reporting-service/Dockerfile .
 minikube image build -t e-team-db-migrate:latest -f migrations/Dockerfile .
@@ -281,5 +281,4 @@ At the time of writing, `run` reaches the Kubernetes execution and worker servic
 - `run` fails with Git clone/authentication errors: the worker is trying to clone the repository revision inside Kubernetes; public repos work more easily, while private repos need credentials injected into the worker
 - External DB mode misconfigured: when `mysql.enabled=false`, set `externalDatabase.url`; if the DB wait init containers remain enabled, also set `externalDatabase.host`, `port`, `username`, `password`, and `database`
 - Observability pods fail to start: inspect `kubectl -n e-team logs deploy/e-team-e-team-grafana`, `kubectl -n e-team logs deploy/e-team-e-team-otel-collector`, and `kubectl -n e-team logs ds/e-team-e-team-promtail`
-
 

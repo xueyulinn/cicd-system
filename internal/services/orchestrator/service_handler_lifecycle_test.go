@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -73,7 +73,7 @@ func TestServiceReadyNilService(t *testing.T) {
 	if err == nil {
 		t.Fatal("Ready error=nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "execution service is not initialized") {
+	if !strings.Contains(err.Error(), "orchestrator service is not initialized") {
 		t.Fatalf("error=%v", err)
 	}
 }

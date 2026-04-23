@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: worker-service
 data:
   PORT: {{ .Values.workerService.service.port | quote }}
-  EXECUTION_URL: {{ printf "http://%s:%v" (include "e-team.executionServiceName" .) .Values.executionService.service.port | quote }}
+  ORCHESTRATOR_URL: {{ printf "http://%s:%v" (include "e-team.executionServiceName" .) .Values.executionService.service.port | quote }}
   WORKER_CONCURRENCY: {{ .Values.workerService.concurrency | toString | quote }}
   SERVICE_NAME: worker-service
   OTEL_SERVICE_NAME: worker-service

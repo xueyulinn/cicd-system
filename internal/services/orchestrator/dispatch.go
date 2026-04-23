@@ -1,4 +1,4 @@
-package execution
+package orchestrator
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/models"
-	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,7 +36,7 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		return fmt.Errorf("job publisher is not initialized")
 	}
 
-	tracer := otel.Tracer(executionClientName)
+	tracer := otel.Tracer(orchestratorClientName)
 	ctx, span := tracer.Start(ctx, "mq.job.publish",
 		trace.WithAttributes(
 			attribute.String("pipeline", msg.Pipeline),
@@ -55,13 +54,13 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	observability.RecordExecutionJobEnqueued(msg.Pipeline, msg.Stage)
+	// observability.RecordExecutionJobEnqueued(msg.Pipeline, msg.Stage)
 	return nil
 }
 
 // enqueueReadyJobs publishes all ready jobs for the current stage.
 func (s *Service) enqueueReadyJobs(ctx context.Context, pipelineName, stageName string, runNo int, jobs []models.JobExecutionPlan, runInfo runInfo) error {
-	observability.RecordExecutionReadyBatchSize(len(jobs))
+	// observability.RecordExecutionReadyBatchSize(len(jobs))
 	if len(jobs) > 1 {
 		slog.Default().Info("mq dispatch batch",
 			"event", "mq-dispatch-batch",

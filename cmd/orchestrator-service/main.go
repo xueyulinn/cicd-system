@@ -11,10 +11,10 @@ import (
 
 	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/xueyulinn/cicd-system/internal/observability"
-	"github.com/xueyulinn/cicd-system/internal/services/execution"
+	"github.com/xueyulinn/cicd-system/internal/services/orchestrator"
 )
 
-const serviceName = "execution-service"
+const serviceName = "orchestrator-service"
 
 func main() {
 	ctx := context.Background()
@@ -26,7 +26,7 @@ func main() {
 	}
 	defer func() { _ = shutdown(ctx) }()
 
-	handler := execution.NewHandler()
+	handler := orchestrator.NewHandler()
 	defer handler.Close()
 
 	mux := http.NewServeMux()
@@ -35,7 +35,7 @@ func main() {
 	wrapped := observability.HTTPMetricsMiddleware(
 		observability.TracingMiddleware(serviceName, mux))
 
-	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultExecutionPort)
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultOrchestratorPort)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      wrapped,
