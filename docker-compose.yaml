@@ -54,7 +54,7 @@ services:
     depends_on:
       - validation-service
       - orchestrator-service
-      # - reporting-service
+      - reporting-service
     ports:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
 
