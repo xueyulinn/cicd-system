@@ -23,7 +23,6 @@ import (
 )
 
 const orchestratorClientName = "orchestrator-service"
-
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
 	workerURL      string

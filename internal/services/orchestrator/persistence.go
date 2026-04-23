@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xueyulinn/cicd-system/internal/store"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // startPipelineRun inserts a new pipeline run in queued state and returns run_no.
@@ -19,6 +20,7 @@ func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo
 		GitBranch:  runInfo.Branch,
 		GitHash:    runInfo.Commit,
 		GitRepo:    runInfo.RepoURL,
+		TraceID: getSpanTraceId(ctx),
 		RequestKey: requestKey,
 	}
 	if strings.TrimSpace(in.GitRepo) == "" {
@@ -115,4 +117,12 @@ func (s *Service) markJobRunning(ctx context.Context, pipeline string, runNo int
 		Status:  store.StatusRunning,
 	}
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
+}
+
+func getSpanTraceId (ctx context.Context) string {
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() {
+		return ""
+	}
+	return sc.TraceID().String()
 }

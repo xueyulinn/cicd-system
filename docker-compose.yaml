@@ -1,10 +1,3 @@
-# compose.values.env is generated from charts/e-team/values.yaml (single source of truth with Helm):
-#   image tags, service/observability ports, service URLs, DB DSN, RabbitMQ auth/URL, OTel endpoint/protocol.
-# Regenerate: ruby scripts/gen-compose-env-from-values.rb
-# Start: docker compose --env-file compose.values.env up -d
-# Stop:  docker compose --env-file compose.values.env down
-# Connection: see dev-docs/report-db-setup.md and use DATABASE_URL or REPORT_DB_URL (MySQL DSN)
-
 services:
   rabbitmq:
     image: ${RABBITMQ_IMAGE}
