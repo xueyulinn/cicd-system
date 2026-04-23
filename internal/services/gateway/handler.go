@@ -94,7 +94,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	if err := h.client.ForwardValidate(r.Context(), w, r); err != nil {
+	if err := h.client.forwardValidate(r.Context(), w, r); err != nil {
 		log.Warn("validate forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
@@ -110,7 +110,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	if err := h.client.ForwardDryRun(r.Context(), w, r); err != nil {
+	if err := h.client.forwardDryRun(r.Context(), w, r); err != nil {
 		log.Warn("dryrun forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
@@ -123,34 +123,13 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
-	defer func() { _ = r.Body.Close() }()
-
-	var req api.RunRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.RunRequest(r.Context(), req)
+	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
-		log.Error("run proxy failed", "error", err)
+		log.Error("run forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
-	}
-
-	if strings.EqualFold(response.Status, "failed") {
-		log.Warn("run failed", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	} else {
-		log.Info("run completed", "message", response.Message, "status", response.Status)
-		api.WriteJSON(w, http.StatusOK, response)
 	}
 }
 

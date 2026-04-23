@@ -193,7 +193,7 @@ func TestPostJSONSuccess(t *testing.T) {
 	}
 }
 
-func TestClientValidateDryRunRunRequests(t *testing.T) {
+func TestClientForwardValidateDryRunRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/validate":
@@ -218,17 +218,52 @@ func TestClientValidateDryRunRunRequests(t *testing.T) {
 		httpExecution:  srv.Client(),
 	}
 
-	v, err := c.ValidateRequest(context.Background(), "pipeline: {}")
-	if err != nil || !v.Valid {
-		t.Fatalf("ValidateRequest err=%v resp=%+v", err, v)
+	validateReq := httptest.NewRequest(http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+	validateRec := httptest.NewRecorder()
+	if err := c.forwardValidate(context.Background(), validateRec, validateReq); err != nil {
+		t.Fatalf("forwardValidate err=%v", err)
 	}
-	d, err := c.DryRunRequest(context.Background(), "pipeline: {}")
-	if err != nil || !d.Valid || d.ExecutionPlan == nil {
-		t.Fatalf("DryRunRequest err=%v resp=%+v", err, d)
+	if validateRec.Code != http.StatusOK {
+		t.Fatalf("forwardValidate code=%d want=%d", validateRec.Code, http.StatusOK)
 	}
-	r, err := c.RunRequest(context.Background(), api.RunRequest{YAMLContent: "pipeline: {}", Branch: "main", Commit: "abc"})
-	if err != nil || r.Status != "queued" {
-		t.Fatalf("RunRequest err=%v resp=%+v", err, r)
+	var v api.ValidateResponse
+	if err := json.Unmarshal(validateRec.Body.Bytes(), &v); err != nil {
+		t.Fatalf("forwardValidate unmarshal err=%v body=%q", err, validateRec.Body.String())
+	}
+	if !v.Valid {
+		t.Fatalf("forwardValidate resp=%+v", v)
+	}
+
+	dryReq := httptest.NewRequest(http.MethodPost, "/dryrun", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+	dryRec := httptest.NewRecorder()
+	if err := c.forwardDryRun(context.Background(), dryRec, dryReq); err != nil {
+		t.Fatalf("forwardDryRun err=%v", err)
+	}
+	if dryRec.Code != http.StatusOK {
+		t.Fatalf("forwardDryRun code=%d want=%d", dryRec.Code, http.StatusOK)
+	}
+	var d api.DryRunResponse
+	if err := json.Unmarshal(dryRec.Body.Bytes(), &d); err != nil {
+		t.Fatalf("forwardDryRun unmarshal err=%v body=%q", err, dryRec.Body.String())
+	}
+	if !d.Valid || d.ExecutionPlan == nil {
+		t.Fatalf("forwardDryRun resp=%+v", d)
+	}
+
+	runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+	runRec := httptest.NewRecorder()
+	if err := c.forwardRun(context.Background(), runRec, runReq); err != nil {
+		t.Fatalf("forwardRun err=%v", err)
+	}
+	if runRec.Code != http.StatusOK {
+		t.Fatalf("forwardRun code=%d want=%d", runRec.Code, http.StatusOK)
+	}
+	var r api.RunResponse
+	if err := json.Unmarshal(runRec.Body.Bytes(), &r); err != nil {
+		t.Fatalf("forwardRun unmarshal err=%v body=%q", err, runRec.Body.String())
+	}
+	if r.Status != "queued" {
+		t.Fatalf("forwardRun resp=%+v", r)
 	}
 }
 

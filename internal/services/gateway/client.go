@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/xueyulinn/cicd-system/internal/observability"
@@ -41,56 +39,8 @@ func NewClient() *Client {
 	}
 }
 
-// ValidateRequest forwards validation request to validation service and decodes the JSON response.
-func (c *Client) ValidateRequest(ctx context.Context, yamlContent string) (*api.ValidateResponse, error) {
-	reqBody, err := json.Marshal(map[string]string{"yaml_content": yamlContent})
-	if err != nil {
-		return nil, fmt.Errorf("marshal validation request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("construct request failed: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpValidation.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var out api.ValidateResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
-		}
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	// Validation errors are business outcomes, not proxy failures.
-	if resp.StatusCode == http.StatusBadRequest {
-		out.Valid = false
-		return &out, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		if len(out.Errors) > 0 {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, out.Errors[0])
-		}
-		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return &out, nil
-}
-
 // ForwardValidate proxies validation responses from downstream directly to upstream response writer.
-func (c *Client) ForwardValidate(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", r.Body)
 	if err != nil {
 		return fmt.Errorf("construct request failed: %w", err)
@@ -113,51 +63,8 @@ func (c *Client) ForwardValidate(ctx context.Context, w http.ResponseWriter, r *
 	return nil
 }
 
-// DryRunRequest forwards dry run request to validation service and decodes the JSON response.
-func (c *Client) DryRunRequest(ctx context.Context, yamlContent string) (*api.DryRunResponse, error) {
-	reqBody, err := json.Marshal(map[string]string{"yaml_content": yamlContent})
-	if err != nil {
-		return nil, fmt.Errorf("marshal dryrun request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/dryrun", bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("construct request failed: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpValidation.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var out api.DryRunResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
-		}
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		if len(out.Errors) > 0 {
-			return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, out.Errors[0])
-		}
-		return nil, fmt.Errorf("validation service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return &out, nil
-}
-
 // ForwardDryRun proxies dryrun responses from downstream directly to upstream response writer.
-func (c *Client) ForwardDryRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/dryrun", r.Body)
 	if err != nil {
 		return fmt.Errorf("construct request failed: %w", err)
@@ -181,47 +88,30 @@ func (c *Client) ForwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 }
 
 // RunRequest forwards run request to execution service.
-func (c *Client) RunRequest(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
-	reqBody, err := json.Marshal(req)
+func (c *Client) forwardRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.executionURL+"/run", r.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("construct request failed: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.executionURL+"/run", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpExecution.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("construct request failed: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpExecution.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call execution service: %w", err)
+		return fmt.Errorf("failed to call execution service: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
 	}
+	w.WriteHeader(resp.StatusCode)
 
-	var out api.RunResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, string(body))
-		}
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("copy downstream response failed: %w", err)
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		if len(out.Errors) > 0 {
-			return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, out.Errors[0])
-		}
-		return nil, fmt.Errorf("execution service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return &out, nil
+	return nil
 }
 
 // ReportRequest forwards report request to reporting service.
