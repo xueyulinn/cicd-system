@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
@@ -19,13 +20,13 @@ const (
 var formatting string
 
 var dryRunCmd = &cobra.Command{
-	Use:     "dryrun pipeline-path [--format yaml|json]",
-	Short:   "Validate a pipeline and preview its execution plan",
-	Long:    "Validates the specified pipeline file and prints the execution plan without running any jobs. Output defaults to YAML and can be changed with --format json.",
-	Example: "cicd dryrun .pipelines/pipeline.yaml\ncicd dryrun .pipelines/pipeline.yaml --format json",
-	Args:    cobra.ExactArgs(1),
-	PreRunE: runVerifyQuiet,
-	RunE:    runDryRun,
+	Use:                   "dryrun pipeline-path [--format yaml|json]",
+	Short:                 "Validate a pipeline and preview its execution plan",
+	Long:                  "Validates the specified pipeline file and prints the execution plan without running any jobs. Output defaults to YAML and can be changed with --format json.",
+	Example:               "cicd dryrun .pipelines/pipeline.yaml\ncicd dryrun .pipelines/pipeline.yaml --format json",
+	Args:                  cobra.ExactArgs(1),
+	PreRunE:               runVerifyQuiet,
+	RunE:                  runDryRun,
 	DisableFlagsInUseLine: true,
 }
 
@@ -57,7 +58,7 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 	client := NewGatewayClient()
 
 	// Call gateway for dry run
-	response, err := client.DryRun(string(fileContent))
+	response, err := client.DryRun(api.ValidateRequest{YAMLContent: string(fileContent)})
 	if err != nil {
 		return fmt.Errorf("dry run failed, error: %w", err)
 	}

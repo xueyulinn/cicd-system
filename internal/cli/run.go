@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/common/parser"
 	"github.com/xueyulinn/cicd-system/internal/config"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -22,12 +22,13 @@ var (
 )
 
 var runCmd = &cobra.Command{
-	Use:     "run",
-	Short:   "Execute a pipeline locally",
+	Use:     "run {pipeline-path | pipeline-name} [--branch branch] [--commit commit] [--remote]",
+	Short:   "Run a pipeline",
 	Long:    "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
-	Args:    cobra.NoArgs,
+	// Args:    cobra.ExactArgs(1),
 	PreRunE: runPreRunE,
 	RunE:    runRun,
+	DisableFlagsInUseLine: true,
 }
 
 // init registers flags for the run command.
@@ -167,6 +168,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		req.YAMLContent = string(fileContent)
 		req.RepoURL = remoteURL
 		req.WorkspacePath = ""
@@ -174,15 +176,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	response, err := client.Run(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", runFile, err.Error())
-		return fmt.Errorf("run failed")
+		return fmt.Errorf("run failed %w", err)
 	}
 
 	if len(response.Errors) > 0 {
 		for _, errMsg := range response.Errors {
 			fmt.Fprintln(os.Stderr, errMsg)
 		}
-		return fmt.Errorf("run failed")
+		return fmt.Errorf("run failed %w", err)
 	}
 
 	if response.RunNo != 0 {

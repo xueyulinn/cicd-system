@@ -45,7 +45,7 @@ func TestGatewayClientValidate_Success(t *testing.T) {
 	defer srv.Close()
 
 	c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
-	resp, err := c.Validate("pipeline: {}")
+	resp, err := c.Validate(api.ValidateRequest{YAMLContent: "pipeline: {}"})
 	if err != nil {
 		t.Fatalf("Validate err: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestGatewayClientValidate_ErrorBodyAndStatusFallback(t *testing.T) {
 		defer srv.Close()
 
 		c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
-		_, err := c.Validate("x")
+		_, err := c.Validate(api.ValidateRequest{YAMLContent: "x"})
 		if err == nil || err.Error() != "bad request" {
 			t.Fatalf("err=%v", err)
 		}
@@ -77,7 +77,7 @@ func TestGatewayClientValidate_ErrorBodyAndStatusFallback(t *testing.T) {
 		defer srv.Close()
 
 		c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
-		_, err := c.Validate("x")
+		_, err := c.Validate(api.ValidateRequest{YAMLContent: "x"})
 		if err == nil || !strings.Contains(err.Error(), "gateway returned status 500") {
 			t.Fatalf("err=%v", err)
 		}
@@ -120,7 +120,7 @@ func TestGatewayClientDryRun_Run_Report(t *testing.T) {
 
 	c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
 
-	dry, err := c.DryRun("pipeline: {}")
+	dry, err := c.DryRun(api.ValidateRequest{YAMLContent: "pipeline: {}"})
 	if err != nil || dry == nil || !dry.Valid || dry.ExecutionPlan == nil || len(dry.ExecutionPlan.Stages) != 1 || dry.ExecutionPlan.Stages[0].Name != "build" {
 		t.Fatalf("dry=%#v err=%v", dry, err)
 	}
@@ -145,7 +145,7 @@ func TestGatewayClient_Non200ForDryRunRunReport(t *testing.T) {
 		name string
 		call func(c *GatewayClient) error
 	}{
-		{name: "dryrun", call: func(c *GatewayClient) error { _, err := c.DryRun("x"); return err }},
+		{name: "dryrun", call: func(c *GatewayClient) error { _, err := c.DryRun(api.ValidateRequest{YAMLContent: "x"}); return err }},
 		{name: "run", call: func(c *GatewayClient) error { _, err := c.Run(api.RunRequest{}); return err }},
 		{name: "report", call: func(c *GatewayClient) error { _, err := c.Report(models.ReportQuery{Pipeline: "p"}); return err }},
 	} {
@@ -172,10 +172,10 @@ func TestGatewayClient_BadJSONResponse(t *testing.T) {
 	defer srv.Close()
 
 	c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
-	if _, err := c.Validate("x"); err == nil {
+	if _, err := c.Validate(api.ValidateRequest{YAMLContent: "x"}); err == nil {
 		t.Fatal("expected unmarshal error")
 	}
-	if _, err := c.DryRun("x"); err == nil {
+	if _, err := c.DryRun(api.ValidateRequest{YAMLContent: "x"}); err == nil {
 		t.Fatal("expected unmarshal error")
 	}
 	if _, err := c.Run(api.RunRequest{}); err == nil {
@@ -188,10 +188,10 @@ func TestGatewayClient_BadJSONResponse(t *testing.T) {
 
 func TestGatewayClient_NetworkError(t *testing.T) {
 	c := &GatewayClient{baseURL: "http://127.0.0.1:1", httpClient: http.DefaultClient}
-	if _, err := c.Validate("x"); err == nil {
+	if _, err := c.Validate(api.ValidateRequest{YAMLContent: "x"}); err == nil {
 		t.Fatal("expected network error")
 	}
-	if _, err := c.DryRun("x"); err == nil {
+	if _, err := c.DryRun(api.ValidateRequest{YAMLContent: "x"}); err == nil {
 		t.Fatal("expected network error")
 	}
 	if _, err := c.Run(api.RunRequest{}); err == nil {

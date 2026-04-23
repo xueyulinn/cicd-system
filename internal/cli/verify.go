@@ -8,8 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 )
 
 var verifyCmd = &cobra.Command{
@@ -89,7 +90,7 @@ func verifySinglePipeline(pipelinePath string, gatewayClient *GatewayClient) (bo
 		return false, fmt.Errorf("failed to read file content %q: %w", pipelinePath, err)
 	}
 
-	response, err := gatewayClient.Validate(string(fileContent))
+	response, err := gatewayClient.Validate(api.ValidateRequest{YAMLContent: string(fileContent)})
 	if err != nil {
 		return false, fmt.Errorf("failed to verify %q: %w", pipelinePath, err)
 	}
