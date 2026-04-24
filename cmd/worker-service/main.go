@@ -22,14 +22,14 @@ func main() {
 
 	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
-		slog.Error("failed to init observability", "service", serviceName, "error", err)
+		slog.Error("failed to init observability", "error", err)
 		os.Exit(1)
 	}
 	defer func() {
 		obsShutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := shutdown(obsShutdownCtx); err != nil {
-			slog.Error("observability shutdown failed", "service", serviceName, "error", err)
+			slog.Error("observability shutdown failed", "error", err)
 		}
 	}()
 
@@ -54,7 +54,7 @@ func main() {
 	errCh := make(chan error, 2)
 
 	go func() {
-		slog.Info("service starting", "service", serviceName, "addr", addr)
+		slog.Info("service starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -68,20 +68,20 @@ func main() {
 
 	select {
 	case err := <-errCh:
-		slog.Error("service error", "service", serviceName, "error", err)
+		slog.Error("service error", "error", err)
 		stop()
 	case <-ctx.Done():
-		slog.Info("shutdown signal received", "service", serviceName)
+		slog.Info("shutdown signal received")
 	}
 
-	slog.Info("service shutting down", "service", serviceName)
+	slog.Info("service shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		slog.Error("forced shutdown", "service", serviceName, "error", err)
+		slog.Error("forced shutdown", "error", err)
 	} else {
-		slog.Info("service stopped", "service", serviceName)
+		slog.Info("service stopped")
 	}
 }

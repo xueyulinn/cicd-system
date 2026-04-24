@@ -75,7 +75,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
 	if err := h.client.forwardValidate(r.Context(), w, r); err != nil {
-		log.Warn("validate forward failed", "error", err)
+		log.Warn("gateway forward validate failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -91,7 +91,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
 	if err := h.client.forwardDryRun(r.Context(), w, r); err != nil {
-		log.Warn("dryrun forward failed", "error", err)
+		log.Warn("gateway forward dryrun failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -107,7 +107,7 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 
 	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
-		logger.Error("run forward failed", "error", err)
+		logger.Error("gateway forward run failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -442,6 +443,8 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		dispatchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := s.dispatchInitialReadyJobs(dispatchCtx, prepared, initialized); err != nil {
+			slog.Error("dispatch initial ready jobs failed", "error", err)
+			return
 		}
 	}(*prepared, initialized)
 
