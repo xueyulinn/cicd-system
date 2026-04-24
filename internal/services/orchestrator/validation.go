@@ -15,8 +15,8 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/common/planner"
 )
 
-// PrepareRun validates the pipeline and returns static execution plan and pipeline dto.
-func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PreparedRun, error) {
+// prepareRun validates the pipeline and returns a pipeline plan.
+func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PipelinePlan, error) {
 	ctx, span := s.tracer.Start(ctx, "prepare.pipeline")
 	defer span.End()
 
@@ -41,7 +41,7 @@ func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*Prepared
 		return nil, fmt.Errorf("generate execution plan failed: %w", err)
 	}
 
-	return &PreparedRun{
+	return &PipelinePlan{
 		Pipeline:      pipeline,
 		ExecutionPlan: executionPlan,
 	}, nil
@@ -76,9 +76,9 @@ func (s *Service) validatePipeline(ctx context.Context, yamlContent string) erro
 
 	var validationResp api.ValidateResponse
 	if len(bodyBytes) > 0 {
-    	if err := json.Unmarshal(respBody, &validationResp); err != nil {
-        	return fmt.Errorf("failed to decode validation response: %w", err)
-    	}
+		if err := json.Unmarshal(respBody, &validationResp); err != nil {
+			return fmt.Errorf("failed to decode validation response: %w", err)
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -92,18 +92,18 @@ func (s *Service) validatePipeline(ctx context.Context, yamlContent string) erro
 			errs = append(errs, errors.New(msg))
 		}
 
-		return fmt.Errorf( "validation service returned status %d: %w",
-        resp.StatusCode,
-        errors.Join(errs...),)
+		return fmt.Errorf("validation service returned status %d: %w",
+			resp.StatusCode,
+			errors.Join(errs...))
 	}
 
 	if !validationResp.Valid {
-    	errs := make([]error, 0, len(validationResp.Errors))
-    	for _, msg := range validationResp.Errors {
-        	errs = append(errs, errors.New(msg))
-    	}
+		errs := make([]error, 0, len(validationResp.Errors))
+		for _, msg := range validationResp.Errors {
+			errs = append(errs, errors.New(msg))
+		}
 
-    	return fmt.Errorf("validation failed: %w", errors.Join(errs...))
+		return fmt.Errorf("validation failed: %w", errors.Join(errs...))
 	}
 
 	return nil

@@ -25,17 +25,18 @@ import (
 )
 
 const orchestratorClientName = "orchestrator-service"
+
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
-	validationURL  string
+	validationURL    string
 	validationClient *http.Client
-	store          *store.Store
-	mqConn         *amqp.Connection
-	jobPublishers  []mq.Publisher
-	publishIdx     uint64
-	runtimeMu      sync.Mutex
-	runtimes       map[string]*pipelineRuntime // isolate pipeline runs on parallel
-	tracer trace.Tracer
+	store            *store.Store
+	mqConn           *amqp.Connection
+	jobPublishers    []mq.Publisher
+	publishIdx       uint64
+	runtimeMu        sync.Mutex
+	runtimes         map[string]*pipelineRuntime // isolate pipeline runs on parallel
+	tracer           trace.Tracer
 }
 
 // job identifier
@@ -50,9 +51,9 @@ type jobConfig struct {
 	needs         []string
 }
 
-// PreparedRun contains the validated pipeline and derived execution plan.
+// PipelinePlan contains the validated pipeline and derived execution plan.
 // Callers can persist or dispatch the returned plan without re-parsing YAML.
-type PreparedRun struct {
+type PipelinePlan struct {
 	Pipeline      *models.Pipeline
 	ExecutionPlan *models.ExecutionPlan
 }
@@ -74,13 +75,6 @@ type stageState struct {
 	startedAt      time.Time // wall clock when the stage row was created; used for metrics
 }
 
-type initializedRun struct {
-	runNo   int
-	runtime *pipelineRuntime
-	deduped bool
-	status  string
-}
-
 type pipelineRuntime struct {
 	pipeline      string
 	runNo         int
@@ -89,6 +83,7 @@ type pipelineRuntime struct {
 	runInfo       runInfo
 	pipelineStart time.Time
 	jobStartTimes map[jobKey]time.Time
+	executionPlan models.ExecutionPlan
 }
 
 // NewService constructs an orchestrator service with DB, MQ, and HTTP dependencies initialized.
@@ -120,13 +115,13 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	return &Service{
-		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
+		validationURL:    config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		validationClient: observability.NewInstrumentedHTTPClient(orchestratorClientName, "validation", 2*time.Minute),
-		store:          st,
-		mqConn:         mqConn,
-		jobPublishers:  jobPublishers,
-		runtimes:       make(map[string]*pipelineRuntime),
-		tracer: otel.Tracer("github.com/xueyulinn/cicd-system"),
+		store:            st,
+		mqConn:           mqConn,
+		jobPublishers:    jobPublishers,
+		runtimes:         make(map[string]*pipelineRuntime),
+		tracer:           otel.Tracer("github.com/xueyulinn/cicd-system"),
 	}, nil
 }
 
@@ -316,24 +311,21 @@ func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 	return "", false
 }
 
-// initialize pipeline runtime
-func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (*initializedRun, error) {
-	ctx, span := s.tracer.Start(ctx, "initialize.pipeline")
+// returns in-flight deduped pipeline run ortherwise initializes pipeline runtime
+func (s *Service) initializePipelineRuntime(ctx context.Context, pipelinePlan PipelinePlan, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (runtime *pipelineRuntime, deduped bool, status string, err error) {
+	ctx, span := s.tracer.Start(ctx, "initialize.pipeline.runtime")
 	defer span.End()
 
-	pipeline := prepared.Pipeline
-	executionPlan := prepared.ExecutionPlan
+	pipeline := pipelinePlan.Pipeline
+	executionPlan := pipelinePlan.ExecutionPlan
 	runResult, runStart, err := s.startPipelineRun(ctx, pipeline.Name, runInfo, requestKey)
-
 	if err != nil {
-		return nil, fmt.Errorf("create pipeline run record: %w", err)
+		return nil, false, "", fmt.Errorf("create pipeline run record failed: %w", err)
 	}
+
 	if runResult.Deduped {
-		return &initializedRun{
-			runNo:   runResult.RunNo,
-			deduped: true,
-			status:  runResult.ExistingStatus,
-		}, nil
+		// For deduped requests, return the existing run number so callers can respond deterministically.
+		return &pipelineRuntime{runNo: runResult.RunNo}, true, runResult.ExistingStatus, nil
 	}
 	runNo := runResult.RunNo
 
@@ -345,7 +337,7 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 	for _, stage := range executionPlan.Stages {
 		if err := s.startStage(ctx, pipeline.Name, runNo, stage.Name); err != nil {
 			_ = s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusFailed, runStart)
-			return nil, fmt.Errorf("create stage record failed: %w", err)
+			return nil, false, "", fmt.Errorf("create stage record failed: %w", err)
 		}
 
 		// generates static execution plan for current stage
@@ -365,12 +357,12 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 			if err := s.startJob(ctx, pipeline.Name, runNo, stage.Name, job.Name, allowFailure); err != nil {
 				_ = s.finishStageWithMetrics(ctx, pipeline.Name, runNo, stage.Name, store.StatusFailed, stageStates[stage.Name].startedAt)
 				_ = s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusFailed, runStart)
-				return nil, fmt.Errorf("create job record failed: %w", err)
+				return nil, false, "", fmt.Errorf("create job record failed: %w", err)
 			}
 		}
 	}
 
-	runtime := &pipelineRuntime{
+	runtime = &pipelineRuntime{
 		pipeline:      pipeline.Name,
 		runNo:         runNo,
 		stageOrder:    stageOrder,
@@ -378,67 +370,63 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 		runInfo:       runInfo,
 		pipelineStart: runStart,
 		jobStartTimes: make(map[jobKey]time.Time),
+		executionPlan: *pipelinePlan.ExecutionPlan,
 	}
 
 	// no stages found
 	if len(executionPlan.Stages) == 0 {
 		if err := s.finishPipelineRunWithMetrics(ctx, pipeline.Name, runNo, store.StatusSuccess, runStart); err != nil {
-			return nil, fmt.Errorf("finish empty pipeline run: %w", err)
+			return nil, false, "", fmt.Errorf("finish empty pipeline run: %w", err)
 		}
-		return &initializedRun{
-			runNo:   runNo,
-			runtime: runtime,
-		}, nil
+		return runtime, false, "", nil
 	}
 
-	return &initializedRun{
-		runNo:   runNo,
-		runtime: runtime,
-	}, nil
+	return runtime, false, "", nil
 }
 
 // Run validates the pipeline, initializes run records/state, dispatches initial jobs, and returns immediately.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
-	ctx, span := s.tracer.Start(ctx, "start.pipeline")
+	ctx, span := s.tracer.Start(ctx, "process.pipeline")
 	defer span.End()
 
-	// validate pipeline file and generate execution plan
-	prepared, err := s.prepareRun(ctx, req)
+	pipelinePlan, err := s.prepareRun(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	// {branch, commit, repo}
 	info := newRunInfo(req)
-	jobConfigs := buildJobConfigs(prepared.Pipeline)
-	requestKey := buildRunRequestKey(req, prepared.Pipeline.Name)
+	jobConfigs := buildJobConfigs(pipelinePlan.Pipeline)
+	requestKey := buildRunRequestKey(req, pipelinePlan.Pipeline.Name)
 
-	initialized, err := s.initializePipelineRun(ctx, *prepared, jobConfigs, info, requestKey)
+	runtime, deduped, status, err := s.initializePipelineRuntime(ctx, *pipelinePlan, jobConfigs, info, requestKey)
 	if err != nil {
 		return nil, err
 	}
-	if initialized.deduped {
+
+	if deduped {
 		return &api.RunResponse{
-			Pipeline: prepared.Pipeline.Name,
-			RunNo:    initialized.runNo,
-			Status:   initialized.status,
-			Message:  fmt.Sprintf("Duplicate run request dropped; using in-flight run %d.", initialized.runNo),
+			Pipeline: pipelinePlan.Pipeline.Name,
+			RunNo:    runtime.runNo,
+			Status:   status,
+			Message:  fmt.Sprintf("Duplicate run request dropped; using in-flight run %d.", runtime.runNo),
 		}, nil
 	}
-	s.putRuntime(initialized.runtime)
 
-	go func(prepared PreparedRun, initialized *initializedRun) {
-		dispatchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.putRuntime(runtime)
+
+	go func(ctx context.Context, runtime *pipelineRuntime) {
+		dispatchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := s.dispatchInitialReadyJobs(dispatchCtx, prepared, initialized); err != nil {
+		if err := s.dispatchPipelineStartJobs(dispatchCtx, runtime); err != nil {
 			slog.Error("dispatch initial ready jobs failed", "error", err)
 			return
 		}
-	}(*prepared, initialized)
+	}(ctx, runtime)
 
 	return &api.RunResponse{
-		Pipeline: prepared.Pipeline.Name,
-		RunNo:    initialized.runNo,
+		Pipeline: pipelinePlan.Pipeline.Name,
+		RunNo:    runtime.runNo,
 		Status:   store.StatusQueued,
 	}, nil
 }

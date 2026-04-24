@@ -99,7 +99,7 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 	tracer := otel.Tracer(workerTracerName)
 	ctx, span := tracer.Start(ctx, "mq.job.consume",
 		trace.WithAttributes(
-			attribute.String("pipeline", msg.Pipeline),
+			attribute.String("pipeline", msg.PipelineName),
 			attribute.Int("run_no", msg.RunNo),
 			attribute.String("stage", msg.Stage),
 			attribute.String("job", msg.Job.Name),
@@ -134,7 +134,7 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 
 	if execErr != nil {
 		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
-			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, callbackErr)
+			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.PipelineName, msg.RunNo, msg.Stage, jobName, callbackErr)
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
 		// Execution-level failures are terminal for this job message once status

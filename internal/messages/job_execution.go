@@ -6,7 +6,7 @@ import "github.com/xueyulinn/cicd-system/internal/models"
 // consumed by worker service for a single job run.
 type JobExecutionMessage struct {
 	RunNo         int                     `json:"run_no"`
-	Pipeline      string                  `json:"pipeline"`
+	PipelineName  string                  `json:"pipeline"`
 	Stage         string                  `json:"stage"`
 	Branch        string                  `json:"branch,omitempty"`
 	Commit        string                  `json:"commit,omitempty"`

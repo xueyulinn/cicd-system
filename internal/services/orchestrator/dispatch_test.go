@@ -33,7 +33,7 @@ func TestBuildJobExecutionMessage(t *testing.T) {
 	info := runInfo{RepoURL: "https://github.com/o/r.git", Branch: "main", Commit: "abc", WorkspacePath: "/tmp/wt"}
 
 	msg := svc.buildJobExecutionMessage(7, "pipe", "build", job, info)
-	if msg.RunNo != 7 || msg.Pipeline != "pipe" || msg.Stage != "build" {
+	if msg.RunNo != 7 || msg.PipelineName != "pipe" || msg.Stage != "build" {
 		t.Fatalf("unexpected envelope: %#v", msg)
 	}
 	if msg.Job.Name != "compile" || msg.RepoURL != info.RepoURL || msg.Commit != info.Commit || msg.WorkspacePath != info.WorkspacePath {
@@ -59,7 +59,7 @@ func TestNextPublisherRoundRobin(t *testing.T) {
 
 func TestEnqueueJobNoPublisher(t *testing.T) {
 	svc := &Service{}
-	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{Pipeline: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
+	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{PipelineName: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
 	if err == nil {
 		t.Fatal("enqueueJob error=nil, want non-nil")
 	}
@@ -70,7 +70,7 @@ func TestEnqueueJobNoPublisher(t *testing.T) {
 
 func TestEnqueueJobPublisherError(t *testing.T) {
 	svc := &Service{jobPublishers: []mq.Publisher{&capturePublisher{err: errors.New("publish fail")}}}
-	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{Pipeline: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
+	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{PipelineName: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
 	if err == nil {
 		t.Fatal("enqueueJob error=nil, want non-nil")
 	}
@@ -96,7 +96,7 @@ func TestEnqueueReadyJobsPublishesAllJobs(t *testing.T) {
 	}
 }
 
-func TestEnqueueInitialReadyJobsPropagatesStageError(t *testing.T) {
+func TestEnqueueFirstReadyStageJobsPropagatesStageError(t *testing.T) {
 	state := newStageState(models.StagePlan{
 		Jobs:      []models.JobExecutionPlan{{Name: "compile"}},
 		InDegree:  map[string]int{"compile": 0},
@@ -104,7 +104,7 @@ func TestEnqueueInitialReadyJobsPropagatesStageError(t *testing.T) {
 	})
 
 	svc := &Service{}
-	err := svc.enqueueInitialReadyJobs(
+	err := svc.enqueueFirstReadyStageJobs(
 		context.Background(),
 		"pipe",
 		1,
@@ -113,27 +113,27 @@ func TestEnqueueInitialReadyJobsPropagatesStageError(t *testing.T) {
 		runInfo{},
 	)
 	if err == nil {
-		t.Fatal("enqueueInitialReadyJobs error=nil, want non-nil")
+		t.Fatal("enqueueFirstReadyStageJobs error=nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "enqueue ready jobs for stage \"build\"") {
 		t.Fatalf("error=%v", err)
 	}
 }
 
-func TestDispatchInitialReadyJobsRequiresInitializedRuntime(t *testing.T) {
+func TestDispatchPipelineStartJobsRequiresInitializedRuntime(t *testing.T) {
 	svc := &Service{}
-	err := svc.dispatchInitialReadyJobs(context.Background(), PreparedRun{}, nil)
+	err := svc.dispatchPipelineStartJobs(context.Background(), nil)
 	if err == nil {
-		t.Fatal("dispatchInitialReadyJobs error=nil, want non-nil")
+		t.Fatal("dispatchPipelineStartJobs error=nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "initialized run is required") {
+	if !strings.Contains(err.Error(), "pipeline runtime is required") {
 		t.Fatalf("error=%v", err)
 	}
 }
 
-func TestEnqueueInitialReadyJobsSkipsMissingStageStates(t *testing.T) {
+func TestEnqueueFirstReadyStageJobsSkipsMissingStageStates(t *testing.T) {
 	svc := &Service{}
-	err := svc.enqueueInitialReadyJobs(
+	err := svc.enqueueFirstReadyStageJobs(
 		context.Background(),
 		"pipe",
 		1,
@@ -142,11 +142,11 @@ func TestEnqueueInitialReadyJobsSkipsMissingStageStates(t *testing.T) {
 		runInfo{},
 	)
 	if err != nil {
-		t.Fatalf("enqueueInitialReadyJobs returned error: %v", err)
+		t.Fatalf("enqueueFirstReadyStageJobs returned error: %v", err)
 	}
 }
 
-func TestEnqueueInitialReadyJobsContinuesWhenStageHasNoReadyJobs(t *testing.T) {
+func TestEnqueueFirstReadyStageJobsContinuesWhenStageHasNoReadyJobs(t *testing.T) {
 	svc := &Service{}
 	state := newStageState(models.StagePlan{
 		Jobs:      []models.JobExecutionPlan{{Name: "compile"}},
@@ -154,7 +154,7 @@ func TestEnqueueInitialReadyJobsContinuesWhenStageHasNoReadyJobs(t *testing.T) {
 		JobByName: map[string]models.JobExecutionPlan{"compile": {Name: "compile"}},
 	})
 
-	err := svc.enqueueInitialReadyJobs(
+	err := svc.enqueueFirstReadyStageJobs(
 		context.Background(),
 		"pipe",
 		1,
@@ -163,29 +163,23 @@ func TestEnqueueInitialReadyJobsContinuesWhenStageHasNoReadyJobs(t *testing.T) {
 		runInfo{},
 	)
 	if err != nil {
-		t.Fatalf("enqueueInitialReadyJobs returned error: %v", err)
+		t.Fatalf("enqueueFirstReadyStageJobs returned error: %v", err)
 	}
 }
 
-func TestDispatchInitialReadyJobsNoStagesSucceeds(t *testing.T) {
+func TestDispatchPipelineStartJobsNoStagesSucceeds(t *testing.T) {
 	svc := &Service{}
-	prepared := PreparedRun{
-		Pipeline:      &models.Pipeline{Name: "demo"},
-		ExecutionPlan: &models.ExecutionPlan{Stages: nil},
-	}
-	initialized := &initializedRun{
-		runNo: 1,
-		runtime: &pipelineRuntime{
-			pipeline:      "demo",
-			runNo:         1,
-			stageStates:   map[string]*stageState{},
-			runInfo:       runInfo{},
-			pipelineStart: time.Now().UTC(),
-		},
+	runtime := &pipelineRuntime{
+		pipeline:      "demo",
+		runNo:         1,
+		executionPlan: models.ExecutionPlan{Stages: nil},
+		stageStates:   map[string]*stageState{},
+		runInfo:       runInfo{},
+		pipelineStart: time.Now().UTC(),
 	}
 
-	err := svc.dispatchInitialReadyJobs(context.Background(), prepared, initialized)
+	err := svc.dispatchPipelineStartJobs(context.Background(), runtime)
 	if err != nil {
-		t.Fatalf("dispatchInitialReadyJobs returned error: %v", err)
+		t.Fatalf("dispatchPipelineStartJobs returned error: %v", err)
 	}
 }

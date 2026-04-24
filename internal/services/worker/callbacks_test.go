@@ -34,7 +34,7 @@ func TestPostJobCallback_SendsExpectedPayload(t *testing.T) {
 	defer srv.Close()
 
 	svc := &Service{orchestratorURL: srv.URL, httpClient: &http.Client{Timeout: time.Second}}
-	msg := messages.JobExecutionMessage{RunNo: 9, Pipeline: "p", Stage: "build", Job: models.JobExecutionPlan{Name: "compile"}}
+	msg := messages.JobExecutionMessage{RunNo: 9, PipelineName: "p", Stage: "build", Job: models.JobExecutionPlan{Name: "compile"}}
 
 	if err := svc.callbackJobStarted(context.Background(), msg); err != nil {
 		t.Fatalf("callbackJobStarted error: %v", err)

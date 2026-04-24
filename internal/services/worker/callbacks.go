@@ -13,7 +13,7 @@ import (
 
 func (s *Service) callbackJobStarted(ctx context.Context, msg messages.JobExecutionMessage) error {
 	return s.postJobCallback(ctx, "/callbacks/job-started", api.JobStatusCallbackRequest{
-		Pipeline: msg.Pipeline,
+		Pipeline: msg.PipelineName,
 		RunNo:    msg.RunNo,
 		Stage:    msg.Stage,
 		Job:      msg.Job.Name,
@@ -23,7 +23,7 @@ func (s *Service) callbackJobStarted(ctx context.Context, msg messages.JobExecut
 
 func (s *Service) callbackJobFinished(ctx context.Context, msg messages.JobExecutionMessage, status string, logs string, errMsg string) error {
 	return s.postJobCallback(ctx, "/callbacks/job-finished", api.JobStatusCallbackRequest{
-		Pipeline: msg.Pipeline,
+		Pipeline: msg.PipelineName,
 		RunNo:    msg.RunNo,
 		Stage:    msg.Stage,
 		Job:      msg.Job.Name,

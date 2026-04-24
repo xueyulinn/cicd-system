@@ -8,7 +8,41 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var prop = otel.GetTextMapPropagator()
+
+type amqpHeaderCarrier struct {
+	headers amqp.Table
+}
+
+func (c amqpHeaderCarrier) Get(key string) string {
+	if v, ok := c.headers[key]; ok {
+		switch t := v.(type) {
+		case string:
+			return t
+		case []byte:
+			return string(t)
+		default:
+			return fmt.Sprint(t)
+		}
+	}
+	return ""
+}
+
+func (c amqpHeaderCarrier) Set(key, value string) {
+	c.headers[key] = value
+}
+
+func (c amqpHeaderCarrier) Keys() []string {
+	keys := make([]string, 0, len(c.headers))
+	for k := range c.headers {
+		keys = append(keys, k)
+	}
+	return keys
+}
 
 // RabbitClient is the low-level RabbitMQ transport used by higher-level
 // publishers. Wire the AMQP connection/channel into this type when
@@ -104,7 +138,15 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 					break
 				}
 
-				if err := handler(ctx, delivery.Body); err != nil {
+				deliveryCtx := prop.Extract(ctx, amqpHeaderCarrier{headers: delivery.Headers})
+				deliveryCtx, span := tracer.Start(
+					deliveryCtx,
+					"consume.message",
+					trace.WithSpanKind(trace.SpanKindConsumer),
+				)
+
+				if err := handler(deliveryCtx, delivery.Body); err != nil {
+					span.End()
 					// observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
 					_ = delivery.Nack(false, true)
 					slog.Warn("mq nack delivery",
@@ -115,13 +157,16 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 				}
 
 				if err := delivery.Ack(false); err != nil {
+					span.End()
 					// observability.RecordMQDeliveryOutcome(queue, "ack_error")
 					slog.Warn("mq ack delivery failed; reconnecting",
 						"queue", queue,
 						"error", err,
 					)
 					restartConsume = true
+					continue
 				}
+				span.End()
 				// observability.RecordMQDeliveryOutcome(queue, "acked")
 			}
 		}
@@ -194,17 +239,25 @@ func (c *RabbitClient) publishOnce(ctx context.Context, queue string, body []byt
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	ctx, span := tracer.Start(ctx, "publish.message", trace.WithSpanKind(trace.SpanKindProducer))
+	defer span.End()
+
 	if err := c.ensureQueueLocked(queue); err != nil {
 		return fmt.Errorf("declare queue %q: %w", queue, err)
 	}
 
+	headers := amqp.Table{}
+	prop.Inject(ctx, amqpHeaderCarrier{headers: headers})
+
 	err := c.channel.PublishWithContext(ctx, "", queue, false, false, amqp.Publishing{
+		Headers:     headers,
 		ContentType: "application/json",
 		Body:        body,
 	})
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
