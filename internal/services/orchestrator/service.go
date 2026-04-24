@@ -20,11 +20,10 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/mq"
 	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const orchestratorClientName = "orchestrator-service"
+const orchestratorTracerScope = "internal/services/orchestrator"
 
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
@@ -116,12 +115,12 @@ func NewService(ctx context.Context) (*Service, error) {
 
 	return &Service{
 		validationURL:    config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		validationClient: observability.NewInstrumentedHTTPClient(orchestratorClientName, "validation", 2*time.Minute),
+		validationClient: observability.NewInstrumentedHTTPClient("validation", 2*time.Minute),
 		store:            st,
 		mqConn:           mqConn,
 		jobPublishers:    jobPublishers,
 		runtimes:         make(map[string]*pipelineRuntime),
-		tracer:           otel.Tracer("github.com/xueyulinn/cicd-system"),
+		tracer:           observability.Tracer(orchestratorTracerScope),
 	}, nil
 }
 

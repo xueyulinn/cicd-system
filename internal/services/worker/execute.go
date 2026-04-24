@@ -6,18 +6,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
 	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
@@ -187,6 +188,7 @@ func createContainer(ctx context.Context, cli *client.Client, image string, scri
 	opts := client.ContainerCreateOptions{Config: cfg}
 	createResp, err := cli.ContainerCreate(ctx, opts)
 	if err != nil {
+		slog.Error("created container failed: ", "error", err.Error())
 		return "", err
 	}
 	return createResp.ID, nil

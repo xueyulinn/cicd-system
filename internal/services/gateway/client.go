@@ -15,8 +15,6 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
-const gatewayClientName = "api-gateway"
-
 // Client handles communication with downstream services
 type Client struct {
 	validationURL      string
@@ -33,9 +31,9 @@ func NewClient() *Client {
 		validationURL:      config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
 		orchestratorURL:    config.GetEnvOrDefaultURL("ORCHESTRATOR_URL", config.DefaultOrchestratorURL),
 		reportURL:          config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
-		validationClient:   observability.NewInstrumentedHTTPClient(gatewayClientName, "validation", 2*time.Minute),
-		orchestratorClient: observability.NewInstrumentedHTTPClient(gatewayClientName, "orchestrator", 2*time.Minute),
-		reportingClient:    observability.NewInstrumentedHTTPClient(gatewayClientName, "reporting", 2*time.Minute),
+		validationClient:   observability.NewInstrumentedHTTPClient("validation", 2*time.Minute),
+		orchestratorClient: observability.NewInstrumentedHTTPClient("orchestrator", 2*time.Minute),
+		reportingClient:    observability.NewInstrumentedHTTPClient("reporting", 2*time.Minute),
 	}
 }
 

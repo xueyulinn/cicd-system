@@ -12,8 +12,8 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/config"
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/mq"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -22,7 +22,8 @@ import (
 const (
 	defaultJobTimeout = 10 * time.Minute
 
-	workerTracerName = "worker-service"
+	workerTracerScope             = "internal/services/worker"
+	orchestratorHTTPDownstreamTag = "orchestrator"
 )
 
 // Service runs the worker consumers and dependency checks.
@@ -34,6 +35,7 @@ type Service struct {
 	orchestratorURL string
 	httpClient      *http.Client
 	mqConfig        mq.Config
+	tracer          trace.Tracer
 }
 
 // NewService constructs a worker service with lazy dependency initialization.
@@ -51,10 +53,16 @@ func NewService(jobTimeout time.Duration) *Service {
 		mqConn:          nil,
 		orchestratorURL: config.GetEnvOrDefaultURL("ORCHESTRATOR_URL", config.DefaultOrchestratorURL),
 		mqConfig:        cfg,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
+		httpClient:      observability.NewInstrumentedHTTPClient(orchestratorHTTPDownstreamTag, 15*time.Second),
+		tracer:          observability.Tracer(workerTracerScope),
 	}
+}
+
+func (s *Service) serviceTracer() trace.Tracer {
+	if s != nil && s.tracer != nil {
+		return s.tracer
+	}
+	return observability.Tracer(workerTracerScope)
 }
 
 // Close releases all underlying consumers and Docker resources held by Service.
@@ -96,8 +104,7 @@ func (s *Service) Ready(ctx context.Context) error {
 }
 
 func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) (err error) {
-	tracer := otel.Tracer(workerTracerName)
-	ctx, span := tracer.Start(ctx, "mq.job.consume",
+	ctx, span := s.serviceTracer().Start(ctx, "consume.message",
 		trace.WithAttributes(
 			attribute.String("pipeline", msg.PipelineName),
 			attribute.Int("run_no", msg.RunNo),

@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	"github.com/xueyulinn/cicd-system/internal/messages"
-	"go.opentelemetry.io/otel"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
- var tracer = otel.Tracer("cicd-system/internal/mq")
+var tracer = observability.Tracer("internal/mq")
 
 // Publisher publishes job messages for worker consumption.
 type Publisher interface {

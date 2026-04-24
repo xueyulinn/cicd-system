@@ -75,7 +75,7 @@ func setupOTel(ctx context.Context, serviceName string) (func(context.Context) e
 
 	// Log bridge
 	otelHandler := otelslog.NewHandler(
-		"github.com/xueyulinn/cicd-system",
+		instrumentationBaseScope,
 		otelslog.WithSource(true),
 	)
 	logger := slog.New(otelHandler)

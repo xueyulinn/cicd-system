@@ -6,15 +6,33 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // NewInstrumentedHTTPClient returns an *http.Client that propagates trace context and records for outbound http request.
 // OTel metrics (http.client.request.duration) for each request.
-// client is the local service name (e.g. api-gateway); downstream is the logical downstream (e.g. validation).
-func NewInstrumentedHTTPClient(clientName string, downstream string, timeout time.Duration) *http.Client {
-	wrapped := otelhttp.NewTransport(http.DefaultTransport, otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-		return r.Method + " " + r.URL.Path
-	}))
+// downstream is the logical downstream service name (e.g. validation).
+func NewInstrumentedHTTPClient(downstream string, timeout time.Duration) *http.Client {
+	wrapped := otelhttp.NewTransport(
+		http.DefaultTransport,
+		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+			method := strings.TrimSpace(r.Method)
+			path := strings.TrimSpace(r.URL.Path)
+			if path == "" {
+				path = "/"
+			}
+			if method == "" {
+				return path
+			}
+			return method + " " + path
+		}),
+		otelhttp.WithSpanOptions(
+			trace.WithAttributes(
+				attribute.String("http.downstream", downstream),
+			),
+		),
+	)
 	return &http.Client{
 		Transport: wrapped,
 		Timeout:   timeout,
