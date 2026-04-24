@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/xueyulinn/cicd-system/internal/api"
+	"go.opentelemetry.io/otel"
 )
 
 func TestValidatePipeline_HTTPErrorWithEmptyValidationErrors(t *testing.T) {
@@ -18,8 +19,8 @@ func TestValidatePipeline_HTTPErrorWithEmptyValidationErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{httpValidation: srv.Client(), validationURL: srv.URL}
-	resp, err := svc.validatePipeline("pipeline: {}")
+	svc := &Service{validationClient: srv.Client(), validationURL: srv.URL, tracer: otel.Tracer("test")}
+	resp, err := svc.validatePipeline(context.Background(), "pipeline: {}")
 	if err != nil {
 		t.Fatalf("validatePipeline error: %v", err)
 	}
@@ -38,8 +39,8 @@ func TestValidatePipeline_HTTPErrorPreservesValidationErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{httpValidation: srv.Client(), validationURL: srv.URL}
-	resp, err := svc.validatePipeline("pipeline: {}")
+	svc := &Service{validationClient: srv.Client(), validationURL: srv.URL, tracer: otel.Tracer("test")}
+	resp, err := svc.validatePipeline(context.Background(), "pipeline: {}")
 	if err != nil {
 		t.Fatalf("validatePipeline error: %v", err)
 	}
@@ -52,8 +53,8 @@ func TestValidatePipeline_HTTPErrorPreservesValidationErrors(t *testing.T) {
 }
 
 func TestPrepareRun_EmptyYAML(t *testing.T) {
-	svc := &Service{}
-	prepared, runResp, err := svc.prepareRun(api.RunRequest{YAMLContent: "   "})
+	svc := &Service{tracer: otel.Tracer("test")}
+	prepared, runResp, err := svc.prepareRun(context.Background(), api.RunRequest{YAMLContent: "   "})
 	if err != nil {
 		t.Fatalf("prepareRun error: %v", err)
 	}
@@ -71,8 +72,8 @@ func TestPrepareRun_ValidationInvalid(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{httpValidation: srv.Client(), validationURL: srv.URL}
-	prepared, runResp, err := svc.prepareRun(api.RunRequest{YAMLContent: "pipeline: {}"})
+	svc := &Service{validationClient: srv.Client(), validationURL: srv.URL, tracer: otel.Tracer("test")}
+	prepared, runResp, err := svc.prepareRun(context.Background(), api.RunRequest{YAMLContent: "pipeline: {}"})
 	if err != nil {
 		t.Fatalf("prepareRun error: %v", err)
 	}
@@ -90,8 +91,8 @@ func TestPrepareRun_ParseFailureAfterValidationSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{httpValidation: srv.Client(), validationURL: srv.URL}
-	prepared, runResp, err := svc.prepareRun(api.RunRequest{YAMLContent: "{"})
+	svc := &Service{validationClient: srv.Client(), validationURL: srv.URL, tracer: otel.Tracer("test")}
+	prepared, runResp, err := svc.prepareRun(context.Background(), api.RunRequest{YAMLContent: "{"})
 	if err != nil {
 		t.Fatalf("prepareRun error: %v", err)
 	}
@@ -123,8 +124,8 @@ compile:
     - "go test ./..."
 `
 
-	svc := &Service{httpValidation: srv.Client(), validationURL: srv.URL}
-	prepared, runResp, err := svc.prepareRun(api.RunRequest{YAMLContent: yml})
+	svc := &Service{validationClient: srv.Client(), validationURL: srv.URL, tracer: otel.Tracer("test")}
+	prepared, runResp, err := svc.prepareRun(context.Background(), api.RunRequest{YAMLContent: yml})
 	if err != nil {
 		t.Fatalf("prepareRun error: %v", err)
 	}

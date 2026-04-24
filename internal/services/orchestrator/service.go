@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,21 +20,22 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/mq"
 	"github.com/xueyulinn/cicd-system/internal/observability"
 	"github.com/xueyulinn/cicd-system/internal/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const orchestratorClientName = "orchestrator-service"
 // Service coordinates pipeline execution, runtime state, and job dispatch.
 type Service struct {
-	workerURL      string
 	validationURL  string
-	httpValidation *http.Client
-	httpWorker     *http.Client
+	validationClient *http.Client
 	store          *store.Store
 	mqConn         *amqp.Connection
 	jobPublishers  []mq.Publisher
 	publishIdx     uint64
 	runtimeMu      sync.Mutex
 	runtimes       map[string]*pipelineRuntime // isolate pipeline runs on parallel
+	tracer trace.Tracer
 }
 
 // job identifier
@@ -120,14 +120,13 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	return &Service{
-		workerURL:     config.GetEnvOrDefaultURL("WORKER_URL", config.DefaultWorkerURL),
 		validationURL: config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		httpValidation: observability.NewInstrumentedHTTPClient(orchestratorClientName, "validation", 2*time.Minute),
-		httpWorker:     observability.NewInstrumentedHTTPClient(orchestratorClientName, "worker", 10*time.Minute),
+		validationClient: observability.NewInstrumentedHTTPClient(orchestratorClientName, "validation", 2*time.Minute),
 		store:          st,
 		mqConn:         mqConn,
 		jobPublishers:  jobPublishers,
 		runtimes:       make(map[string]*pipelineRuntime),
+		tracer: otel.Tracer("github.com/xueyulinn/cicd-system"),
 	}, nil
 }
 
@@ -175,7 +174,7 @@ func (s *Service) nextPublisher() mq.Publisher {
 }
 
 // Ready reports whether the orchestrator service can serve requests.
-// The service depends on the report store and the worker service.
+// The service depends on the store client and mq client .
 func (s *Service) Ready(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("orchestrator service is not initialized")
@@ -185,20 +184,6 @@ func (s *Service) Ready(ctx context.Context) error {
 	}
 	if err := s.store.Ping(ctx); err != nil {
 		return fmt.Errorf("report store is not ready: %w", err)
-	}
-
-	resp, err := s.httpWorker.Get(s.workerURL + "/ready")
-	if err != nil {
-		return fmt.Errorf("worker service is not ready: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("worker service readiness returned status %d", resp.StatusCode)
-		}
-		return fmt.Errorf("worker service readiness returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	timedoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -333,6 +318,9 @@ func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 
 // initialize pipeline runtime
 func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRun, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (*initializedRun, error) {
+	ctx, span := s.tracer.Start(ctx, "initialize.pipeline")
+	defer span.End()
+
 	pipeline := prepared.Pipeline
 	executionPlan := prepared.ExecutionPlan
 	runResult, runStart, err := s.startPipelineRun(ctx, pipeline.Name, runInfo, requestKey)
@@ -411,8 +399,11 @@ func (s *Service) initializePipelineRun(ctx context.Context, prepared PreparedRu
 
 // Run validates the pipeline, initializes run records/state, dispatches initial jobs, and returns immediately.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "start.pipeline")
+	defer span.End()
+
 	// validate pipeline file and generate execution plan
-	prepared, runResp, err := s.prepareRun(req)
+	prepared, runResp, err := s.prepareRun(ctx, req)
 	if runResp != nil {
 		return runResp, nil
 	}

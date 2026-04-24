@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +15,10 @@ import (
 )
 
 // PrepareRun validates the incoming YAML and returns static execution plan and pipeline dto.
-func (s *Service) prepareRun(req api.RunRequest) (*PreparedRun, *api.RunResponse, error) {
+func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PreparedRun, *api.RunResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "prepare.pipeline")
+	defer span.End()
+
 	if strings.TrimSpace(req.YAMLContent) == "" {
 		return nil, &api.RunResponse{
 			Pipeline: "",
@@ -23,9 +27,9 @@ func (s *Service) prepareRun(req api.RunRequest) (*PreparedRun, *api.RunResponse
 		}, nil
 	}
 
-	validationResp, err := s.validatePipeline(req.YAMLContent)
+	validationResp, err := s.validatePipeline(ctx, req.YAMLContent)
 	if err != nil {
-		return nil, nil, fmt.Errorf("run pipeline: %w", err)
+		return nil, nil, fmt.Errorf("validate pipeline failed: %w", err)
 	}
 
 	if !validationResp.Valid {
@@ -63,17 +67,22 @@ func (s *Service) prepareRun(req api.RunRequest) (*PreparedRun, *api.RunResponse
 }
 
 // validatePipeline calls validation service and returns validation result.
-func (s *Service) validatePipeline(yamlContent string) (*api.ValidateResponse, error) {
+func (s *Service) validatePipeline(ctx context.Context, yamlContent string) (*api.ValidateResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "validate.pipeline")
+	defer span.End()
+
 	validateReq := map[string]string{
 		"yaml_content": yamlContent,
 	}
 
-	jsonBody, err := json.Marshal(validateReq)
+	bodyBytes, err := json.Marshal(validateReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal validation request: %w", err)
+		return nil, fmt.Errorf("fail to marshal request body %w", err)
 	}
 
-	resp, err := s.httpValidation.Post(s.validationURL+"/validate", "application/json", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.validationURL+"/validate", bytes.NewReader(bodyBytes))
+
+	resp, err := s.validationClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call validation service: %w", err)
 	}
