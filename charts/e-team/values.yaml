@@ -313,20 +313,6 @@ observability:
         cpu: 500m
         memory: 512Mi
 
-  promtail:
-    enabled: true
-    image:
-      repository: grafana/promtail
-      tag: 3.5.7
-      pullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 250m
-        memory: 256Mi
-
   grafana:
     image:
       repository: grafana/grafana

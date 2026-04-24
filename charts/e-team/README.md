@@ -157,7 +157,6 @@ This deploys:
 - Loki
 - Tempo
 - OpenTelemetry Collector
-- Promtail
 - Grafana
 
 Observability data is persisted via PVCs for Prometheus, Loki, Tempo, and Grafana.
@@ -190,20 +189,18 @@ It also provisions these dashboards from config committed to the repository:
 - `HTTP Latency (Server & Client)`
 - `Parallel execution & RabbitMQ`
 
-This deployment uses Prometheus direct scraping for `/metrics`, Promtail for pod log shipping to Loki, and the OTel Collector for traces. That is the documented substitution for the recommended “single ingestion point” design, chosen so service logs and worker-managed job-container logs are both queryable without modifying pipeline job images.
+This deployment uses Prometheus direct scraping for `/metrics`, and the OTel Collector for traces and OTLP logs.
 
 ### Observability Validation
 
 ```bash
-kubectl -n e-team get pods | grep -E 'grafana|prometheus|loki|tempo|otel|promtail'
+kubectl -n e-team get pods | grep -E 'grafana|prometheus|loki|tempo|otel'
 kubectl -n e-team get pvc
 kubectl -n e-team port-forward svc/e-team-e-team-otel-collector 13133:13133
 curl http://localhost:13133/
 curl -u admin:admin http://localhost:3000/api/datasources
 curl -u admin:admin http://localhost:3000/api/search
 ```
-
-In Kubernetes, Promtail scrapes pod logs from the node and forwards them to Loki so both service logs and job-container logs are queryable in Grafana.
 
 ## Minikube Validation
 
@@ -280,5 +277,4 @@ At the time of writing, `run` reaches the Kubernetes execution and worker servic
 - Worker startup failures: confirm `/var/run/docker.sock` exists inside the node and the `hostPath` mount is allowed
 - `run` fails with Git clone/authentication errors: the worker is trying to clone the repository revision inside Kubernetes; public repos work more easily, while private repos need credentials injected into the worker
 - External DB mode misconfigured: when `mysql.enabled=false`, set `externalDatabase.url`; if the DB wait init containers remain enabled, also set `externalDatabase.host`, `port`, `username`, `password`, and `database`
-- Observability pods fail to start: inspect `kubectl -n e-team logs deploy/e-team-e-team-grafana`, `kubectl -n e-team logs deploy/e-team-e-team-otel-collector`, and `kubectl -n e-team logs ds/e-team-e-team-promtail`
-
+- Observability pods fail to start: inspect `kubectl -n e-team logs deploy/e-team-e-team-grafana` and `kubectl -n e-team logs deploy/e-team-e-team-otel-collector`

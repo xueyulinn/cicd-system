@@ -174,16 +174,6 @@ services:
       - "${OTEL_COLLECTOR_HEALTH_PORT}:${OTEL_COLLECTOR_HEALTH_PORT}"
       - "${OTEL_COLLECTOR_METRICS_HOST_PORT}:${OTEL_COLLECTOR_METRICS_PORT}"
 
-  promtail:
-    image: ${PROMTAIL_IMAGE}
-    command:
-      - -config.file=/etc/promtail/promtail-config.yml
-    volumes:
-      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - loki
-
   grafana:
     image: ${GRAFANA_IMAGE}
     environment:
