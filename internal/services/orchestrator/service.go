@@ -442,7 +442,6 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		dispatchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := s.dispatchInitialReadyJobs(dispatchCtx, prepared, initialized); err != nil {
-			fmt.Fprintf(os.Stderr, "dispatch initial ready jobs failed for run %d: %v\n", initialized.runNo, err)
 		}
 	}(*prepared, initialized)
 

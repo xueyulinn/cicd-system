@@ -130,16 +130,13 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return fmt.Errorf("callback job started: %w", err)
 	}
 
-	start := time.Now()
 	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
-	duration := time.Since(start)
 
 	if execErr != nil {
 		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
 			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, callbackErr)
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
-		log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v error=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, execErr)
 		// Execution-level failures are terminal for this job message once status
 		// has been reported back; return nil so MQ ack does not requeue forever.
 		return nil
@@ -149,6 +146,5 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return fmt.Errorf("callback job finished: %w", err)
 	}
 
-	log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v ok logs=%q", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, logs)
 	return nil
 }

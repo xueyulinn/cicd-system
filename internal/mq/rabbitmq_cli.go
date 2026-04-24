@@ -3,7 +3,7 @@ package mq
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -83,7 +83,6 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 	for {
 		deliveries, err := c.startConsume(queue)
 		if err != nil {
-			log.Printf("[mq] consumer declared queue failed, queue=%s err=%v; reconnecting", queue, err)
 			if err := c.reconnectAndWait(ctx, queue); err != nil {
 				return err
 			}
@@ -98,7 +97,9 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 				return ctx.Err()
 			case delivery, ok := <-deliveries:
 				if !ok {
-					log.Printf("[mq] delivery channel closed queue=%s; reconnecting", queue)
+					slog.Warn("mq delivery channel closed; reconnecting",
+						"queue", queue,
+					)
 					restartConsume = true
 					break
 				}
@@ -106,15 +107,20 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 				if err := handler(ctx, delivery.Body); err != nil {
 					// observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
 					_ = delivery.Nack(false, true)
-					log.Printf("[mq] nack delivery from queue=%s err=%v", queue, err)
+					slog.Warn("mq nack delivery",
+						"queue", queue,
+						"error", err,
+					)
 					continue
 				}
 
 				if err := delivery.Ack(false); err != nil {
 					// observability.RecordMQDeliveryOutcome(queue, "ack_error")
-					log.Printf("[mq] ack delivery failed queue=%s err=%v; reconnecting", queue, err)
+					slog.Warn("mq ack delivery failed; reconnecting",
+						"queue", queue,
+						"error", err,
+					)
 					restartConsume = true
-					break
 				}
 				// observability.RecordMQDeliveryOutcome(queue, "acked")
 			}
@@ -135,7 +141,10 @@ func (c *RabbitClient) reconnectAndWait(ctx context.Context, queue string) error
 		case CtxDone:
 			return recErr
 		case Retryable:
-			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+			slog.Warn("mq reconnect failed",
+				"queue", queue,
+				"error", recErr,
+			)
 		}
 	}
 	if err := sleepWithContext(ctx, reconnectDelay); err != nil {
@@ -156,14 +165,22 @@ func (c *RabbitClient) Publish(ctx context.Context, queue string, body []byte) e
 			return nil
 		} else {
 			lastErr = err
-			log.Printf("[mq] publish failed attempt=%d/%d queue=%s err=%v", attempt, maxPublishAttempts, queue, err)
+			slog.Warn("mq publish failed",
+				"attempt", attempt,
+				"max_attempts", maxPublishAttempts,
+				"queue", queue,
+				"error", err,
+			)
 		}
 
 		if attempt == maxPublishAttempts {
 			break
 		}
 		if recErr := c.reconnect(); recErr != nil {
-			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+			slog.Warn("mq reconnect failed",
+				"queue", queue,
+				"error", recErr,
+			)
 			lastErr = fmt.Errorf("%w; reconnect: %v", lastErr, recErr)
 		}
 		if err := sleepWithContext(ctx, reconnectDelay); err != nil {

@@ -1,9 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -37,23 +34,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/run", h.handleRun)
 	mux.HandleFunc("/report", h.handleReport)
 	mux.HandleFunc("/ready", h.handleReady)
-}
-
-func decodeYAMLContentRequest(r *http.Request) (string, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read request body: %w", err)
-	}
-
-	var req api.ValidateRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		return "", fmt.Errorf("invalid JSON: %w", err)
-	}
-	if strings.TrimSpace(req.YAMLContent) == "" {
-		return "", fmt.Errorf("missing yaml_content field")
-	}
-
-	return req.YAMLContent, nil
 }
 
 // handleHealth reports gateway liveness only.
@@ -123,11 +103,11 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := observability.WithTraceContext(r.Context(), slog.Default())
+	logger := observability.WithTraceContext(r.Context(), slog.Default())
 
 	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
-		log.Error("run forward failed", "error", err)
+		logger.Error("run forward failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
