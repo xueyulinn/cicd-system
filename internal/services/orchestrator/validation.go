@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,60 +15,40 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/common/planner"
 )
 
-// PrepareRun validates the incoming YAML and returns static execution plan and pipeline dto.
-func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PreparedRun, *api.RunResponse, error) {
+// PrepareRun validates the pipeline and returns static execution plan and pipeline dto.
+func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PreparedRun, error) {
 	ctx, span := s.tracer.Start(ctx, "prepare.pipeline")
 	defer span.End()
 
 	if strings.TrimSpace(req.YAMLContent) == "" {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   []string{"yaml_content is required"},
-		}, nil
+		return nil, fmt.Errorf("pipeline content can not be empty")
 	}
 
-	validationResp, err := s.validatePipeline(ctx, req.YAMLContent)
+	err := s.validatePipeline(ctx, req.YAMLContent)
 	if err != nil {
-		return nil, nil, fmt.Errorf("validate pipeline failed: %w", err)
-	}
-
-	if !validationResp.Valid {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   validationResp.Errors,
-		}, nil
+		return nil, fmt.Errorf("validate pipeline failed: %w", err)
 	}
 
 	p := parser.NewParserFromContent(req.YAMLContent)
 	pipeline, _, err := p.Parse()
 	if err != nil {
-		return nil, &api.RunResponse{
-			Pipeline: "",
-			Status:   "failed",
-			Errors:   []string{fmt.Sprintf("pipeline parse failed: %v", err)},
-		}, nil
+		return nil, fmt.Errorf("pipeline parse failed: %w", err)
 	}
 
 	// generate static executionPlan for current pipeline run
 	executionPlan, err := planner.GenerateExecutionPlan(pipeline)
 	if err != nil {
-		return nil, &api.RunResponse{
-			Pipeline: pipeline.Name,
-			Status:   "failed",
-			Errors:   []string{fmt.Sprintf("generate execution plan failed: %v", err)},
-		}, nil
+		return nil, fmt.Errorf("generate execution plan failed: %w", err)
 	}
 
 	return &PreparedRun{
 		Pipeline:      pipeline,
 		ExecutionPlan: executionPlan,
-	}, nil, nil
+	}, nil
 }
 
-// validatePipeline calls validation service and returns validation result.
-func (s *Service) validatePipeline(ctx context.Context, yamlContent string) (*api.ValidateResponse, error) {
+// validatePipeline calls validation service and returns error if validation fails.
+func (s *Service) validatePipeline(ctx context.Context, yamlContent string) error {
 	ctx, span := s.tracer.Start(ctx, "validate.pipeline")
 	defer span.End()
 
@@ -77,27 +58,27 @@ func (s *Service) validatePipeline(ctx context.Context, yamlContent string) (*ap
 
 	bodyBytes, err := json.Marshal(validateReq)
 	if err != nil {
-		return nil, fmt.Errorf("fail to marshal request body %w", err)
+		return fmt.Errorf("fail to marshal request body %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.validationURL+"/validate", bytes.NewReader(bodyBytes))
 
 	resp, err := s.validationClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call validation service: %w", err)
+		return fmt.Errorf("failed to call validation service: %w", err)
 	}
-	defer func() {
-		_ = resp.Body.Close() // Ignore close error as we're done with the body
-	}()
+	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read validation response: %w", err)
+		return fmt.Errorf("failed to read validation response body: %w", err)
 	}
 
 	var validationResp api.ValidateResponse
-	if err := json.Unmarshal(body, &validationResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal validation response: %w", err)
+	if len(bodyBytes) > 0 {
+    	if err := json.Unmarshal(respBody, &validationResp); err != nil {
+        	return fmt.Errorf("failed to decode validation response: %w", err)
+    	}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -105,8 +86,25 @@ func (s *Service) validatePipeline(ctx context.Context, yamlContent string) (*ap
 		if len(validationResp.Errors) == 0 {
 			validationResp.Errors = []string{fmt.Sprintf("validation service returned status %d", resp.StatusCode)}
 		}
-		validationResp.Valid = false
+
+		errs := make([]error, 0, len(validationResp.Errors))
+		for _, msg := range validationResp.Errors {
+			errs = append(errs, errors.New(msg))
+		}
+
+		return fmt.Errorf( "validation service returned status %d: %w",
+        resp.StatusCode,
+        errors.Join(errs...),)
 	}
 
-	return &validationResp, nil
+	if !validationResp.Valid {
+    	errs := make([]error, 0, len(validationResp.Errors))
+    	for _, msg := range validationResp.Errors {
+        	errs = append(errs, errors.New(msg))
+    	}
+
+    	return fmt.Errorf("validation failed: %w", errors.Join(errs...))
+	}
+
+	return nil
 }

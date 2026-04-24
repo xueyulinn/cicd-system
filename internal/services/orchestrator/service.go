@@ -403,10 +403,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	defer span.End()
 
 	// validate pipeline file and generate execution plan
-	prepared, runResp, err := s.prepareRun(ctx, req)
-	if runResp != nil {
-		return runResp, nil
-	}
+	prepared, err := s.prepareRun(ctx, req)
 	if err != nil {
 		return nil, err
 	}

@@ -107,8 +107,6 @@ func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 
 	if len(resp.Errors) == 0 {
 		api.WriteJSON(w, http.StatusOK, resp)
-	} else {
-		api.WriteJSON(w, http.StatusBadRequest, resp)
 	}
 }
 
