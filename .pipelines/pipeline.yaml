@@ -20,6 +20,7 @@ unit-tests:
   - image: golang:1.25
   - script:
     - "go test -v ./internal/... ./cmd/..."
+  - failures: true
 
 integration-tests:
   - stage: test
@@ -27,6 +28,7 @@ integration-tests:
   - image: golang:1.25
   - script:
     - "go test -v ./internal/... ./cmd/..."
+  - failures: true
 
 deploy-staging:
   - stage: deploy
