@@ -14,9 +14,9 @@ Kubernetes-enabled by this chart:
 - `rabbitmq` Deployment, Service, and credentials `Secret` when `rabbitmq.enabled=true` (AMQP for pipeline job dispatch; aligns with Docker Compose)
 - `MySQL` StatefulSet, Service, Secret, and migration `Job` when `mysql.enabled=true`
 
-Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. The worker also gets `ORCHESTRATOR_URL` (HTTP callbacks to execution) and `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `workerService.concurrency` in `values.yaml` as needed.
+Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. Execution also gets `PUBLISHER_CONCURRENCY` (RabbitMQ publishers per Pod), and worker gets `ORCHESTRATOR_URL` (HTTP callbacks to execution) plus `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `executionService.publisherConcurrency` and `workerService.concurrency` in `values.yaml` as needed.
 
-**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `ORCHESTRATOR_URL`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
+**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `ORCHESTRATOR_URL`, `PUBLISHER_CONCURRENCY`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
 
 Not Kubernetes-enabled in this chart:
 

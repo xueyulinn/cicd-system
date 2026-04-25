@@ -252,12 +252,15 @@ func (c *RabbitClient) publishOnce(ctx context.Context, queue string, body []byt
 	headers := amqp.Table{}
 	prop.Inject(ctx, amqpHeaderCarrier{headers: headers})
 
-	err := c.channel.PublishWithContext(ctx, "", queue, false, false, amqp.Publishing{
+	dc, err := c.channel.PublishWithDeferredConfirmWithContext(ctx, "", queue, false, false, amqp.Publishing{
 		Headers:     headers,
 		ContentType: "application/json",
 		Body:        body,
 	})
 	if err != nil {
+		return err
+	}
+	if err := waitPublishConfirm(ctx, dc); err != nil {
 		return err
 	}
 
@@ -319,6 +322,29 @@ func (c *RabbitClient) reopenChannelLocked() error {
 		return err
 	}
 	c.channel = ch
+	if err := c.channel.Confirm(false); err != nil {
+		_ = c.channel.Close()
+		c.channel = nil
+		return fmt.Errorf("enable publisher confirms: %w", err)
+	}
+	return nil
+}
+
+type publishConfirmationWaiter interface {
+	WaitContext(ctx context.Context) (bool, error)
+}
+
+func waitPublishConfirm(ctx context.Context, waiter publishConfirmationWaiter) error {
+	if waiter == nil {
+		return fmt.Errorf("publish confirmation waiter is nil")
+	}
+	acked, err := waiter.WaitContext(ctx)
+	if err != nil {
+		return fmt.Errorf("wait publish confirmation: %w", err)
+	}
+	if !acked {
+		return fmt.Errorf("publish message nacked by broker")
+	}
 	return nil
 }
 
