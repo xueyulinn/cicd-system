@@ -87,6 +87,12 @@ workerService:
   replicaCount: 1
   # RabbitMQ consumers per worker Pod (parallel-ready jobs within a stage).
   concurrency: 2
+  # Per-job container limits used by local docker-compose worker execution.
+  # cpuLimit uses CPU cores format, e.g. "0.5", "1", "2".
+  jobResources:
+    cpuLimit: ""
+    nanoCPUs: ""
+    memoryLimitMB: ""
   image:
     repository: ghcr.io/cs7580-sea-sp26/e-team/worker-service
     tag: main

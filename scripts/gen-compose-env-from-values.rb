@@ -112,6 +112,9 @@ lines << "REPORTING_URL=http://reporting-service:#{reporting_port}"
 lines << "REPORT_DB_DSN=#{v.dig('mysql', 'auth', 'username')}:#{v.dig('mysql', 'auth', 'password')}@tcp(mysql:#{mysql_port})/#{v.dig('mysql', 'auth', 'database')}?parseTime=true&charset=utf8mb4&loc=UTC"
 
 lines << "WORKER_CONCURRENCY=#{v.dig('workerService', 'concurrency') || 1}"
+lines << "WORKER_JOB_CPU_LIMIT=#{v.dig('workerService', 'jobResources', 'cpuLimit') || ''}"
+lines << "WORKER_JOB_NANO_CPUS=#{v.dig('workerService', 'jobResources', 'nanoCPUs') || ''}"
+lines << "WORKER_JOB_MEMORY_LIMIT_MB=#{v.dig('workerService', 'jobResources', 'memoryLimitMB') || ''}"
 
 File.write(OUT_PATH, lines.join("\n") + "\n")
 puts "Wrote #{OUT_PATH}" if ARGV.empty?

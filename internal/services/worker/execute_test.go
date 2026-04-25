@@ -80,3 +80,54 @@ func TestResolveWorkspacePathMapsWindowsPathToHostTemp(t *testing.T) {
 		t.Fatalf("resolved path = %q, want %q", got, mappedPath)
 	}
 }
+
+func TestContainerResourcesFromEnvUsesCPULimit(t *testing.T) {
+	t.Setenv("WORKER_JOB_CPU_LIMIT", "0.5")
+	t.Setenv("WORKER_JOB_NANO_CPUS", "")
+	t.Setenv("WORKER_JOB_MEMORY_LIMIT_MB", "")
+
+	resources, err := containerResourcesFromEnv()
+	if err != nil {
+		t.Fatalf("containerResourcesFromEnv returned error: %v", err)
+	}
+	if resources.NanoCPUs != 500000000 {
+		t.Fatalf("resources.NanoCPUs = %d, want 500000000", resources.NanoCPUs)
+	}
+	if resources.Memory != 0 {
+		t.Fatalf("resources.Memory = %d, want 0", resources.Memory)
+	}
+}
+
+func TestContainerResourcesFromEnvUsesMemoryLimitMB(t *testing.T) {
+	t.Setenv("WORKER_JOB_CPU_LIMIT", "")
+	t.Setenv("WORKER_JOB_NANO_CPUS", "")
+	t.Setenv("WORKER_JOB_MEMORY_LIMIT_MB", "256")
+
+	resources, err := containerResourcesFromEnv()
+	if err != nil {
+		t.Fatalf("containerResourcesFromEnv returned error: %v", err)
+	}
+	if resources.Memory != 256*1024*1024 {
+		t.Fatalf("resources.Memory = %d, want %d", resources.Memory, 256*1024*1024)
+	}
+}
+
+func TestContainerResourcesFromEnvRejectsConflictingCPUVars(t *testing.T) {
+	t.Setenv("WORKER_JOB_CPU_LIMIT", "1")
+	t.Setenv("WORKER_JOB_NANO_CPUS", "1000000000")
+	t.Setenv("WORKER_JOB_MEMORY_LIMIT_MB", "")
+
+	if _, err := containerResourcesFromEnv(); err == nil {
+		t.Fatal("expected error when both cpu env vars are set")
+	}
+}
+
+func TestContainerResourcesFromEnvRejectsInvalidCPU(t *testing.T) {
+	t.Setenv("WORKER_JOB_CPU_LIMIT", "bad")
+	t.Setenv("WORKER_JOB_NANO_CPUS", "")
+	t.Setenv("WORKER_JOB_MEMORY_LIMIT_MB", "")
+
+	if _, err := containerResourcesFromEnv(); err == nil {
+		t.Fatal("expected error for invalid WORKER_JOB_CPU_LIMIT")
+	}
+}

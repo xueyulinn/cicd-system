@@ -508,6 +508,11 @@ docker compose --env-file compose.values.env logs -f execution-service worker-se
 
 `compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: MySQL, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `ORCHESTRATOR_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
 
+Optional worker job container limits (applied per job container by `worker-service`):
+- `WORKER_JOB_CPU_LIMIT` (e.g. `0.5`, `1`, `2`, converted to Docker `NanoCPUs`)
+- `WORKER_JOB_NANO_CPUS` (exact `NanoCPUs`; cannot be set together with `WORKER_JOB_CPU_LIMIT`)
+- `WORKER_JOB_MEMORY_LIMIT_MB` (memory limit in MB)
+
 #### Local parallel execution (RabbitMQ + worker)
 
 To exercise **multiple ready jobs in one stage** (parallel dispatch to the queue and, with enough consumers, overlapping job runs):
@@ -661,5 +666,4 @@ This project is licensed under the terms specified in the [LICENSE](LICENSE) fil
 ## Team
 
 This project is developed by the e-team for CS7580 SEA-SP26.
-
 

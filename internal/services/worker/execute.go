@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,12 +26,20 @@ import (
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
 const DefaultImage = "alpine:latest"
 
+const (
+	envWorkerJobCPULimit          = "WORKER_JOB_CPU_LIMIT"
+	envWorkerJobNanoCPUs          = "WORKER_JOB_NANO_CPUS"
+	envWorkerJobMemoryLimit       = "WORKER_JOB_MEMORY_LIMIT_MB"
+	cpuNanoUnit                   = 1_000_000_000
+	memoryMegabyteBytes     int64 = 1024 * 1024
+)
+
 // ExecuteJob runs a single job: optionally pull image (if provided), materialize a workspace, run container, wait for exit,
 // collect logs, and remove the container.
-func(s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
 	ctx, span := s.tracer.Start(ctx, "execute.job")
 	defer span.End()
-	
+
 	if cli == nil || job == nil {
 		return "", fmt.Errorf("Docker client and job are required")
 	}
@@ -106,7 +115,7 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 		}
 
 		repo, err := git.PlainCloneContext(ctx, tmpDir, &git.CloneOptions{
-			URL: repoURL,
+			URL:  repoURL,
 			Auth: cloneAuth(repoURL),
 		})
 		if err != nil {
@@ -235,6 +244,11 @@ func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 // createContainer creates a container for the given image and script; returns container ID.
 // If hasWorkspace is true, the container will run with /workspace as its working directory.
 func createContainer(ctx context.Context, cli *client.Client, image string, script []string, hasWorkspace bool) (containerID string, err error) {
+	resources, err := containerResourcesFromEnv()
+	if err != nil {
+		return "", err
+	}
+
 	cmd := scriptToCmd(script)
 	cfg := &container.Config{
 		Image:        image,
@@ -245,13 +259,65 @@ func createContainer(ctx context.Context, cli *client.Client, image string, scri
 	if hasWorkspace {
 		cfg.WorkingDir = "/workspace"
 	}
+
 	opts := client.ContainerCreateOptions{Config: cfg}
+	if hasContainerResourceLimits(resources) {
+		opts.HostConfig = &container.HostConfig{
+			Resources: resources,
+		}
+	}
+
 	createResp, err := cli.ContainerCreate(ctx, opts)
 	if err != nil {
 		slog.Error("created container failed: ", "error", err.Error())
 		return "", err
 	}
 	return createResp.ID, nil
+}
+
+func containerResourcesFromEnv() (container.Resources, error) {
+	var resources container.Resources
+
+	nanoCPURaw := strings.TrimSpace(os.Getenv(envWorkerJobNanoCPUs))
+	cpuLimitRaw := strings.TrimSpace(os.Getenv(envWorkerJobCPULimit))
+	memoryLimitRaw := strings.TrimSpace(os.Getenv(envWorkerJobMemoryLimit))
+
+	if nanoCPURaw != "" && cpuLimitRaw != "" {
+		return resources, fmt.Errorf("%s and %s cannot both be set", envWorkerJobNanoCPUs, envWorkerJobCPULimit)
+	}
+
+	if nanoCPURaw != "" {
+		nanoCPUs, err := strconv.ParseInt(nanoCPURaw, 10, 64)
+		if err != nil || nanoCPUs <= 0 {
+			return resources, fmt.Errorf("%s must be a positive int64, got %q", envWorkerJobNanoCPUs, nanoCPURaw)
+		}
+		resources.NanoCPUs = nanoCPUs
+	}
+
+	if cpuLimitRaw != "" {
+		cpuLimit, err := strconv.ParseFloat(cpuLimitRaw, 64)
+		if err != nil || cpuLimit <= 0 {
+			return resources, fmt.Errorf("%s must be a positive number, got %q", envWorkerJobCPULimit, cpuLimitRaw)
+		}
+		resources.NanoCPUs = int64(math.Round(cpuLimit * cpuNanoUnit))
+		if resources.NanoCPUs <= 0 {
+			return resources, fmt.Errorf("%s resolved to invalid NanoCPUs for value %q", envWorkerJobCPULimit, cpuLimitRaw)
+		}
+	}
+
+	if memoryLimitRaw != "" {
+		memoryLimitMB, err := strconv.ParseInt(memoryLimitRaw, 10, 64)
+		if err != nil || memoryLimitMB <= 0 {
+			return resources, fmt.Errorf("%s must be a positive integer (MB), got %q", envWorkerJobMemoryLimit, memoryLimitRaw)
+		}
+		resources.Memory = memoryLimitMB * memoryMegabyteBytes
+	}
+
+	return resources, nil
+}
+
+func hasContainerResourceLimits(resources container.Resources) bool {
+	return resources.NanoCPUs > 0 || resources.Memory > 0
 }
 
 func startContainer(ctx context.Context, cli *client.Client, containerID string) error {
