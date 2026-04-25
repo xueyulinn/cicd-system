@@ -44,7 +44,7 @@ The repository supports Kubernetes deployment for all current stateless services
 
 | Component | Type | K8s Enabled | Notes |
 |-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) |
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/cicd/`) |
 | Validation Service | Stateless | Yes | Same as API Gateway |
 | Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
@@ -64,11 +64,11 @@ Service-to-service communication inside the cluster is done through Kubernetes S
 - `WORKER_URL`
 - `DATABASE_URL`
 
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/e-team/README.md).
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/cicd/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/cicd/README.md).
 
-**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, execution publisher concurrency (`executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`), worker consumer concurrency (`workerService.concurrency` as `WORKER_CONCURRENCY`), and worker `ORCHESTRATOR_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/cicd/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, execution publisher concurrency (`executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`), worker consumer concurrency (`workerService.concurrency` as `WORKER_CONCURRENCY`), and worker `ORCHESTRATOR_URL`. Cluster deployment uses Helm (`charts/cicd/`); run `helm template` if you need to inspect rendered YAML.
 
-**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/e-team/README.md`](charts/e-team/README.md).
+**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/cicd/README.md`](charts/cicd/README.md).
 
 ### Queue Deduplication
 
@@ -487,7 +487,7 @@ deploy:
 The recommended way to run everything locally — all services, database, migrations, and the observability stack:
 
 ```bash
-# Align image tags and DB defaults with charts/e-team/values.yaml (committed compose.values.env)
+# Align image tags and DB defaults with charts/cicd/values.yaml (committed compose.values.env)
 ruby scripts/gen-compose-env-from-values.rb
 
 # Start all containers (builds services from local source via docker-compose.override.yaml)
@@ -506,7 +506,7 @@ docker compose --env-file compose.values.env logs -f execution-service worker-se
 - `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
 - `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
 
-`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: MySQL, images, RabbitMQ credentials and URL, `executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `ORCHESTRATOR_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+`compose.values.env` is generated from `charts/cicd/values.yaml` (same knobs as Helm where applicable: MySQL, images, RabbitMQ credentials and URL, `executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `ORCHESTRATOR_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
 
 Optional worker job container limits (applied per job container by `worker-service`):
 - `WORKER_JOB_CPU_LIMIT` (e.g. `0.5`, `1`, `2`, converted to Docker `NanoCPUs`)
@@ -572,7 +572,7 @@ e-team/
 │   ├── tempo/                    # Tempo tracing config
 │   ├── otel-collector/           # OpenTelemetry Collector pipeline config
 │   └── grafana/                  # Grafana provisioning and dashboards
-├── charts/e-team/                # Helm chart for Kubernetes deployment (canonical)
+├── charts/cicd/                # Helm chart for Kubernetes deployment (canonical)
 ├── k8s/                          # Notes for Kubernetes (see k8s/README.md)
 ├── scripts/                      # Dev scripts (start services, verify DB)
 ├── .pipelines/                   # Pipeline configurations

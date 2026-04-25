@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify report store DB inside Kubernetes (MySQL + migrations in namespace e-team).
-# Expects a cluster deployed from the Helm chart (charts/e-team/) or equivalent manifests.
+# Expects a cluster deployed from the Helm chart (charts/cicd/) or equivalent manifests.
 # Prerequisites: kubectl configured; stack applied; migrate image pullable.
 # Run from repo root. Exit 0 if checks pass.
 

@@ -63,7 +63,7 @@ kubectl -n e-team create secret docker-registry ghcr-pull-secret \
 Then install or upgrade Helm (quote `--set` in **zsh**):
 
 ```bash
-helm upgrade --install e-team ./charts/e-team -n e-team \
+helm upgrade --install e-team ./charts/cicd -n e-team \
   --set 'global.imagePullSecrets[0].name=ghcr-pull-secret'
 ```
 
@@ -72,19 +72,19 @@ helm upgrade --install e-team ./charts/e-team -n e-team \
 Install into a namespace:
 
 ```bash
-helm install e-team ./charts/e-team -n e-team --create-namespace
+helm install e-team ./charts/cicd -n e-team --create-namespace
 ```
 
 If the release already exists and you rebuilt local Minikube images, apply the latest chart/templates with:
 
 ```bash
-helm upgrade e-team ./charts/e-team -n e-team
+helm upgrade e-team ./charts/cicd -n e-team
 ```
 
 If you want to use an external MySQL instance instead of the in-cluster StatefulSet:
 
 ```bash
-helm install e-team ./charts/e-team \
+helm install e-team ./charts/cicd \
   -n e-team --create-namespace \
   --set mysql.enabled=false \
   --set externalDatabase.url='cicd:cicd@tcp(host:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC' \
@@ -98,7 +98,7 @@ helm install e-team ./charts/e-team \
 ## Upgrade
 
 ```bash
-helm upgrade e-team ./charts/e-team -n e-team
+helm upgrade e-team ./charts/cicd -n e-team
 ```
 
 The migration job runs as a `post-install,post-upgrade` hook when `mysql.enabled=true`, so the MySQL Secret/Service/StatefulSet are created first and the hook waits for the database to become ready before applying SQL.
@@ -146,7 +146,7 @@ This setup was validated for `verify` and `report` against the Helm/Kubernetes d
 Enable the observability stack in Kubernetes with:
 
 ```bash
-helm upgrade --install e-team ./charts/e-team \
+helm upgrade --install e-team ./charts/cicd \
   -n e-team --create-namespace \
   --set observability.enabled=true
 ```
@@ -220,7 +220,7 @@ minikube image build -t e-team-execution-service:latest -f cmd/orchestrator-serv
 minikube image build -t e-team-worker-service:latest -f cmd/worker-service/Dockerfile .
 minikube image build -t e-team-reporting-service:latest -f cmd/reporting-service/Dockerfile .
 minikube image build -t e-team-db-migrate:latest -f migrations/Dockerfile .
-helm install e-team ./charts/e-team -n e-team --create-namespace
+helm install e-team ./charts/cicd -n e-team --create-namespace
 ```
 
 3. Wait for the stack:
