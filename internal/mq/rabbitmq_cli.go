@@ -79,6 +79,9 @@ func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, 
 
 // create queue if not exists
 func (c *RabbitClient) ensureQueue(queue string) error {
+	if c == nil {
+		return fmt.Errorf("rabbit client is nil")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.ensureQueueLocked(queue)

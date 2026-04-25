@@ -1,6 +1,10 @@
 package worker
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestCloneAuthUsesGitHubTokenForGitHubRepos(t *testing.T) {
 	t.Setenv("GIT_USERNAME", "")
@@ -43,5 +47,36 @@ func TestCloneAuthReturnsNilWithoutCredentials(t *testing.T) {
 
 	if auth := cloneAuth("https://github.com/org/private-repo.git"); auth != nil {
 		t.Fatal("expected nil auth without credentials")
+	}
+}
+
+func TestResolveWorkspacePathKeepsExistingPath(t *testing.T) {
+	dir := t.TempDir()
+
+	got, err := resolveWorkspacePath(dir)
+	if err != nil {
+		t.Fatalf("resolveWorkspacePath returned error: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("resolved path = %q, want %q", got, dir)
+	}
+}
+
+func TestResolveWorkspacePathMapsWindowsPathToHostTemp(t *testing.T) {
+	hostTemp := t.TempDir()
+	t.Setenv("WORKSPACE_HOST_TEMP_DIR", hostTemp)
+
+	const wtName = "cicd-run-wt-2605657174"
+	mappedPath := filepath.Join(hostTemp, wtName)
+	if err := os.MkdirAll(mappedPath, 0o755); err != nil {
+		t.Fatalf("mkdir mapped path failed: %v", err)
+	}
+
+	got, err := resolveWorkspacePath(`Z:\no-such-host-temp\` + wtName)
+	if err != nil {
+		t.Fatalf("resolveWorkspacePath returned error: %v", err)
+	}
+	if got != mappedPath {
+		t.Fatalf("resolved path = %q, want %q", got, mappedPath)
 	}
 }

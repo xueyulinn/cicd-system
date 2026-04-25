@@ -124,6 +124,13 @@ func NewService(ctx context.Context) (*Service, error) {
 	}, nil
 }
 
+func (s *Service) serviceTracer() trace.Tracer {
+	if s != nil && s.tracer != nil {
+		return s.tracer
+	}
+	return observability.Tracer(orchestratorTracerScope)
+}
+
 func newRunInfo(req api.RunRequest) runInfo {
 	return runInfo{
 		RepoURL:       req.RepoURL,
@@ -312,7 +319,7 @@ func (rt *pipelineRuntime) nextStageName(current string) (string, bool) {
 
 // returns in-flight deduped pipeline run ortherwise initializes pipeline runtime
 func (s *Service) initializePipelineRuntime(ctx context.Context, pipelinePlan PipelinePlan, jobConfigs map[jobKey]jobConfig, runInfo runInfo, requestKey string) (runtime *pipelineRuntime, deduped bool, status string, err error) {
-	ctx, span := s.tracer.Start(ctx, "initialize.pipeline.runtime")
+	ctx, span := s.serviceTracer().Start(ctx, "initialize.pipeline.runtime")
 	defer span.End()
 
 	pipeline := pipelinePlan.Pipeline
@@ -385,7 +392,7 @@ func (s *Service) initializePipelineRuntime(ctx context.Context, pipelinePlan Pi
 
 // Run validates the pipeline, initializes run records/state, dispatches initial jobs, and returns immediately.
 func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse, error) {
-	ctx, span := s.tracer.Start(ctx, "process.pipeline")
+	ctx, span := s.serviceTracer().Start(ctx, "process.pipeline")
 	defer span.End()
 
 	pipelinePlan, err := s.prepareRun(ctx, req)

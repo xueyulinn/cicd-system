@@ -81,7 +81,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	var req api.ValidateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
@@ -91,10 +91,11 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	if response.Valid {
 		log.Info("dryrun ok")
+		api.WriteJSON(w, http.StatusOK, response)
 	} else {
 		log.Info("dryrun failed", "errors", response.Errors)
+		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
-	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleReady returns readiness status

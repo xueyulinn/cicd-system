@@ -67,6 +67,12 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 		for _, errMsg := range response.Errors {
 			fmt.Fprintln(os.Stderr, errMsg)
 		}
+		for _, errMsg := range response.Errors {
+			msg := strings.TrimSpace(errMsg)
+			if msg != "" {
+				return fmt.Errorf("dry run failed with %d error(s): %s", len(response.Errors), msg)
+			}
+		}
 		return fmt.Errorf("dry run failed with %d error(s)", len(response.Errors))
 	}
 

@@ -17,7 +17,7 @@ import (
 
 // prepareRun validates the pipeline and returns a pipeline plan.
 func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*PipelinePlan, error) {
-	ctx, span := s.tracer.Start(ctx, "prepare.pipeline")
+	ctx, span := s.serviceTracer().Start(ctx, "prepare.pipeline")
 	defer span.End()
 
 	if strings.TrimSpace(req.YAMLContent) == "" {
@@ -49,7 +49,7 @@ func (s *Service) prepareRun(ctx context.Context, req api.RunRequest) (*Pipeline
 
 // validatePipeline calls validation service and returns error if validation fails.
 func (s *Service) validatePipeline(ctx context.Context, yamlContent string) error {
-	ctx, span := s.tracer.Start(ctx, "validate.pipeline")
+	ctx, span := s.serviceTracer().Start(ctx, "validate.pipeline")
 	defer span.End()
 
 	validateReq := map[string]string{

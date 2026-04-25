@@ -100,6 +100,7 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       ORCHESTRATOR_URL: ${ORCHESTRATOR_URL}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
+      WORKSPACE_HOST_TEMP_DIR: /host-temp
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       SERVICE_NAME: worker-service
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
@@ -108,6 +109,9 @@ services:
       - "${WORKER_SERVICE_PORT}:${WORKER_SERVICE_PORT}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${LOCAL_TEMP_DIR:-${LOCALAPPDATA}/Temp}
+        target: /host-temp
     depends_on:
       rabbitmq:
         condition: service_healthy

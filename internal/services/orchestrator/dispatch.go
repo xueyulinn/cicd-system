@@ -34,7 +34,7 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		return fmt.Errorf("job publisher is not initialized")
 	}
 
-	ctx, span := s.tracer.Start(ctx, "publish.job.message",
+	ctx, span := s.serviceTracer().Start(ctx, "publish.job.message",
 		trace.WithAttributes(
 			attribute.String("pipeline_name", msg.PipelineName),
 			attribute.Int("run_no", msg.RunNo),
@@ -102,7 +102,7 @@ func (s *Service) enqueueFirstReadyStageJobs(ctx context.Context, pipelineName s
 
 // dispatchPipelineStartJobs dispatches the initial runnable jobs for a pipeline run.
 func (s *Service) dispatchPipelineStartJobs(ctx context.Context, runtime *pipelineRuntime) error {
-	ctx, span := s.tracer.Start(ctx, "start.dispatch.jobs")
+	ctx, span := s.serviceTracer().Start(ctx, "start.dispatch.jobs")
 	defer span.End()
 
 	if runtime == nil {

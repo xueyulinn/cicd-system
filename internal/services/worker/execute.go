@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,9 +27,12 @@ const DefaultImage = "alpine:latest"
 
 // ExecuteJob runs a single job: optionally pull image (if provided), materialize a workspace, run container, wait for exit,
 // collect logs, and remove the container.
-func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+func(s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+	ctx, span := s.tracer.Start(ctx, "execute.job")
+	defer span.End()
+	
 	if cli == nil || job == nil {
-		return "", fmt.Errorf("client and job are required")
+		return "", fmt.Errorf("Docker client and job are required")
 	}
 
 	image := job.Image
@@ -45,6 +49,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 
 	workspacePath, cleanup, err := materializeWorkspace(ctx, repoURL, commit, workspacePath)
 	if err != nil {
+		slog.Error("prepare workspace", "error", err.Error())
 		return "", fmt.Errorf("prepare workspace: %w", err)
 	}
 	if cleanup != nil {
@@ -54,7 +59,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	// 2. Create container
 	containerID, err := createContainer(ctx, cli, image, job.Script, workspacePath != "")
 	if err != nil {
-		return "", fmt.Errorf("run container: %w", err)
+		return "", fmt.Errorf("create container: %w", err)
 	}
 	defer func() {
 		_ = removeContainer(context.Background(), cli, containerID)
@@ -62,6 +67,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 
 	if workspacePath != "" {
 		if err := copyWorkspaceToContainer(ctx, cli, containerID, workspacePath); err != nil {
+			slog.Error("copy workspace to container", "error", err.Error())
 			return "", fmt.Errorf("copy workspace to container: %w", err)
 		}
 	}
@@ -74,7 +80,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	// failed jobs expose stderr/stdout to callbacks and debugging output.
 	waitErr := waitContainer(ctx, cli, containerID)
 
-	// 4. Get logs (stdout/stderr)
+	// 4. Get logs
 	logs, logsErr := getLogs(ctx, cli, containerID)
 	if logsErr != nil {
 		if waitErr != nil {
@@ -125,7 +131,61 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 		return tmpDir, func() { _ = os.RemoveAll(tmpDir) }, nil
 	}
 
-	return workspacePath, nil, nil
+	resolvedPath, err := resolveWorkspacePath(workspacePath)
+	if err != nil {
+		return "", nil, err
+	}
+	return resolvedPath, nil, nil
+}
+
+func resolveWorkspacePath(workspacePath string) (string, error) {
+	workspacePath = strings.TrimSpace(workspacePath)
+	if workspacePath == "" {
+		return "", nil
+	}
+
+	if _, err := os.Stat(workspacePath); err == nil {
+		return workspacePath, nil
+	}
+
+	if !looksLikeWindowsPath(workspacePath) {
+		return workspacePath, nil
+	}
+
+	mappedPath := mapWindowsWorkspacePath(workspacePath)
+	if mappedPath == "" {
+		return workspacePath, nil
+	}
+	if _, err := os.Stat(mappedPath); err == nil {
+		return mappedPath, nil
+	}
+
+	return workspacePath, nil
+}
+
+func mapWindowsWorkspacePath(workspacePath string) string {
+	hostTempDir := strings.TrimSpace(os.Getenv("WORKSPACE_HOST_TEMP_DIR"))
+	if hostTempDir == "" {
+		hostTempDir = "/host-temp"
+	}
+
+	normalized := strings.ReplaceAll(strings.TrimSpace(workspacePath), "\\", "/")
+	base := path.Base(normalized)
+	if base == "." || base == "/" || base == "" {
+		return ""
+	}
+
+	return filepath.Join(hostTempDir, base)
+}
+
+func looksLikeWindowsPath(p string) bool {
+	if strings.Contains(p, "\\") {
+		return true
+	}
+	if len(p) < 2 || p[1] != ':' {
+		return false
+	}
+	return (p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z')
 }
 
 func cloneAuth(repoURL string) *githttp.BasicAuth {

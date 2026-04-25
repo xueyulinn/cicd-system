@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -137,11 +137,18 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return fmt.Errorf("callback job started: %w", err)
 	}
 
-	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
-
+	logs, execErr := s.ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
+	
 	if execErr != nil {
+		slog.Error("execute job failed",
+      	"pipeline", msg.PipelineName,
+      	"run_no", msg.RunNo,
+      	"stage", msg.Stage,
+      	"job", jobName,
+      	"error", execErr,
+      	"logs", logs,
+  	)
 		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
-			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.PipelineName, msg.RunNo, msg.Stage, jobName, callbackErr)
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
 		// Execution-level failures are terminal for this job message once status
