@@ -411,6 +411,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 	}
 
 	if deduped {
+		slog.Info("pipeline deduped", "pipiline", pipelinePlan.Pipeline.Name, "runNo", runtime.runNo)
 		return &api.RunResponse{
 			Pipeline: pipelinePlan.Pipeline.Name,
 			RunNo:    runtime.runNo,

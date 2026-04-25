@@ -1,0 +1,141 @@
+# Multi-job parallel test:
+# - 16 independent jobs in the same stage.
+# - With WORKER_CONCURRENCY>=16, these jobs can run concurrently.
+#
+# Run:
+#   ./bin/cicd run --file .pipelines/parallel-multi-jobs.yaml
+
+pipeline:
+  name: parallel-multi-jobs
+
+stages:
+  - build
+
+job-01:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-01 start"
+    - sleep 6
+    - echo "job-01 done"
+
+job-02:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-02 start"
+    - sleep 6
+    - echo "job-02 done"
+
+job-03:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-03 start"
+    - sleep 6
+    - echo "job-03 done"
+
+job-04:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-04 start"
+    - sleep 6
+    - echo "job-04 done"
+
+job-05:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-05 start"
+    - sleep 6
+    - echo "job-05 done"
+
+job-06:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-06 start"
+    - sleep 6
+    - echo "job-06 done"
+
+job-07:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-07 start"
+    - sleep 6
+    - echo "job-07 done"
+
+job-08:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-08 start"
+    - sleep 6
+    - echo "job-08 done"
+
+job-09:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-09 start"
+    - sleep 6
+    - echo "job-09 done"
+
+job-10:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-10 start"
+    - sleep 6
+    - echo "job-10 done"
+
+job-11:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-11 start"
+    - sleep 6
+    - echo "job-11 done"
+
+job-12:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-12 start"
+    - sleep 6
+    - echo "job-12 done"
+
+job-13:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-13 start"
+    - sleep 6
+    - echo "job-13 done"
+
+job-14:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-14 start"
+    - sleep 6
+    - echo "job-14 done"
+
+job-15:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-15 start"
+    - sleep 6
+    - echo "job-15 done"
+
+job-16:
+  - stage: build
+  - image: alpine:latest
+  - script:
+    - echo "job-16 start"
+    - sleep 6
+    - echo "job-16 done"
+
