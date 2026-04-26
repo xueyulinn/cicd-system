@@ -1,9 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,23 +36,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ready", h.handleReady)
 }
 
-func decodeYAMLContentRequest(r *http.Request) (string, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read request body: %w", err)
-	}
-
-	var req api.ValidateRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		return "", fmt.Errorf("invalid JSON: %w", err)
-	}
-	if strings.TrimSpace(req.YAMLContent) == "" {
-		return "", fmt.Errorf("missing yaml_content field")
-	}
-
-	return req.YAMLContent, nil
-}
-
 // handleHealth reports gateway liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -75,17 +55,16 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"services": map[string]string{
-			"validation": h.client.validationURL,
-			"execution":  h.client.executionURL,
-			"reporting":  h.client.reportURL,
-			"gateway":    getGatewayPublicURL(),
+			"validation":   h.client.validationURL,
+			"orchestrator": h.client.orchestratorURL,
+			"reporting":    h.client.reportURL,
+			"gateway":      getGatewayPublicURL(),
 		},
 	}
 
 	api.WriteJSON(w, http.StatusOK, response)
 }
 
-// handleValidate forwards validation requests to validation service
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -93,30 +72,15 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = r.Body.Close() }()
 
-	yamlContent, err := decodeYAMLContentRequest(r)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.ValidateRequest(yamlContent)
-	if err != nil {
-		log.Warn("validate proxy failed", "error", err)
+	if err := h.client.forwardValidate(r.Context(), w, r); err != nil {
+		log.Warn("gateway forward validate failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
-	if response.Valid {
-		log.Info("verification succeeds")
-	} else {
-		log.Info("verification rejected", "errors", response.Errors)
-	}
-	api.WriteJSON(w, http.StatusOK, response)
 }
 
-// handleDryRun forwards dry run requests to validation service
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -124,69 +88,31 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = r.Body.Close() }()
 
-	yamlContent, err := decodeYAMLContentRequest(r)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
-	response, err := h.client.DryRunRequest(yamlContent)
-	if err != nil {
-		log.Warn("dryrun proxy failed", "error", err)
+	if err := h.client.forwardDryRun(r.Context(), w, r); err != nil {
+		log.Warn("gateway forward dryrun failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
-	if response.Valid {
-		log.Info("dryrun ok")
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
-		log.Info("dryrun rejected", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	}
 }
 
-// handleRun forwards run requests to execution service
 func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	logger := observability.WithTraceContext(r.Context(), slog.Default())
+
+	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
-	defer func() { _ = r.Body.Close() }()
-
-	var req api.RunRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-
-	log := observability.WithTraceContext(r.Context(), slog.Default())
-
-	response, err := h.client.RunRequest(req)
-	if err != nil {
-		log.Error("run proxy failed", "error", err)
+		logger.Error("gateway forward run failed", "error", err)
 		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
-	if strings.EqualFold(response.Status, "failed") {
-		log.Warn("run failed", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	} else {
-		log.Info("run completed", "message", response.Message, "status", response.Status)
-		api.WriteJSON(w, http.StatusOK, response)
-	}
 }
 
-// handleReport forwards report requests to reporting service.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
@@ -232,9 +158,9 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	services := map[string]string{
-		"validation": "unknown",
-		"reporting":  "unknown",
-		"execution":  "unknown",
+		"validation":   "unknown",
+		"reporting":    "unknown",
+		"orchestrator": "unknown",
 	}
 
 	if resp, err := h.client.checkValidationReady(); err == nil {
@@ -243,8 +169,8 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if resp, err := h.client.checkReportReady(); err == nil {
 		services["reporting"] = resp
 	}
-	if resp, err := h.client.checkExecutionReady(); err == nil {
-		services["execution"] = resp
+	if resp, err := h.client.checkOrchestratorReady(); err == nil {
+		services["orchestrator"] = resp
 	}
 
 	overallStatus := "ready"
@@ -269,7 +195,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Client) checkValidationReady() (string, error) {
-	resp, err := c.httpValidation.Get(c.validationURL + "/ready")
+	resp, err := c.validationClient.Get(c.validationURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -285,7 +211,7 @@ func (c *Client) checkValidationReady() (string, error) {
 }
 
 func (c *Client) checkReportReady() (string, error) {
-	resp, err := c.httpReporting.Get(c.reportURL + "/ready")
+	resp, err := c.reportingClient.Get(c.reportURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}
@@ -299,8 +225,8 @@ func (c *Client) checkReportReady() (string, error) {
 	return "not ready", nil
 }
 
-func (c *Client) checkExecutionReady() (string, error) {
-	resp, err := c.httpExecution.Get(c.executionURL + "/ready")
+func (c *Client) checkOrchestratorReady() (string, error) {
+	resp, err := c.orchestratorClient.Get(c.orchestratorURL + "/ready")
 	if err != nil {
 		return "not ready", err
 	}

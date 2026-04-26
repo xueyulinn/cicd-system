@@ -20,19 +20,24 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	shutdown, err := observability.Init(ctx, serviceName)
+	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
 		slog.Error("failed to init observability", "error", err)
 		os.Exit(1)
 	}
-	defer func() { _ = shutdown(ctx) }()
+	defer func() {
+		obsShutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := shutdown(obsShutdownCtx); err != nil {
+			slog.Error("observability shutdown failed", "error", err)
+		}
+	}()
 
 	handler := worker.NewHandler()
 	defer handler.Close()
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	mux.Handle("/metrics", observability.MetricsHandler())
 
 	wrapped := observability.HTTPMetricsMiddleware(
 		observability.TracingMiddleware(serviceName, mux))
@@ -66,6 +71,7 @@ func main() {
 		slog.Error("service error", "error", err)
 		stop()
 	case <-ctx.Done():
+		slog.Info("shutdown signal received")
 	}
 
 	slog.Info("service shutting down")

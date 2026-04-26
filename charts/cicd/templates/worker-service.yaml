@@ -1,0 +1,130 @@
+{{- if .Values.workerService.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.workerServiceName" . }}-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-service
+data:
+  PORT: {{ .Values.workerService.service.port | quote }}
+  ORCHESTRATOR_URL: {{ printf "http://%s:%v" (include "e-team.executionServiceName" .) .Values.executionService.service.port | quote }}
+  WORKER_CONCURRENCY: {{ .Values.workerService.concurrency | toString | quote }}
+  SERVICE_NAME: worker-service
+  OTEL_SERVICE_NAME: worker-service
+  {{- if .Values.observability.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "e-team.otelHTTPEndpoint" . | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.workerServiceName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-service
+spec:
+  replicas: {{ .Values.workerService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "worker-service") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "worker-service") | nindent 8 }}
+      {{- with .Values.global.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.rabbitmq.enabled .Values.workerService.waitForRabbitmq.enabled }}
+      initContainers:
+        - name: wait-for-rabbitmq
+          image: "{{ .Values.workerService.waitForRabbitmq.image.repository }}:{{ .Values.workerService.waitForRabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.workerService.waitForRabbitmq.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for RabbitMQ..."
+              until nc -z {{ include "e-team.rabbitmqName" . }} {{ .Values.rabbitmq.service.amqpPort }}; do
+                sleep 2
+              done
+      {{- end }}
+      containers:
+        - name: worker-service
+          image: "{{ .Values.workerService.image.repository }}:{{ .Values.workerService.image.tag }}"
+          imagePullPolicy: {{ .Values.workerService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.workerService.service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "e-team.workerServiceName" . }}-config
+            {{- if .Values.rabbitmq.enabled }}
+            - secretRef:
+                name: {{ include "e-team.rabbitmqSecretName" . }}
+            {{- end }}
+            {{- if .Values.workerService.gitAuth.existingSecret }}
+            - secretRef:
+                name: {{ .Values.workerService.gitAuth.existingSecret }}
+            {{- else if or .Values.workerService.gitAuth.username .Values.workerService.gitAuth.password .Values.workerService.gitAuth.githubToken }}
+            - secretRef:
+                name: {{ include "e-team.workerGitAuthSecretName" . }}
+            {{- end }}
+          securityContext:
+            runAsUser: {{ .Values.workerService.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.workerService.securityContext.runAsGroup }}
+          {{- if .Values.workerService.dockerSocket.enabled }}
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.workerService.resources | nindent 12 }}
+      {{- if .Values.workerService.dockerSocket.enabled }}
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: {{ .Values.workerService.dockerSocket.hostPath }}
+            type: Socket
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.workerServiceName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-service
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "worker-service") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.workerService.service.port }}
+      targetPort: http
+  type: ClusterIP
+{{- end }}

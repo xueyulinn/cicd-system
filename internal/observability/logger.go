@@ -10,13 +10,6 @@ import (
 
 type ctxKeyLogger struct{}
 
-// NewLogger creates a structured JSON logger with the service name baked in.
-func NewLogger(serviceName string) *slog.Logger {
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slogLevelFromEnv(),
-	})).With(slog.String("service", serviceName))
-}
-
 // ContextWithLogger stores a logger in the context.
 func ContextWithLogger(ctx context.Context, l *slog.Logger) context.Context {
 	return context.WithValue(ctx, ctxKeyLogger{}, l)

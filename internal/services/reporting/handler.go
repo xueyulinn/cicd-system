@@ -111,7 +111,6 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Info("report returned")
 	api.WriteJSON(w, http.StatusOK, report)
 }
 

@@ -7,17 +7,6 @@ import (
 	"testing"
 )
 
-func TestNewLogger_serviceField(t *testing.T) {
-	t.Setenv("LOG_LEVEL", "INFO")
-	logger := NewLogger("unit-test")
-	if !logger.Enabled(context.Background(), slog.LevelInfo) {
-		t.Fatal("expected INFO enabled")
-	}
-	if logger.Enabled(context.Background(), slog.LevelDebug) {
-		t.Fatal("expected DEBUG disabled at INFO level")
-	}
-}
-
 func TestSlogLevelFromEnv_debug(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "DEBUG")
 	if got := slogLevelFromEnv(); got != slog.LevelDebug {

@@ -138,7 +138,7 @@ jobs:
           - image: validation-service
             dockerfile: cmd/validation-service/Dockerfile
           - image: execution-service
-            dockerfile: cmd/execution-service/Dockerfile
+            dockerfile: cmd/orchestrator-service/Dockerfile
           - image: worker-service
             dockerfile: cmd/worker-service/Dockerfile
           - image: reporting-service

@@ -41,7 +41,7 @@ docker compose --env-file compose.values.env down
 
 ## Kubernetes
 
-The Helm chart (`charts/e-team`) can run MySQL + migration job in-cluster.
+The Helm chart (`charts/cicd`) can run MySQL + migration job in-cluster.
 
 Verify in-cluster DB setup:
 

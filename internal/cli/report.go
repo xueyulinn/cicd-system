@@ -4,35 +4,40 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 var (
-	reportPipeline string
 	reportRun      int
 	reportStage    string
 	reportJob      string
 )
 
 var reportCmd = &cobra.Command{
-	Use:   "report",
-	Short: "Report historical pipeline execution data",
-	Long:  "Get reports on all runs for a pipeline, a specific run, stage, or job.",
-	Args:  cobra.NoArgs,
-	RunE:  runReport,
+	Use:   "report pipeline-name [--run run-no] [--stage stage-name] [--job job-name] [-f yaml|json]",
+	Short: "Show pipeline run reports",
+	Long:  "Query pipeline report data for a specific run, and optionally narrow it to one stage or one job.",
+	Example: strings.Join([]string{
+		"  cicd report DefaultPipeline --run 1",
+		"  cicd report DefaultPipeline --run 1 --stage build",
+		"  cicd report DefaultPipeline --run 1 --stage build --job compile",
+		"  cicd report DefaultPipeline --run 1 -f json",
+	}, "\n"),
+	Args:                  cobra.ExactArgs(1),
+	RunE:                  runReport,
+	DisableFlagsInUseLine: true,
 }
 
 func init() {
-	reportCmd.Flags().StringVar(&reportPipeline, "pipeline", "", "Pipeline name")
-	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Run number for the pipeline")
-	reportCmd.Flags().StringVar(&reportStage, "stage", "", "Stage name (requires --run)")
-	reportCmd.Flags().StringVar(&reportJob, "job", "", "Job name (requires --run and --stage)")
-	reportCmd.Flags().StringP("format", "f", formatYAML, "Output format: yaml or json")
+	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Pipeline run number (required)")
+	reportCmd.Flags().StringVar(&reportStage, "stage", "", "Stage filter (requires --run)")
+	reportCmd.Flags().StringVar(&reportJob, "job", "", "Job filter (requires --run and --stage)")
+	reportCmd.Flags().StringP("format", "f", formatYAML, "Output format (yaml|json)")
 }
 
 func runReport(cmd *cobra.Command, args []string) error {
-	query, err := buildReportQuery()
+	query, err := buildReportQuery(args)
 	if err != nil {
 		return err
 	}
@@ -52,7 +57,17 @@ func runReport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	reportOutput, err := formatReport(report, format)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(reportOutput))
+	return nil
+}
+
+func formatReport(report *models.ReportResponse, format string) ([]byte, error) {
 	var out []byte
+	var err error
 	switch format {
 	case formatJSON:
 		out, err = FormatReportJSON(report)
@@ -60,20 +75,18 @@ func runReport(cmd *cobra.Command, args []string) error {
 		out, err = FormatReportYAML(report)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	fmt.Println(string(out))
-	return nil
+	return out, nil
 }
 
-func buildReportQuery() (models.ReportQuery, error) {
-	pipeline := strings.TrimSpace(reportPipeline)
+func buildReportQuery(args []string) (models.ReportQuery, error) {
+	pipeline := args[0]
 	stage := strings.TrimSpace(reportStage)
 	job := strings.TrimSpace(reportJob)
 
 	if pipeline == "" {
-		return models.ReportQuery{}, fmt.Errorf("pipeline is required (use --pipeline <name>)")
+		return models.ReportQuery{}, fmt.Errorf("pipeline name is required")
 	}
 	if reportRun < 0 {
 		return models.ReportQuery{}, fmt.Errorf("run must be a positive integer")
@@ -91,8 +104,8 @@ func buildReportQuery() (models.ReportQuery, error) {
 		Job:      job,
 	}
 	if reportRun > 0 {
-		run := reportRun
-		query.Run = &run
+		runNo := reportRun
+		query.Run = &runNo
 	}
 	return query, nil
 }

@@ -58,7 +58,7 @@ func TestJobPublisherPublishJob(t *testing.T) {
 	cfg := Config{URL: "amqp://guest:guest@localhost:5672/", JobQueue: "jobs.queue"}
 	msg := messages.JobExecutionMessage{
 		RunNo:         22,
-		Pipeline:      "release",
+		PipelineName:  "release",
 		Stage:         "test",
 		Branch:        "main",
 		Commit:        "abc123",
@@ -119,7 +119,7 @@ func TestJobPublisherPublishJobWrappedError(t *testing.T) {
 		t.Fatalf("NewJobPublisher error: %v", err)
 	}
 
-	err = publisher.PublishJob(context.Background(), messages.JobExecutionMessage{Pipeline: "demo", Stage: "build", Job: models.JobExecutionPlan{Name: "lint"}})
+	err = publisher.PublishJob(context.Background(), messages.JobExecutionMessage{PipelineName: "demo", Stage: "build", Job: models.JobExecutionPlan{Name: "lint"}})
 	if err == nil {
 		t.Fatalf("expected wrapped publish error")
 	}

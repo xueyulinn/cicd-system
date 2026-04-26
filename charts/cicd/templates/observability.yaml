@@ -1,0 +1,571 @@
+{{- if .Values.observability.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.prometheusName" . }}-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+{{ tpl (.Files.Get "files/observability/prometheus.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.lokiName" . }}-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+data:
+  loki.yml: |
+{{ tpl (.Files.Get "files/observability/loki.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.tempoName" . }}-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+data:
+  tempo.yml: |
+{{ tpl (.Files.Get "files/observability/tempo.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.otelCollectorName" . }}-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+data:
+  config.yml: |
+{{ tpl (.Files.Get "files/observability/otel-collector.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.grafanaName" . }}-datasources
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  datasources.yml: |
+{{ tpl (.Files.Get "files/observability/grafana-datasources.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.grafanaName" . }}-dashboards-config
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  dashboards.yml: |
+{{ tpl (.Files.Get "files/observability/grafana-dashboards.yml") . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "e-team.grafanaName" . }}-dashboards
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  {{- range $path, $_ := .Files.Glob "files/observability/dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | nindent 4 }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "e-team.grafanaName" . }}-credentials
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+type: Opaque
+stringData:
+  admin-user: {{ .Values.observability.grafana.adminUser | quote }}
+  admin-password: {{ .Values.observability.grafana.adminPassword | quote }}
+{{- if .Values.observability.prometheus.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "e-team.observabilityPrometheusPVCName" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  accessModes:
+    {{- toYaml .Values.observability.prometheus.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.observability.prometheus.persistence.size }}
+  {{- if .Values.observability.prometheus.persistence.storageClassName }}
+  storageClassName: {{ .Values.observability.prometheus.persistence.storageClassName }}
+  {{- end }}
+{{- end }}
+{{- if .Values.observability.loki.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "e-team.observabilityLokiPVCName" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  accessModes:
+    {{- toYaml .Values.observability.loki.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.observability.loki.persistence.size }}
+  {{- if .Values.observability.loki.persistence.storageClassName }}
+  storageClassName: {{ .Values.observability.loki.persistence.storageClassName }}
+  {{- end }}
+{{- end }}
+{{- if .Values.observability.tempo.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "e-team.observabilityTempoPVCName" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  accessModes:
+    {{- toYaml .Values.observability.tempo.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.observability.tempo.persistence.size }}
+  {{- if .Values.observability.tempo.persistence.storageClassName }}
+  storageClassName: {{ .Values.observability.tempo.persistence.storageClassName }}
+  {{- end }}
+{{- end }}
+{{- if .Values.observability.grafana.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "e-team.observabilityGrafanaPVCName" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  accessModes:
+    {{- toYaml .Values.observability.grafana.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.observability.grafana.persistence.size }}
+  {{- if .Values.observability.grafana.persistence.storageClassName }}
+  storageClassName: {{ .Values.observability.grafana.persistence.storageClassName }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.prometheusName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "prometheus") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "prometheus") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prometheus
+          image: "{{ .Values.observability.prometheus.image.repository }}:{{ .Values.observability.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.prometheus.image.pullPolicy }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: {{ .Values.observability.prometheus.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: data
+              mountPath: /prometheus
+          resources:
+            {{- toYaml .Values.observability.prometheus.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "e-team.prometheusName" . }}-config
+        - name: data
+          {{- if .Values.observability.prometheus.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "e-team.observabilityPrometheusPVCName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.prometheusName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "prometheus") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.observability.prometheus.service.port }}
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.lokiName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "loki") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "loki") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: loki
+          image: "{{ .Values.observability.loki.image.repository }}:{{ .Values.observability.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.loki.image.pullPolicy }}
+          args:
+            - -config.file=/etc/loki/loki.yml
+          ports:
+            - name: http
+              containerPort: {{ .Values.observability.loki.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki/loki.yml
+              subPath: loki.yml
+            - name: data
+              mountPath: /loki
+          resources:
+            {{- toYaml .Values.observability.loki.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "e-team.lokiName" . }}-config
+        - name: data
+          {{- if .Values.observability.loki.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "e-team.observabilityLokiPVCName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.lokiName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "loki") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.observability.loki.service.port }}
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.tempoName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "tempo") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "tempo") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tempo
+          image: "{{ .Values.observability.tempo.image.repository }}:{{ .Values.observability.tempo.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.tempo.image.pullPolicy }}
+          args:
+            - -config.file=/etc/tempo/tempo.yml
+          ports:
+            - name: http
+              containerPort: {{ .Values.observability.tempo.service.port }}
+            - name: otlp-grpc
+              containerPort: {{ .Values.observability.tempo.service.otlpGrpcPort }}
+            - name: otlp-http
+              containerPort: {{ .Values.observability.tempo.service.otlpHttpPort }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo/tempo.yml
+              subPath: tempo.yml
+            - name: data
+              mountPath: /var/tempo
+          resources:
+            {{- toYaml .Values.observability.tempo.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "e-team.tempoName" . }}-config
+        - name: data
+          {{- if .Values.observability.tempo.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "e-team.observabilityTempoPVCName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.tempoName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "tempo") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.observability.tempo.service.port }}
+      targetPort: http
+    - name: otlp-grpc
+      port: {{ .Values.observability.tempo.service.otlpGrpcPort }}
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: {{ .Values.observability.tempo.service.otlpHttpPort }}
+      targetPort: otlp-http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.otelCollectorName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "otel-collector") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "otel-collector") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.observability.otelCollector.image.repository }}:{{ .Values.observability.otelCollector.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.otelCollector.image.pullPolicy }}
+          args:
+            - --config=/etc/otelcol-contrib/config.yml
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ .Values.observability.otelCollector.service.otlpGrpcPort }}
+            - name: otlp-http
+              containerPort: {{ .Values.observability.otelCollector.service.otlpHttpPort }}
+            - name: health
+              containerPort: {{ .Values.observability.otelCollector.service.healthPort }}
+            - name: prom-exp
+              containerPort: {{ .Values.observability.otelCollector.service.metricsPort }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yml
+              subPath: config.yml
+          resources:
+            {{- toYaml .Values.observability.otelCollector.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "e-team.otelCollectorName" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.otelCollectorName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "otel-collector") | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.observability.otelCollector.service.otlpGrpcPort }}
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: {{ .Values.observability.otelCollector.service.otlpHttpPort }}
+      targetPort: otlp-http
+    - name: health
+      port: {{ .Values.observability.otelCollector.service.healthPort }}
+      targetPort: health
+    - name: prom-exp
+      port: {{ .Values.observability.otelCollector.service.metricsPort }}
+      targetPort: prom-exp
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "e-team.grafanaName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "e-team.componentLabels" (dict "context" . "component" "grafana") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "grafana") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: grafana
+          image: "{{ .Values.observability.grafana.image.repository }}:{{ .Values.observability.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.grafana.image.pullPolicy }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.grafanaName" . }}-credentials
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.grafanaName" . }}-credentials
+                  key: admin-password
+          ports:
+            - name: http
+              containerPort: {{ .Values.observability.grafana.service.port }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yml
+              subPath: datasources.yml
+            - name: dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+              subPath: dashboards.yml
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            {{- toYaml .Values.observability.grafana.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.observability.grafana.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "e-team.observabilityGrafanaPVCName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: datasources
+          configMap:
+            name: {{ include "e-team.grafanaName" . }}-datasources
+        - name: dashboards-config
+          configMap:
+            name: {{ include "e-team.grafanaName" . }}-dashboards-config
+        - name: dashboards
+          configMap:
+            name: {{ include "e-team.grafanaName" . }}-dashboards
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "e-team.grafanaName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  selector:
+    {{- include "e-team.componentLabels" (dict "context" . "component" "grafana") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.observability.grafana.service.port }}
+      targetPort: http
+  type: {{ .Values.observability.grafana.service.type }}
+{{- if .Values.observability.grafana.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "e-team.grafanaName" . }}-ingress
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with .Values.observability.grafana.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.observability.grafana.ingress.className }}
+  rules:
+    - host: {{ .Values.observability.grafana.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.observability.grafana.ingress.path }}
+            pathType: {{ .Values.observability.grafana.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "e-team.grafanaName" . }}
+                port:
+                  number: {{ .Values.observability.grafana.service.port }}
+{{- end }}
+{{- end }}

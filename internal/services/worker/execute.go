@@ -6,28 +6,42 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
 	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
 const DefaultImage = "alpine:latest"
 
+const (
+	envWorkerJobCPULimit          = "WORKER_JOB_CPU_LIMIT"
+	envWorkerJobNanoCPUs          = "WORKER_JOB_NANO_CPUS"
+	envWorkerJobMemoryLimit       = "WORKER_JOB_MEMORY_LIMIT_MB"
+	cpuNanoUnit                   = 1_000_000_000
+	memoryMegabyteBytes     int64 = 1024 * 1024
+)
+
 // ExecuteJob runs a single job: optionally pull image (if provided), materialize a workspace, run container, wait for exit,
 // collect logs, and remove the container.
-func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+	ctx, span := s.tracer.Start(ctx, "execute.job")
+	defer span.End()
+
 	if cli == nil || job == nil {
-		return "", fmt.Errorf("client and job are required")
+		return "", fmt.Errorf("docker client and job are required")
 	}
 
 	image := job.Image
@@ -44,6 +58,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 
 	workspacePath, cleanup, err := materializeWorkspace(ctx, repoURL, commit, workspacePath)
 	if err != nil {
+		slog.Error("prepare workspace", "error", err.Error())
 		return "", fmt.Errorf("prepare workspace: %w", err)
 	}
 	if cleanup != nil {
@@ -53,7 +68,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	// 2. Create container
 	containerID, err := createContainer(ctx, cli, image, job.Script, workspacePath != "")
 	if err != nil {
-		return "", fmt.Errorf("run container: %w", err)
+		return "", fmt.Errorf("create container: %w", err)
 	}
 	defer func() {
 		_ = removeContainer(context.Background(), cli, containerID)
@@ -61,6 +76,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 
 	if workspacePath != "" {
 		if err := copyWorkspaceToContainer(ctx, cli, containerID, workspacePath); err != nil {
+			slog.Error("copy workspace to container", "error", err.Error())
 			return "", fmt.Errorf("copy workspace to container: %w", err)
 		}
 	}
@@ -73,7 +89,7 @@ func ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutio
 	// failed jobs expose stderr/stdout to callbacks and debugging output.
 	waitErr := waitContainer(ctx, cli, containerID)
 
-	// 4. Get logs (stdout/stderr)
+	// 4. Get logs
 	logs, logsErr := getLogs(ctx, cli, containerID)
 	if logsErr != nil {
 		if waitErr != nil {
@@ -99,7 +115,7 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 		}
 
 		repo, err := git.PlainCloneContext(ctx, tmpDir, &git.CloneOptions{
-			URL: repoURL,
+			URL:  repoURL,
 			Auth: cloneAuth(repoURL),
 		})
 		if err != nil {
@@ -124,7 +140,61 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 		return tmpDir, func() { _ = os.RemoveAll(tmpDir) }, nil
 	}
 
-	return workspacePath, nil, nil
+	resolvedPath, err := resolveWorkspacePath(workspacePath)
+	if err != nil {
+		return "", nil, err
+	}
+	return resolvedPath, nil, nil
+}
+
+func resolveWorkspacePath(workspacePath string) (string, error) {
+	workspacePath = strings.TrimSpace(workspacePath)
+	if workspacePath == "" {
+		return "", nil
+	}
+
+	if _, err := os.Stat(workspacePath); err == nil {
+		return workspacePath, nil
+	}
+
+	if !looksLikeWindowsPath(workspacePath) {
+		return workspacePath, nil
+	}
+
+	mappedPath := mapWindowsWorkspacePath(workspacePath)
+	if mappedPath == "" {
+		return workspacePath, nil
+	}
+	if _, err := os.Stat(mappedPath); err == nil {
+		return mappedPath, nil
+	}
+
+	return workspacePath, nil
+}
+
+func mapWindowsWorkspacePath(workspacePath string) string {
+	hostTempDir := strings.TrimSpace(os.Getenv("WORKSPACE_HOST_TEMP_DIR"))
+	if hostTempDir == "" {
+		hostTempDir = "/host-temp"
+	}
+
+	normalized := strings.ReplaceAll(strings.TrimSpace(workspacePath), "\\", "/")
+	base := path.Base(normalized)
+	if base == "." || base == "/" || base == "" {
+		return ""
+	}
+
+	return filepath.Join(hostTempDir, base)
+}
+
+func looksLikeWindowsPath(p string) bool {
+	if strings.Contains(p, "\\") {
+		return true
+	}
+	if len(p) < 2 || p[1] != ':' {
+		return false
+	}
+	return (p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z')
 }
 
 func cloneAuth(repoURL string) *githttp.BasicAuth {
@@ -174,6 +244,11 @@ func pullImage(ctx context.Context, cli *client.Client, imageRef string) error {
 // createContainer creates a container for the given image and script; returns container ID.
 // If hasWorkspace is true, the container will run with /workspace as its working directory.
 func createContainer(ctx context.Context, cli *client.Client, image string, script []string, hasWorkspace bool) (containerID string, err error) {
+	resources, err := containerResourcesFromEnv()
+	if err != nil {
+		return "", err
+	}
+
 	cmd := scriptToCmd(script)
 	cfg := &container.Config{
 		Image:        image,
@@ -184,12 +259,65 @@ func createContainer(ctx context.Context, cli *client.Client, image string, scri
 	if hasWorkspace {
 		cfg.WorkingDir = "/workspace"
 	}
+
 	opts := client.ContainerCreateOptions{Config: cfg}
+	if hasContainerResourceLimits(resources) {
+		opts.HostConfig = &container.HostConfig{
+			Resources: resources,
+		}
+	}
+
 	createResp, err := cli.ContainerCreate(ctx, opts)
 	if err != nil {
+		slog.Error("created container failed: ", "error", err.Error())
 		return "", err
 	}
 	return createResp.ID, nil
+}
+
+func containerResourcesFromEnv() (container.Resources, error) {
+	var resources container.Resources
+
+	nanoCPURaw := strings.TrimSpace(os.Getenv(envWorkerJobNanoCPUs))
+	cpuLimitRaw := strings.TrimSpace(os.Getenv(envWorkerJobCPULimit))
+	memoryLimitRaw := strings.TrimSpace(os.Getenv(envWorkerJobMemoryLimit))
+
+	if nanoCPURaw != "" && cpuLimitRaw != "" {
+		return resources, fmt.Errorf("%s and %s cannot both be set", envWorkerJobNanoCPUs, envWorkerJobCPULimit)
+	}
+
+	if nanoCPURaw != "" {
+		nanoCPUs, err := strconv.ParseInt(nanoCPURaw, 10, 64)
+		if err != nil || nanoCPUs <= 0 {
+			return resources, fmt.Errorf("%s must be a positive int64, got %q", envWorkerJobNanoCPUs, nanoCPURaw)
+		}
+		resources.NanoCPUs = nanoCPUs
+	}
+
+	if cpuLimitRaw != "" {
+		cpuLimit, err := strconv.ParseFloat(cpuLimitRaw, 64)
+		if err != nil || cpuLimit <= 0 {
+			return resources, fmt.Errorf("%s must be a positive number, got %q", envWorkerJobCPULimit, cpuLimitRaw)
+		}
+		resources.NanoCPUs = int64(math.Round(cpuLimit * cpuNanoUnit))
+		if resources.NanoCPUs <= 0 {
+			return resources, fmt.Errorf("%s resolved to invalid NanoCPUs for value %q", envWorkerJobCPULimit, cpuLimitRaw)
+		}
+	}
+
+	if memoryLimitRaw != "" {
+		memoryLimitMB, err := strconv.ParseInt(memoryLimitRaw, 10, 64)
+		if err != nil || memoryLimitMB <= 0 {
+			return resources, fmt.Errorf("%s must be a positive integer (MB), got %q", envWorkerJobMemoryLimit, memoryLimitRaw)
+		}
+		resources.Memory = memoryLimitMB * memoryMegabyteBytes
+	}
+
+	return resources, nil
+}
+
+func hasContainerResourceLimits(resources container.Resources) bool {
+	return resources.NanoCPUs > 0 || resources.Memory > 0
 }
 
 func startContainer(ctx context.Context, cli *client.Client, containerID string) error {

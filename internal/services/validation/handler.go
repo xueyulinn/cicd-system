@@ -93,7 +93,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		log.Info("dryrun ok")
 		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		log.Info("dryrun rejected", "errors", response.Errors)
+		log.Info("dryrun failed", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }

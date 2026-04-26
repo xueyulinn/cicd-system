@@ -39,6 +39,7 @@ func TestGenerateExecutionPlan_SingleStageSingleJob(t *testing.T) {
 	}
 	if plan == nil {
 		t.Fatal("Expected non-nil plan")
+		return
 	}
 	s, ok := getStagePlan(plan, "build")
 	if !ok {
@@ -72,6 +73,7 @@ func TestGenerateExecutionPlan_MultipleStagesMultipleJobs(t *testing.T) {
 	}
 	if plan == nil {
 		t.Fatal("Expected non-nil plan")
+		return
 	}
 
 	build, _ := getStagePlan(plan, "build")
@@ -106,6 +108,7 @@ func TestGenerateExecutionPlan_EmptyStages(t *testing.T) {
 	}
 	if plan == nil {
 		t.Fatal("Expected non-nil plan")
+		return
 	}
 	if len(plan.Stages) != 0 {
 		t.Errorf("Expected empty stages, got %d", len(plan.Stages))

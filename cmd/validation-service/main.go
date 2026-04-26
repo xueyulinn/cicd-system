@@ -17,20 +17,26 @@ import (
 const serviceName = "validation-service"
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	shutdown, err := observability.Init(ctx, serviceName)
+	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
 		slog.Error("failed to init observability", "error", err)
 		os.Exit(1)
 	}
-	defer func() { _ = shutdown(ctx) }()
+	defer func() {
+		obsShutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := shutdown(obsShutdownCtx); err != nil {
+			slog.Error("observability shutdown failed", "error", err)
+		}
+	}()
 
 	handler := validation.NewHandler()
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	mux.Handle("/metrics", observability.MetricsHandler())
 
 	wrapped := observability.HTTPMetricsMiddleware(
 		observability.TracingMiddleware(serviceName, mux))
@@ -43,17 +49,21 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+	errCh := make(chan error, 1)
 
 	go func() {
 		slog.Info("service starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("listen failed", "error", err)
+			errCh <- err
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-ctx.Done():
+		slog.Info("shutdown signal received")
+	case err := <-errCh:
+		slog.Error("listen failed", "error", err)
+	}
 
 	slog.Info("service shutting down")
 

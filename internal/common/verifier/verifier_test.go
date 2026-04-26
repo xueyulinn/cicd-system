@@ -398,6 +398,7 @@ compile:
 
 	if verifier == nil {
 		t.Fatal("Expected verifier to be created, got nil")
+		return
 	}
 
 	if verifier.filePath != "test.yaml" {
