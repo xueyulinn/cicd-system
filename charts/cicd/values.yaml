@@ -9,6 +9,11 @@ global:
   imagePullSecrets: []
   podAnnotations: {}
 
+composeLocal:
+  redis:
+    image: redis:7-alpine
+    port: 6379
+
 apiGateway:
   enabled: true
   replicaCount: 1

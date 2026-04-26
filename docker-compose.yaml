@@ -13,6 +13,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: ${REDIS_IMAGE}
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   mysql:
     image: ${MYSQL_IMAGE}
     environment:
@@ -86,9 +96,13 @@ services:
     image: ${VALIDATION_SERVICE_IMAGE}
     environment:
       PORT: "${VALIDATION_SERVICE_PORT}"
+      VALIDATION_CACHE_REDIS_URL: ${VALIDATION_CACHE_REDIS_URL}
       SERVICE_NAME: validation-service
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "${VALIDATION_SERVICE_PORT}:${VALIDATION_SERVICE_PORT}"
 

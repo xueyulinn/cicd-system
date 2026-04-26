@@ -51,7 +51,9 @@ func (s *Service) Start(ctx context.Context) error {
 			return err
 		}
 		if errors.Is(err, mq.ErrConnectionClosed) {
-			s.Close()
+			if closeErr := s.Close(); closeErr != nil {
+				log.Printf("[worker] close service failed: %v", closeErr)
+			}
 			if err := s.ensureDependencies(ctx); err != nil {
 				return err
 			}

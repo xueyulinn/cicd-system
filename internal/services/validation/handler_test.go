@@ -75,6 +75,7 @@ func TestNewHandler(t *testing.T) {
 	h := NewHandler()
 	if h == nil {
 		t.Fatal("expected handler to be initialized")
+		return
 	}
 	if h.service == nil {
 		t.Fatal("expected service to be initialized")

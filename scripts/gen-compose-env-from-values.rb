@@ -33,6 +33,8 @@ obs = v["observability"] || {}
 mysql_port = v.dig("mysql", "service", "port") || 3306
 rabbit_amqp_port = v.dig("rabbitmq", "service", "amqpPort") || 5672
 rabbit_mgmt_port = v.dig("rabbitmq", "service", "managementPort") || 15672
+redis_image = v.dig("composeLocal", "redis", "image") || "redis:7-alpine"
+redis_port = v.dig("composeLocal", "redis", "port") || 6379
 gateway_port = v.dig("apiGateway", "service", "port") || 8000
 validation_port = v.dig("validationService", "service", "port") || 8001
 exec_port = v.dig("executionService", "service", "port") || 8002
@@ -100,6 +102,8 @@ lines << "RABBITMQ_PASSWORD=#{v.dig('rabbitmq', 'auth', 'password') || 'guest'}"
 lines << "RABBITMQ_URL=#{amqp_url_for_compose(v)}"
 lines << "RABBITMQ_AMQP_PORT=#{rabbit_amqp_port}"
 lines << "RABBITMQ_MANAGEMENT_PORT=#{rabbit_mgmt_port}"
+lines << "REDIS_IMAGE=#{redis_image}"
+lines << "REDIS_PORT=#{redis_port}"
 lines << "API_GATEWAY_PORT=#{gateway_port}"
 lines << "VALIDATION_SERVICE_PORT=#{validation_port}"
 lines << "ORCHESTRATOR_SERVICE_PORT=#{exec_port}"
@@ -110,6 +114,7 @@ lines << "ORCHESTRATOR_URL=http://orchestrator-service:#{exec_port}"
 lines << "WORKER_URL=http://worker-service:#{worker_port}"
 lines << "REPORTING_URL=http://reporting-service:#{reporting_port}"
 lines << "REPORT_DB_DSN=#{v.dig('mysql', 'auth', 'username')}:#{v.dig('mysql', 'auth', 'password')}@tcp(mysql:#{mysql_port})/#{v.dig('mysql', 'auth', 'database')}?parseTime=true&charset=utf8mb4&loc=UTC"
+lines << "VALIDATION_CACHE_REDIS_URL=redis://redis:#{redis_port}/0"
 
 lines << "PUBLISHER_CONCURRENCY=#{v.dig('executionService', 'publisherConcurrency') || 1}"
 lines << "WORKER_CONCURRENCY=#{v.dig('workerService', 'concurrency') || 1}"

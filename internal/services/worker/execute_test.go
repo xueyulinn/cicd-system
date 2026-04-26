@@ -14,6 +14,7 @@ func TestCloneAuthUsesGitHubTokenForGitHubRepos(t *testing.T) {
 	auth := cloneAuth("https://github.com/org/private-repo.git")
 	if auth == nil {
 		t.Fatal("expected auth for GitHub token")
+		return
 	}
 	if auth.Username != "x-access-token" {
 		t.Fatalf("auth.Username = %q, want x-access-token", auth.Username)
@@ -31,6 +32,7 @@ func TestCloneAuthPrefersExplicitGitCredentials(t *testing.T) {
 	auth := cloneAuth("https://github.com/org/private-repo.git")
 	if auth == nil {
 		t.Fatal("expected auth for explicit git credentials")
+		return
 	}
 	if auth.Username != "git-user" {
 		t.Fatalf("auth.Username = %q, want git-user", auth.Username)

@@ -39,10 +39,12 @@ compile:
 
 	if pipeline == nil {
 		t.Fatal("Expected pipeline to be parsed, got nil")
+		return
 	}
 
 	if rootNode == nil {
 		t.Fatal("Expected rootNode to be parsed, got nil")
+		return
 	}
 
 	// Check parsed content
@@ -232,9 +234,11 @@ compile:
 	}
 	if pipeline == nil {
 		t.Fatal("Expected pipeline to be parsed, got nil")
+		return
 	}
 	if rootNode == nil {
 		t.Fatal("Expected root node to be parsed, got nil")
+		return
 	}
 	if pipeline.Name != "Content Pipeline" {
 		t.Fatalf("Expected pipeline name Content Pipeline, got %q", pipeline.Name)

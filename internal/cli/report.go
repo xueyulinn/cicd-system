@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	reportPipeline string
 	reportRun      int
 	reportStage    string
 	reportJob      string

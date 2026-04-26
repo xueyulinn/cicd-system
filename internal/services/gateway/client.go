@@ -48,7 +48,9 @@ func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *
 	if err != nil {
 		return fmt.Errorf("failed to call validation service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
@@ -72,7 +74,9 @@ func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 	if err != nil {
 		return fmt.Errorf("failed to call dryrun service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)

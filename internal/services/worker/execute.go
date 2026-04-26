@@ -41,7 +41,7 @@ func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *model
 	defer span.End()
 
 	if cli == nil || job == nil {
-		return "", fmt.Errorf("Docker client and job are required")
+		return "", fmt.Errorf("docker client and job are required")
 	}
 
 	image := job.Image

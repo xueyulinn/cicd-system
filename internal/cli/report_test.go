@@ -66,7 +66,6 @@ func TestBuildReportQuery_ValidWithJob(t *testing.T) {
 }
 
 func resetReportFlags() {
-	reportPipeline = ""
 	reportRun = 0
 	reportStage = ""
 	reportJob = ""

@@ -1,11 +1,5 @@
 package observability
 
-import (
-	"go.opentelemetry.io/otel"
-)
-
-var meter = otel.Meter("github.com/xueyulinn/cicd-system/internal/observability")
-
 // HTTP OTel metrics.
 // var (
 // 	httpServerRequestDuration metric.Float64Histogram
