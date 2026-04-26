@@ -1,46 +1,61 @@
 package cli
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildReportQuery_PipelineRequired(t *testing.T) {
 	resetReportFlags()
-	_, err := buildReportQuery()
-	if err == nil {
-		t.Fatal("expected pipeline required error")
+	reportRun = 1
+	_, err := buildReportQuery([]string{""})
+	if err == nil || !strings.Contains(err.Error(), "pipeline name is required") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
-func TestBuildReportQuery_StageRequiresRun(t *testing.T) {
+func TestBuildReportQuery_NegativeRunRejected(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "default"
-	reportStage = "build"
-	_, err := buildReportQuery()
-	if err == nil {
-		t.Fatal("expected stage requires run error")
+	reportRun = -1
+	_, err := buildReportQuery([]string{"default"})
+	if err == nil || !strings.Contains(err.Error(), "run must be a positive integer") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestBuildReportQuery_RunOmittedProducesNilPointer(t *testing.T) {
+	resetReportFlags()
+	q, err := buildReportQuery([]string{"default"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if q.Run != nil {
+		t.Fatalf("expected nil run when --run is omitted, got %+v", *q.Run)
 	}
 }
 
 func TestBuildReportQuery_JobRequiresStage(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "default"
 	reportRun = 1
 	reportJob = "compile"
-	_, err := buildReportQuery()
-	if err == nil {
-		t.Fatal("expected job requires stage error")
+	_, err := buildReportQuery([]string{"default"})
+	if err == nil || !strings.Contains(err.Error(), "run and stage are required when job is provided") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
 func TestBuildReportQuery_ValidWithJob(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "default"
 	reportRun = 1
 	reportStage = "build"
 	reportJob = "compile"
 
-	q, err := buildReportQuery()
+	q, err := buildReportQuery([]string{"default"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if q.Pipeline != "default" {
+		t.Fatalf("expected pipeline=default, got %q", q.Pipeline)
 	}
 	if q.Run == nil || *q.Run != 1 {
 		t.Fatalf("expected run=1, got %+v", q.Run)
@@ -51,7 +66,6 @@ func TestBuildReportQuery_ValidWithJob(t *testing.T) {
 }
 
 func resetReportFlags() {
-	reportPipeline = ""
 	reportRun = 0
 	reportStage = ""
 	reportJob = ""

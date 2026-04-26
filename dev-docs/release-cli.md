@@ -31,7 +31,7 @@ Binaries are statically linked (`CGO_ENABLED=0`), so no extra runtimes (JVM, Pyt
 **With a specific version:**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CS7580-SEA-SP26/e-team/main/scripts/install.sh | sh -s v0.1.0
+curl -sSL https://raw.githubusercontent.com/xueyulinn/cicd-system/main/scripts/install.sh | sh -s v0.1.0
 ```
 
 Or download the script and run:
@@ -43,7 +43,7 @@ Or download the script and run:
 **Latest release (script fetches latest tag from GitHub API):**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CS7580-SEA-SP26/e-team/main/scripts/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/xueyulinn/cicd-system/main/scripts/install.sh | sh
 ```
 
 The script installs the binary to `$HOME/bin` (or `$CICD_BIN` / `$PREFIX/bin` if set) and prints how to add it to PATH if needed.

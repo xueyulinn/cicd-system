@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 // Handler serves reporting HTTP endpoints.
@@ -63,7 +63,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debug("reporting ready")
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ready"})
 }
 
 // handleHealth reports reporting-service liveness only.
@@ -73,7 +73,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 // handleReport parses report filters and returns the requested report view.
@@ -111,7 +111,6 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Info("report returned")
 	api.WriteJSON(w, http.StatusOK, report)
 }
 

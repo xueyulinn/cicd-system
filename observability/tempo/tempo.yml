@@ -23,7 +23,12 @@ storage:
     local:
       path: /var/tempo/traces
 
+metrics_generator:
+  storage:
+    path: /tmp/tempo/generator/wal
+
 overrides:
   defaults:
     metrics_generator:
-      processors: []
+      processors:
+        - local-blocks

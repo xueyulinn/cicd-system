@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 type consumerTestContextKey string
@@ -57,9 +57,9 @@ func TestNewJobConsumerValidation(t *testing.T) {
 func TestJobConsumerConsumeJob(t *testing.T) {
 	cfg := Config{URL: "amqp://guest:guest@localhost:5672/", JobQueue: "jobs.queue"}
 	expected := messages.JobExecutionMessage{
-		RunNo:    7,
-		Pipeline: "demo",
-		Stage:    "build",
+		RunNo:        7,
+		PipelineName: "demo",
+		Stage:        "build",
 		Job: models.JobExecutionPlan{
 			Name:   "lint",
 			Image:  "golang:1.25",

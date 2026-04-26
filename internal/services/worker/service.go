@@ -3,75 +3,66 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
-	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
-	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
 	"github.com/moby/moby/client"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/xueyulinn/cicd-system/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/mq"
+	"github.com/xueyulinn/cicd-system/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/store"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 const (
-	defaultJobTimeout = 5 * time.Minute
+	defaultJobTimeout = 10 * time.Minute
 
-	workerTracerName = "worker-service"
+	workerTracerScope             = "internal/services/worker"
+	orchestratorHTTPDownstreamTag = "orchestrator"
 )
 
 // Service runs the worker consumers and dependency checks.
 type Service struct {
-	docker       *client.Client
-	jobTimeout   time.Duration
-	jobConsumers []mq.Consumer
-	mqConn       *amqp.Connection
-	executionURL string
-	httpClient   *http.Client
-	mqConfig     mq.Config
+	docker          *client.Client
+	jobTimeout      time.Duration
+	jobConsumers    []mq.Consumer
+	mqConn          *amqp.Connection
+	orchestratorURL string
+	httpClient      *http.Client
+	mqConfig        mq.Config
+	tracer          trace.Tracer
 }
 
-// NewService creates a worker service backed by Docker and RabbitMQ consumer groups.
-func NewService(ctx context.Context, jobTimeout time.Duration) (*Service, error) {
+// NewService constructs a worker service with lazy dependency initialization.
+func NewService(jobTimeout time.Duration) *Service {
 	if jobTimeout == 0 {
 		jobTimeout = defaultJobTimeout
 	}
 
-	docker, err := NewDockerClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create docker client: %w", err)
-	}
-
 	cfg := mq.LoadConfig()
-	mqConn, err := amqp.Dial(cfg.URL)
-	if err != nil {
-		_ = docker.Close()
-		return nil, fmt.Errorf("connect rabbitmq: %w", err)
-	}
-	concurrency := loadWorkerConcurrency()
-	jobConsumers, err := createJobConsumers(cfg, mqConn, concurrency)
-	if err != nil {
-		_ = mqConn.Close()
-		_ = docker.Close()
-		return nil, err
-	}
 
 	return &Service{
-		docker:       docker,
-		jobTimeout:   jobTimeout,
-		jobConsumers: jobConsumers,
-		mqConn:       mqConn,
-		executionURL: config.GetEnvOrDefaultURL("EXECUTION_URL", config.DefaultExecutionURL),
-		mqConfig:     cfg,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-	}, nil
+		docker:          nil,
+		jobTimeout:      jobTimeout,
+		jobConsumers:    make([]mq.Consumer, 0),
+		mqConn:          nil,
+		orchestratorURL: config.GetEnvOrDefaultURL("ORCHESTRATOR_URL", config.DefaultOrchestratorURL),
+		mqConfig:        cfg,
+		httpClient:      observability.NewInstrumentedHTTPClient(orchestratorHTTPDownstreamTag, 15*time.Second),
+		tracer:          observability.Tracer(workerTracerScope),
+	}
+}
+
+func (s *Service) serviceTracer() trace.Tracer {
+	if s != nil && s.tracer != nil {
+		return s.tracer
+	}
+	return observability.Tracer(workerTracerScope)
 }
 
 // Close releases all underlying consumers and Docker resources held by Service.
@@ -84,11 +75,14 @@ func (s *Service) Close() error {
 			_ = consumer.Close()
 		}
 	}
+	s.jobConsumers = nil
 	if s.mqConn != nil {
 		_ = s.mqConn.Close()
+		s.mqConn = nil
 	}
 	if s.docker != nil {
 		_ = s.docker.Close()
+		s.docker = nil
 	}
 	return nil
 }
@@ -110,10 +104,9 @@ func (s *Service) Ready(ctx context.Context) error {
 }
 
 func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutionMessage) (err error) {
-	tracer := observability.Tracer(workerTracerName)
-	ctx, span := tracer.Start(ctx, "mq.job.consume",
+	ctx, span := s.serviceTracer().Start(ctx, "consume.message",
 		trace.WithAttributes(
-			attribute.String("pipeline", msg.Pipeline),
+			attribute.String("pipeline", msg.PipelineName),
 			attribute.Int("run_no", msg.RunNo),
 			attribute.String("stage", msg.Stage),
 			attribute.String("job", msg.Job.Name),
@@ -144,16 +137,20 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return fmt.Errorf("callback job started: %w", err)
 	}
 
-	start := time.Now()
-	logs, execErr := ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
-	duration := time.Since(start)
-
+	logs, execErr := s.ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
+	
 	if execErr != nil {
+		slog.Error("execute job failed",
+      	"pipeline", msg.PipelineName,
+      	"run_no", msg.RunNo,
+      	"stage", msg.Stage,
+      	"job", jobName,
+      	"error", execErr,
+      	"logs", logs,
+  	)
 		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
-			log.Printf("[worker] callback failed for failed job pipeline=%s run=%d stage=%s job=%s err=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, callbackErr)
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
-		log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v error=%v", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, execErr)
 		// Execution-level failures are terminal for this job message once status
 		// has been reported back; return nil so MQ ack does not requeue forever.
 		return nil
@@ -163,6 +160,5 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return fmt.Errorf("callback job finished: %w", err)
 	}
 
-	log.Printf("[worker] pipeline=%s run=%d stage=%s job=%s duration=%v ok logs=%q", msg.Pipeline, msg.RunNo, msg.Stage, jobName, duration, logs)
 	return nil
 }

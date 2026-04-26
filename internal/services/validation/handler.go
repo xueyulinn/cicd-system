@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 // Handler handles HTTP requests for validation service
@@ -37,7 +37,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "healthy"})
 }
 
 // handleValidate validates YAML pipeline
@@ -60,17 +60,9 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := observability.WithTraceContext(r.Context(), slog.Default())
-
 	response := h.service.ValidateYAML(req.YAMLContent)
 
-	if response.Valid {
-		log.Info("validate ok")
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
-		log.Info("validate rejected", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleDryRun validates YAML and returns execution plan
@@ -101,7 +93,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		log.Info("dryrun ok")
 		api.WriteJSON(w, http.StatusOK, response)
 	} else {
-		log.Info("dryrun rejected", "errors", response.Errors)
+		log.Info("dryrun failed", "errors", response.Errors)
 		api.WriteJSON(w, http.StatusBadRequest, response)
 	}
 }
@@ -113,5 +105,5 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ready"})
 }

@@ -1,0 +1,74 @@
+{{- if and .Values.mysql.enabled .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "e-team.migrationJobName" . }}
+  labels:
+    {{- include "e-team.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: {{ .Values.migration.hookDeletePolicy | quote }}
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.migration.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "e-team.componentLabels" (dict "context" . "component" "migration") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-mysql
+          image: "{{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}"
+          imagePullPolicy: {{ .Values.mysql.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until mysqladmin --protocol=TCP -h {{ include "e-team.mysqlName" . }} -P {{ .Values.mysql.service.port }} -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" ping --silent; do
+                echo "waiting for mysql..."
+                sleep 3
+              done
+              echo "mysql is accepting connections"
+          env:
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_PASSWORD
+      containers:
+        - name: migrate
+          image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag }}"
+          imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          env:
+            - name: DB_HOST
+              value: {{ include "e-team.mysqlName" . }}
+            - name: DB_PORT
+              value: {{ .Values.mysql.service.port | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_USER
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_DATABASE
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "e-team.mysqlSecretName" . }}
+                  key: MYSQL_PASSWORD
+{{- end }}

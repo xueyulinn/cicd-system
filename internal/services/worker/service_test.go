@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
-	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
+	"github.com/xueyulinn/cicd-system/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/mq"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -52,6 +52,8 @@ func TestLoadWorkerConcurrency_InvalidFallsBack(t *testing.T) {
 }
 
 func TestCreateJobConsumers_CreatesRequestedCount(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "2")
+
 	originalFactory := newJobConsumer
 	defer func() { newJobConsumer = originalFactory }()
 
@@ -61,7 +63,7 @@ func TestCreateJobConsumers_CreatesRequestedCount(t *testing.T) {
 		return &fakeConsumer{}, nil
 	}
 
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil)
 	if err != nil {
 		t.Fatalf("createJobConsumers returned error: %v", err)
 	}
@@ -74,6 +76,8 @@ func TestCreateJobConsumers_CreatesRequestedCount(t *testing.T) {
 }
 
 func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "2")
+
 	originalFactory := newJobConsumer
 	defer func() { newJobConsumer = originalFactory }()
 
@@ -87,7 +91,7 @@ func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil)
 	if err == nil {
 		t.Fatal("createJobConsumers error = nil, want non-nil")
 	}
@@ -99,13 +103,27 @@ func TestCreateJobConsumers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
 	}
 }
 
-func TestCreateJobConsumers_InvalidCount(t *testing.T) {
-	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 0)
-	if err == nil {
-		t.Fatal("createJobConsumers error = nil, want non-nil")
+func TestCreateJobConsumers_InvalidEnvFallsBackToDefault(t *testing.T) {
+	t.Setenv("WORKER_CONCURRENCY", "0")
+
+	originalFactory := newJobConsumer
+	defer func() { newJobConsumer = originalFactory }()
+
+	created := 0
+	newJobConsumer = func(cfg mq.Config, _ *amqp.Connection) (mq.Consumer, error) {
+		created++
+		return &fakeConsumer{}, nil
 	}
-	if consumers != nil {
-		t.Fatalf("consumers = %v, want nil", consumers)
+
+	consumers, err := createJobConsumers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil)
+	if err != nil {
+		t.Fatalf("createJobConsumers returned error: %v", err)
+	}
+	if len(consumers) != defaultWorkerConcurrent {
+		t.Fatalf("len(consumers) = %d, want %d", len(consumers), defaultWorkerConcurrent)
+	}
+	if created != defaultWorkerConcurrent {
+		t.Fatalf("created = %d, want %d", created, defaultWorkerConcurrent)
 	}
 }
 

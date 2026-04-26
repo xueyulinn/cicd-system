@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
@@ -35,9 +35,6 @@ func TestDryRunYAMLValidPipeline(t *testing.T) {
 	if !resp.Valid {
 		t.Fatalf("DryRunYAML valid = false, errors = %+v", resp.Errors)
 	}
-	if !strings.Contains(resp.Output, "build:") || !strings.Contains(resp.Output, "compile:") {
-		t.Fatalf("unexpected dryrun output: %q", resp.Output)
-	}
 }
 
 func TestDryRunYAMLInvalidPipeline(t *testing.T) {
@@ -49,9 +46,6 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 	}
 	if len(resp.Errors) == 0 {
 		t.Fatal("expected validation errors")
-	}
-	if resp.Output != "" {
-		t.Fatalf("expected empty output for invalid pipeline, got %q", resp.Output)
 	}
 }
 

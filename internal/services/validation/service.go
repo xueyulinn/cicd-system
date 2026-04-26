@@ -3,11 +3,11 @@ package validation
 import (
 	"fmt"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/parser"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/planner"
-	"github.com/CS7580-SEA-SP26/e-team/internal/common/verifier"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/common/planner"
+	"github.com/xueyulinn/cicd-system/internal/common/verifier"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 // Service provides validation functionality
@@ -72,19 +72,10 @@ func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
 		}
 	}
 
-	// Convert execution plan to YAML output
-	output, err := marshalExecutionPlan(plan)
-	if err != nil {
-		return api.DryRunResponse{
-			Valid:  false,
-			Errors: []string{fmt.Sprintf("failed to marshal execution plan: %v", err)},
-		}
-	}
-
 	return api.DryRunResponse{
 		Valid:  true,
 		Errors: []string{},
-		Output: output,
+		ExecutionPlan: plan,
 	}
 }
 

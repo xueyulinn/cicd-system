@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,93 +9,65 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/config"
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
-	"github.com/CS7580-SEA-SP26/e-team/internal/services/reporting"
+	"github.com/xueyulinn/cicd-system/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/observability"
+	"github.com/xueyulinn/cicd-system/internal/services/reporting"
 )
 
 const serviceName = "reporting-service"
 
-type handler interface {
-	RegisterRoutes(mux *http.ServeMux)
-	Close()
-}
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-type httpServer interface {
-	ListenAndServe() error
-	Shutdown(ctx context.Context) error
-}
-
-type dependencies struct {
-	initObservability     func(ctx context.Context, service string) (func(context.Context) error, error)
-	newHandler            func() (handler, error)
-	metricsHandler        func() http.Handler
-	tracingMiddleware     func(service string, next http.Handler) http.Handler
-	httpMetricsMiddleware func(next http.Handler) http.Handler
-	getEnvOrDefault       func(key, fallback string) string
-	newServer             func(addr string, wrapped http.Handler) httpServer
-	notifySignals         func(c chan<- os.Signal, sig ...os.Signal)
-}
-
-func defaultDependencies() dependencies {
-	return dependencies{
-		initObservability: observability.Init,
-		newHandler: func() (handler, error) {
-			return reporting.NewHandler()
-		},
-		metricsHandler:        observability.MetricsHandler,
-		tracingMiddleware:     observability.TracingMiddleware,
-		httpMetricsMiddleware: observability.HTTPMetricsMiddleware,
-		getEnvOrDefault:       config.GetEnvOrDefault,
-		newServer: func(addr string, wrapped http.Handler) httpServer {
-			return &http.Server{
-				Addr:         addr,
-				Handler:      wrapped,
-				ReadTimeout:  15 * time.Second,
-				WriteTimeout: 15 * time.Second,
-				IdleTimeout:  60 * time.Second,
-			}
-		},
-		notifySignals: signal.Notify,
-	}
-}
-
-func run(ctx context.Context, deps dependencies) error {
-	shutdown, err := deps.initObservability(ctx, serviceName)
+	shutdown, err := observability.Bootstrap(ctx, serviceName)
 	if err != nil {
-		return fmt.Errorf("failed to init observability: %w", err)
+		slog.Error("failed to init observability", "error", err)
+		os.Exit(1)
 	}
-	defer func() { _ = shutdown(ctx) }()
+	defer func() {
+		obsShutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := shutdown(obsShutdownCtx); err != nil {
+			slog.Error("observability shutdown failed", "error", err)
+		}
+	}()
 
-	handler, err := deps.newHandler()
+	handler, err := reporting.NewHandler()
 	if err != nil {
-		return fmt.Errorf("reporting service failed to initialize: %w", err)
+		slog.Error("reporting service failed to initialize", "error", err)
+		os.Exit(1)
 	}
 	defer handler.Close()
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
-	mux.Handle("/metrics", deps.metricsHandler())
 
-	wrapped := deps.httpMetricsMiddleware(deps.tracingMiddleware(serviceName, mux))
+	wrapped := observability.HTTPMetricsMiddleware(
+		observability.TracingMiddleware(serviceName, mux))
 
-	addr := ":" + deps.getEnvOrDefault("PORT", config.DefaultReportingPort)
-	server := deps.newServer(addr, wrapped)
-	listenErr := make(chan error, 1)
+	addr := ":" + config.GetEnvOrDefault("PORT", config.DefaultReportingPort)
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      wrapped,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	errCh := make(chan error, 1)
 
 	go func() {
 		slog.Info("service starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			listenErr <- err
+			errCh <- err
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	deps.notifySignals(quit, syscall.SIGINT, syscall.SIGTERM)
 	select {
-	case <-quit:
-	case err := <-listenErr:
-		return fmt.Errorf("listen failed: %w", err)
+	case <-ctx.Done():
+		slog.Info("shutdown signal received")
+	case err := <-errCh:
+		slog.Error("listen failed", "error", err)
 	}
 
 	slog.Info("service shutting down")
@@ -105,15 +76,8 @@ func run(ctx context.Context, deps dependencies) error {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("forced shutdown: %w", err)
-	}
-	slog.Info("service stopped")
-	return nil
-}
-
-func main() {
-	if err := run(context.Background(), defaultDependencies()); err != nil {
-		slog.Error("service exited with error", "error", err)
-		os.Exit(1)
+		slog.Error("forced shutdown", "error", err)
+	} else {
+		slog.Info("service stopped")
 	}
 }

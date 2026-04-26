@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/models"
 	"github.com/spf13/cobra"
 )
 
 func TestRunReport_InvalidFormat(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "demo"
+	reportRun = 1
 	cmd := &cobra.Command{}
 	cmd.Flags().StringP("format", "f", formatYAML, "")
 	_ = cmd.Flags().Set("format", "xml")
 
-	err := runReport(cmd, nil)
+	err := runReport(cmd, []string{"demo"})
 	if err == nil || !strings.Contains(err.Error(), "invalid format") {
 		t.Fatalf("err=%v", err)
 	}
@@ -26,7 +26,7 @@ func TestRunReport_InvalidFormat(t *testing.T) {
 
 func TestRunReport_SuccessJSON(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "demo"
+	reportRun = 1
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/report" {
@@ -43,7 +43,7 @@ func TestRunReport_SuccessJSON(t *testing.T) {
 	cmd.Flags().StringP("format", "f", formatYAML, "")
 	_ = cmd.Flags().Set("format", formatJSON)
 
-	out, err := captureStdout(t, func() error { return runReport(cmd, nil) })
+	out, err := captureStdout(t, func() error { return runReport(cmd, []string{"demo"}) })
 	if err != nil {
 		t.Fatalf("runReport err=%v", err)
 	}
@@ -54,7 +54,7 @@ func TestRunReport_SuccessJSON(t *testing.T) {
 
 func TestRunReport_GatewayError(t *testing.T) {
 	resetReportFlags()
-	reportPipeline = "demo"
+	reportRun = 1
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
@@ -67,7 +67,7 @@ func TestRunReport_GatewayError(t *testing.T) {
 	cmd.Flags().StringP("format", "f", formatYAML, "")
 	_ = cmd.Flags().Set("format", formatYAML)
 
-	err := runReport(cmd, nil)
+	err := runReport(cmd, []string{"demo"})
 	if err == nil || !strings.Contains(err.Error(), "report unavailable") {
 		t.Fatalf("err=%v", err)
 	}

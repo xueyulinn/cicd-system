@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 type reportStore interface {
@@ -29,10 +29,7 @@ type Service struct {
 func NewService(ctx context.Context) (*Service, error) {
 	connURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if connURL == "" {
-		connURL = strings.TrimSpace(os.Getenv("REPORT_DB_URL"))
-	}
-	if connURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL or REPORT_DB_URL is required")
+		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
 	st, err := store.New(ctx, connURL)

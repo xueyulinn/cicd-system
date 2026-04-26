@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
-	"github.com/CS7580-SEA-SP26/e-team/internal/store"
+	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 func TestNewService_RequiresDatabaseURL(t *testing.T) {

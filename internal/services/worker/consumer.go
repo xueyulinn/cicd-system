@@ -2,18 +2,23 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/mq"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/xueyulinn/cicd-system/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/mq"
 )
 
 const defaultWorkerConcurrent = 1
+
+const dependencyRetryDelay = 2 * time.Second
 
 var newJobConsumer = func(cfg mq.Config, conn *amqp.Connection) (mq.Consumer, error) {
 	mqClient, err := mq.NewRabbitClientWithConn(cfg, conn)
@@ -29,29 +34,111 @@ var newJobConsumer = func(cfg mq.Config, conn *amqp.Connection) (mq.Consumer, er
 	return jobConsumer, nil
 }
 
+var newDockerClient = NewDockerClient
+var dialRabbitMQ = amqp.Dial
+
 // Start blocks and consumes jobs from RabbitMQ until ctx is cancelled or consuming fails.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("worker service is nil")
 	}
-	if s.docker == nil {
-		return fmt.Errorf("docker client not available")
+	if err := s.ensureDependencies(ctx); err != nil {
+		return err
 	}
-	if len(s.jobConsumers) == 0 {
-		return fmt.Errorf("job consumer not available")
+	for {
+		err := s.consumeJobs(ctx)
+		if err == nil || ctx.Err() != nil {
+			return err
+		}
+		if errors.Is(err, mq.ErrConnectionClosed) {
+			if closeErr := s.Close(); closeErr != nil {
+				log.Printf("[worker] close service failed: %v", closeErr)
+			}
+			if err := s.ensureDependencies(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		return err
+	}
+}
+
+// ensureDependencies initializes Docker and MQ consumers with retry until ready
+// or until ctx is canceled. Fatal MQ configuration errors are returned directly.
+func (s *Service) ensureDependencies(ctx context.Context) error {
+	if err := s.mqConfig.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", mq.ErrFatal, err)
 	}
 
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if s.docker == nil {
+			dockerClient, err := newDockerClient(ctx)
+			if err != nil {
+				log.Printf("[worker] docker not ready: %v", err)
+				if err := waitForRetry(ctx, dependencyRetryDelay); err != nil {
+					return err
+				}
+				continue
+			}
+			s.docker = dockerClient
+		}
+
+		if len(s.jobConsumers) == 0 {
+			if s.mqConn != nil {
+				_ = s.mqConn.Close()
+				s.mqConn = nil
+			}
+
+			conn, err := dialRabbitMQ(s.mqConfig.URL)
+			if err != nil {
+				log.Printf("[worker] rabbitmq not ready: %v", err)
+				if err := waitForRetry(ctx, dependencyRetryDelay); err != nil {
+					return err
+				}
+				continue
+			}
+
+			jobConsumers, err := createJobConsumers(s.mqConfig, conn)
+			if err != nil {
+				_ = conn.Close()
+				if errors.Is(err, mq.ErrFatal) {
+					return err
+				}
+				log.Printf("[worker] initialize job consumers failed: %v", err)
+				if err := waitForRetry(ctx, dependencyRetryDelay); err != nil {
+					return err
+				}
+				continue
+			}
+
+			s.mqConn = conn
+			s.jobConsumers = jobConsumers
+		}
+
+		if s.docker != nil && len(s.jobConsumers) > 0 {
+			return nil
+		}
+	}
+}
+
+// consumeWorkers runs all consumers concurrently and waits for either the first
+// worker error, ctx cancellation, or all workers exiting cleanly.
+func consumeWorkers(ctx context.Context, consumers []mq.Consumer, handler func(context.Context, messages.JobExecutionMessage) error) error {
 	consumeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, len(s.jobConsumers))
+	errCh := make(chan error, len(consumers))
 	done := make(chan struct{})
 	var wg sync.WaitGroup
-	for i, consumer := range s.jobConsumers {
+	for i, consumer := range consumers {
 		wg.Add(1)
 		go func(idx int, c mq.Consumer) {
 			defer wg.Done()
-			if err := c.ConsumeJob(consumeCtx, s.handleJobMessage); err != nil && consumeCtx.Err() == nil {
+			if err := c.ConsumeJob(consumeCtx, handler); err != nil && consumeCtx.Err() == nil {
 				errCh <- fmt.Errorf("job consumer %d failed: %w", idx+1, err)
 			}
 		}(i, consumer)
@@ -76,19 +163,43 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 }
 
-func createJobConsumers(cfg mq.Config, conn *amqp.Connection, count int) ([]mq.Consumer, error) {
-	if count < 1 {
+func (s *Service) consumeJobs(ctx context.Context) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client not available")
+	}
+	if len(s.jobConsumers) == 0 {
+		return fmt.Errorf("job consumer not available")
+	}
+
+	return consumeWorkers(ctx, s.jobConsumers, s.handleJobMessage)
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func createJobConsumers(cfg mq.Config, conn *amqp.Connection) ([]mq.Consumer, error) {
+	consumerNumber := loadWorkerConcurrency()
+	if consumerNumber < 1 {
 		return nil, fmt.Errorf("worker concurrency must be >= 1")
 	}
 
-	consumers := make([]mq.Consumer, 0, count)
-	for i := 0; i < count; i++ {
+	consumers := make([]mq.Consumer, 0, consumerNumber)
+	for i := 0; i < consumerNumber; i++ {
 		consumer, err := newJobConsumer(cfg, conn)
 		if err != nil {
 			for _, c := range consumers {
 				_ = c.Close()
 			}
-			return nil, fmt.Errorf("initialize job consumer %d/%d: %w", i+1, count, err)
+			return nil, fmt.Errorf("initialize worker %d/%d: %w", i+1, consumerNumber, err)
 		}
 		consumers = append(consumers, consumer)
 	}

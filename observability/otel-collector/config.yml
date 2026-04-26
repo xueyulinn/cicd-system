@@ -12,55 +12,38 @@ receivers:
 
 processors:
   batch: {}
+  # adds more resources (resource that can not be got at sdk)
   resource:
     attributes:
-      - action: upsert
+      - action: upsert # replaces old one or inserts
         key: deployment.environment
-        value: local-compose
+        value: docker-compose
 
 exporters:
-  prometheus:
-    endpoint: 0.0.0.0:8889
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
-    default_labels_enabled:
-      exporter: true
-      job: true
   otlphttp/tempo:
     endpoint: http://tempo:4318
-    tls:
-      insecure: true
+  prometheus:
+    # exports endpoint for Prometheus
+    endpoint: "0.0.0.0:8889"
+    translation_strategy: "UnderscoreEscapingWithoutSuffixes"
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
   debug:
     verbosity: basic
 
 service:
-  extensions:
-    - health_check
+  extensions: [health_check]
   pipelines:
-    metrics:
-      receivers:
-        - otlp
-      processors:
-        - resource
-        - batch
-      exporters:
-        - prometheus
-        - debug
-    logs:
-      receivers:
-        - otlp
-      processors:
-        - resource
-        - batch
-      exporters:
-        - loki
-        - debug
     traces:
-      receivers:
-        - otlp
-      processors:
-        - resource
-        - batch
-      exporters:
-        - otlphttp/tempo
-        - debug
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [prometheus, debug]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/loki, debug]
+

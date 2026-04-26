@@ -4,37 +4,38 @@ package store
 
 import (
 	"context"
+	"database/sql"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/go-sql-driver/mysql"
 )
 
-// Store provides transactional access to the report database via a pgx connection pool.
+// Store provides transactional access to the report database via a MySQL connection pool.
 type Store struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-// New creates a Store that uses the given PostgreSQL connection URL.
-// The URL should be in the form: postgres://user:pass@host:port/dbname?sslmode=disable
+// New creates a Store that uses the given MySQL connection DSN.
+// Example: user:pass@tcp(host:3306)/dbname?parseTime=true&loc=UTC
 func New(ctx context.Context, connURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, connURL)
+	db, err := sql.Open("mysql", connURL)
 	if err != nil {
 		return nil, err
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
-	return &Store{pool: pool}, nil
+	return &Store{db: db}, nil
 }
 
 // Close the connection pool. Call when shutting down the service.
 func (s *Store) Close() {
-	if s.pool != nil {
-		s.pool.Close()
+	if s.db != nil {
+		_ = s.db.Close()
 	}
 }
 
 // Ping verifies the database connection is alive.
 func (s *Store) Ping(ctx context.Context) error {
-	return s.pool.Ping(ctx)
+	return s.db.PingContext(ctx)
 }

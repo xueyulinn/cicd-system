@@ -3,14 +3,46 @@ package mq
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-
-	"github.com/CS7580-SEA-SP26/e-team/internal/observability"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var prop = otel.GetTextMapPropagator()
+
+type amqpHeaderCarrier struct {
+	headers amqp.Table
+}
+
+func (c amqpHeaderCarrier) Get(key string) string {
+	if v, ok := c.headers[key]; ok {
+		switch t := v.(type) {
+		case string:
+			return t
+		case []byte:
+			return string(t)
+		default:
+			return fmt.Sprint(t)
+		}
+	}
+	return ""
+}
+
+func (c amqpHeaderCarrier) Set(key, value string) {
+	c.headers[key] = value
+}
+
+func (c amqpHeaderCarrier) Keys() []string {
+	keys := make([]string, 0, len(c.headers))
+	for k := range c.headers {
+		keys = append(keys, k)
+	}
+	return keys
+}
 
 // RabbitClient is the low-level RabbitMQ transport used by higher-level
 // publishers. Wire the AMQP connection/channel into this type when
@@ -29,10 +61,10 @@ const (
 
 func NewRabbitClientWithConn(cfg Config, conn *amqp.Connection) (*RabbitClient, error) {
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFatal, err)
 	}
 	if conn == nil {
-		return nil, fmt.Errorf("rabbit connection is nil")
+		return nil, ErrConnectionClosed
 	}
 	client := &RabbitClient{cfg: cfg, conn: conn}
 	if err := client.reopenChannel(); err != nil {
@@ -56,9 +88,6 @@ func (c *RabbitClient) ensureQueue(queue string) error {
 }
 
 func (c *RabbitClient) ensureQueueLocked(queue string) error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	if queue == "" {
 		return fmt.Errorf("queue is required")
 	}
@@ -66,6 +95,7 @@ func (c *RabbitClient) ensureQueueLocked(queue string) error {
 		return fmt.Errorf("rabbit channel is nil")
 	}
 
+	// when the error return value is not nil, the queue could not be declared with these parameters, and the channel will be closed.
 	_, err := c.channel.QueueDeclare(
 		queue,
 		true,
@@ -84,17 +114,13 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 		return fmt.Errorf("rabbit client is nil")
 	}
 	if handler == nil {
-		return fmt.Errorf("consumer handler is required")
+		return fmt.Errorf("job consume handler is nil")
 	}
 
 	for {
 		deliveries, err := c.startConsume(queue)
 		if err != nil {
-			log.Printf("[mq] start consume failed queue=%s err=%v; reconnecting", queue, err)
-			if recErr := c.reconnect(); recErr != nil {
-				log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
-			}
-			if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+			if err := c.reconnectAndWait(ctx, queue); err != nil {
 				return err
 			}
 			continue
@@ -108,34 +134,71 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 				return ctx.Err()
 			case delivery, ok := <-deliveries:
 				if !ok {
-					log.Printf("[mq] delivery channel closed queue=%s; reconnecting", queue)
+					slog.Warn("mq delivery channel closed; reconnecting",
+						"queue", queue,
+					)
 					restartConsume = true
 					break
 				}
 
-				if err := handler(ctx, delivery.Body); err != nil {
-					observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
+				deliveryCtx := prop.Extract(ctx, amqpHeaderCarrier{headers: delivery.Headers})
+				deliveryCtx, span := tracer.Start(
+					deliveryCtx,
+					"consume.message",
+					trace.WithSpanKind(trace.SpanKindConsumer),
+				)
+
+				if err := handler(deliveryCtx, delivery.Body); err != nil {
+					span.End()
+					// observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
 					_ = delivery.Nack(false, true)
-					log.Printf("[mq] nack delivery from queue=%s err=%v", queue, err)
+					slog.Warn("mq nack delivery",
+						"queue", queue,
+						"error", err,
+					)
 					continue
 				}
+
 				if err := delivery.Ack(false); err != nil {
-					observability.RecordMQDeliveryOutcome(queue, "ack_error")
-					log.Printf("[mq] ack delivery failed queue=%s err=%v; reconnecting", queue, err)
+					span.End()
+					// observability.RecordMQDeliveryOutcome(queue, "ack_error")
+					slog.Warn("mq ack delivery failed; reconnecting",
+						"queue", queue,
+						"error", err,
+					)
 					restartConsume = true
-					break
+					continue
 				}
-				observability.RecordMQDeliveryOutcome(queue, "acked")
+				span.End()
+				// observability.RecordMQDeliveryOutcome(queue, "acked")
 			}
 		}
 
-		if recErr := c.reconnect(); recErr != nil {
-			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
-		}
-		if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+		if err := c.reconnectAndWait(ctx, queue); err != nil {
 			return err
 		}
 	}
+}
+
+// reopens channel and reports err if connection lost
+func (c *RabbitClient) reconnectAndWait(ctx context.Context, queue string) error {
+	if recErr := c.reconnect(); recErr != nil {
+		switch classifyError(recErr) {
+		case ConnLost, Fatal:
+			return fmt.Errorf("consume queue %q: %w", queue, recErr)
+		case CtxDone:
+			return recErr
+		case Retryable:
+			slog.Warn("mq reconnect failed",
+				"queue", queue,
+				"error", recErr,
+			)
+		}
+	}
+	if err := sleepWithContext(ctx, reconnectDelay); err != nil {
+		return err
+	}
+	return nil
 }
 
 // implementation of Publish() for RawJobPublisher
@@ -150,14 +213,22 @@ func (c *RabbitClient) Publish(ctx context.Context, queue string, body []byte) e
 			return nil
 		} else {
 			lastErr = err
-			log.Printf("[mq] publish failed attempt=%d/%d queue=%s err=%v", attempt, maxPublishAttempts, queue, err)
+			slog.Warn("mq publish failed",
+				"attempt", attempt,
+				"max_attempts", maxPublishAttempts,
+				"queue", queue,
+				"error", err,
+			)
 		}
 
 		if attempt == maxPublishAttempts {
 			break
 		}
 		if recErr := c.reconnect(); recErr != nil {
-			log.Printf("[mq] reconnect failed queue=%s err=%v", queue, recErr)
+			slog.Warn("mq reconnect failed",
+				"queue", queue,
+				"error", recErr,
+			)
 			lastErr = fmt.Errorf("%w; reconnect: %v", lastErr, recErr)
 		}
 		if err := sleepWithContext(ctx, reconnectDelay); err != nil {
@@ -171,17 +242,28 @@ func (c *RabbitClient) publishOnce(ctx context.Context, queue string, body []byt
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	ctx, span := tracer.Start(ctx, "publish.message", trace.WithSpanKind(trace.SpanKindProducer))
+	defer span.End()
+
 	if err := c.ensureQueueLocked(queue); err != nil {
 		return fmt.Errorf("declare queue %q: %w", queue, err)
 	}
 
-	err := c.channel.PublishWithContext(ctx, "", queue, false, false, amqp.Publishing{
+	headers := amqp.Table{}
+	prop.Inject(ctx, amqpHeaderCarrier{headers: headers})
+
+	dc, err := c.channel.PublishWithDeferredConfirmWithContext(ctx, "", queue, false, false, amqp.Publishing{
+		Headers:     headers,
 		ContentType: "application/json",
 		Body:        body,
 	})
 	if err != nil {
 		return err
 	}
+	if err := waitPublishConfirm(ctx, dc); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -208,26 +290,20 @@ func (c *RabbitClient) startConsume(queue string) (<-chan amqp.Delivery, error) 
 }
 
 func (c *RabbitClient) reconnect() error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if err := c.cfg.Validate(); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFatal, err)
 	}
 
 	if c.conn == nil || c.conn.IsClosed() {
-		return fmt.Errorf("rabbit connection is closed")
+		return ErrConnectionClosed
 	}
 	return c.reopenChannelLocked()
 }
 
 func (c *RabbitClient) reopenChannel() error {
-	if c == nil {
-		return fmt.Errorf("rabbit client is nil")
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reopenChannelLocked()
@@ -235,7 +311,7 @@ func (c *RabbitClient) reopenChannel() error {
 
 func (c *RabbitClient) reopenChannelLocked() error {
 	if c.conn == nil || c.conn.IsClosed() {
-		return fmt.Errorf("rabbit connection is closed")
+		return ErrConnectionClosed
 	}
 	if c.channel != nil {
 		_ = c.channel.Close()
@@ -246,6 +322,29 @@ func (c *RabbitClient) reopenChannelLocked() error {
 		return err
 	}
 	c.channel = ch
+	if err := c.channel.Confirm(false); err != nil {
+		_ = c.channel.Close()
+		c.channel = nil
+		return fmt.Errorf("enable publisher confirms: %w", err)
+	}
+	return nil
+}
+
+type publishConfirmationWaiter interface {
+	WaitContext(ctx context.Context) (bool, error)
+}
+
+func waitPublishConfirm(ctx context.Context, waiter publishConfirmationWaiter) error {
+	if waiter == nil {
+		return fmt.Errorf("publish confirmation waiter is nil")
+	}
+	acked, err := waiter.WaitContext(ctx)
+	if err != nil {
+		return fmt.Errorf("wait publish confirmation: %w", err)
+	}
+	if !acked {
+		return fmt.Errorf("publish message nacked by broker")
+	}
 	return nil
 }
 

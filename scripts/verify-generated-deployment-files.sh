@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail if compose.values.env drifts from charts/e-team/values.yaml.
+# Fail if compose.values.env drifts from charts/cicd/values.yaml.
 # Run from repo root: ./scripts/verify-generated-deployment-files.sh
 set -euo pipefail
 
@@ -15,4 +15,4 @@ if ! cmp -s "${ROOT}/compose.values.env" "$TMP_ENV"; then
   exit 1
 fi
 
-echo "compose.values.env is up to date with charts/e-team/values.yaml."
+echo "compose.values.env is up to date with charts/cicd/values.yaml."

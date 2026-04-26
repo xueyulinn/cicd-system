@@ -2,6 +2,14 @@
 // These types are the single source of truth for API contracts (validate, dryrun, run).
 package api
 
+import "github.com/xueyulinn/cicd-system/internal/models"
+
+// StatusResponse is the common response shape for simple status endpoints
+// such as /health and /ready.
+type StatusResponse struct {
+	Status string `json:"status"`
+}
+
 // ValidateRequest is the request body for POST /validate and POST /dryrun.
 type ValidateRequest struct {
 	YAMLContent string `json:"yaml_content"`
@@ -17,7 +25,7 @@ type ValidateResponse struct {
 type DryRunResponse struct {
 	Valid  bool     `json:"valid"`
 	Errors []string `json:"errors,omitempty"`
-	Output string   `json:"output,omitempty"`
+	ExecutionPlan *models.ExecutionPlan `json:"execution_plan,omitempty"`
 }
 
 // RunRequest is the request body for POST /run.

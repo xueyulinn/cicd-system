@@ -31,7 +31,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 | Execution Service    | 8002 | Runs pipelines, coordinates jobs |
 | Worker Service       | 8003 | Executes job steps             |
 | Reporting Service    | 8004 | Pipeline run reports           |
-| PostgreSQL           | 5432 | Report store database          |
+| MySQL 8           | 3306 | Report store database          |
 | Prometheus           | 9090 | Metrics collection & storage   |
 | Loki                 | 3100 | Log aggregation & storage      |
 | Tempo                | 3200 | Distributed tracing storage    |
@@ -44,31 +44,31 @@ The repository supports Kubernetes deployment for all current stateless services
 
 | Component | Type | K8s Enabled | Notes |
 |-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deploy via Helm (`charts/e-team/`) |
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/cicd/`) |
 | Validation Service | Stateless | Yes | Same as API Gateway |
 | Execution Service | Stateless | Yes | Same as API Gateway |
 | Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
 | Reporting Service | Stateless | Yes | Same as API Gateway |
-| PostgreSQL report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
+| MySQL 8 report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
 
 ### Kubernetes Deployment Modes
 
-- **All-in-cluster**: install the Helm chart with `postgres.enabled=true` to run stateless services, Postgres, and the migration Job inside Kubernetes.
-- **Hybrid**: install the Helm chart with `postgres.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
+- **All-in-cluster**: install the Helm chart with `mysql.enabled=true` to run stateless services, MySQL, and the migration Job inside Kubernetes.
+- **Hybrid**: install the Helm chart with `mysql.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
 
 Service-to-service communication inside the cluster is done through Kubernetes Services and environment variables:
 
 - `VALIDATION_URL`
-- `EXECUTION_URL`
+- `ORCHESTRATOR_URL`
 - `REPORTING_URL`
 - `WORKER_URL`
 - `DATABASE_URL`
 
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/e-team/README.md`](https://github.com/CS7580-SEA-SP26/e-team/blob/review/charts/e-team/README.md).
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/cicd/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/cicd/README.md).
 
-**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/e-team/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), Postgres, RabbitMQ image/credentials/`RABBITMQ_URL`, `WORKER_CONCURRENCY` (from `workerService.concurrency`), and worker `EXECUTION_URL`. Cluster deployment uses Helm (`charts/e-team/`); run `helm template` if you need to inspect rendered YAML.
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/cicd/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, execution publisher concurrency (`executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`), worker consumer concurrency (`workerService.concurrency` as `WORKER_CONCURRENCY`), and worker `ORCHESTRATOR_URL`. Cluster deployment uses Helm (`charts/cicd/`); run `helm template` if you need to inspect rendered YAML.
 
-**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/e-team/README.md`](charts/e-team/README.md).
+**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/cicd/README.md`](charts/cicd/README.md).
 
 ### Queue Deduplication
 
@@ -198,7 +198,7 @@ All observability configuration files are committed under `observability/`. The 
 
 ```bash
 # Clone the repository
-git clone https://github.com/CS7580-SEA-SP26/e-team.git
+git clone https://github.com/xueyulinn/cicd-system.git
 cd e-team
 
 # Build (Windows / macOS / Linux)
@@ -254,7 +254,7 @@ This section describes how a user can run example pipelines and observe both suc
 
 ### Repository and Example Pipelines
 
-- **Repository**: `CS7580-SEA-SP26/e-team` (this repository).
+- **Repository**: `xueyulinn/cicd-system` (this repository).
 - **Source code**: Go implementation of the CLI and microservices under `cmd/` and `internal/`.
 - **Pipeline definitions**: YAML pipelines under the `.pipelines/` directory, including:
   - `.pipelines/pipeline.yaml`: a complete, **successful** example pipeline (`Default Pipeline`).
@@ -353,7 +353,7 @@ cicd run --name pipeline.yaml --branch main --commit HEAD
 1. **Prepare data by running a pipeline**:
 
    ```bash
-   docker compose --env-file compose.values.env up -d postgres db-migrate
+   docker compose --env-file compose.values.env up -d mysql db-migrate
    ./scripts/start-services.sh         # start services (if not already running)
    cicd run --file .pipelines/pipeline.yaml
    ```
@@ -487,7 +487,7 @@ deploy:
 The recommended way to run everything locally — all services, database, migrations, and the observability stack:
 
 ```bash
-# Align image tags and DB defaults with charts/e-team/values.yaml (committed compose.values.env)
+# Align image tags and DB defaults with charts/cicd/values.yaml (committed compose.values.env)
 ruby scripts/gen-compose-env-from-values.rb
 
 # Start all containers (builds services from local source via docker-compose.override.yaml)
@@ -506,7 +506,12 @@ docker compose --env-file compose.values.env logs -f execution-service worker-se
 - `docker compose --env-file compose.values.env up -d --build` — forces a rebuild after code changes
 - `docker compose --env-file compose.values.env -f docker-compose.yaml up -d` — uses registry images only (CI/production)
 
-`compose.values.env` is generated from `charts/e-team/values.yaml` (same knobs as Helm where applicable: Postgres, images, RabbitMQ credentials and URL, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `EXECUTION_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+`compose.values.env` is generated from `charts/cicd/values.yaml` (same knobs as Helm where applicable: MySQL, images, RabbitMQ credentials and URL, `executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`, `workerService.concurrency` as `WORKER_CONCURRENCY`, worker `ORCHESTRATOR_URL` for in-network DNS). Regenerate after editing values: `ruby scripts/gen-compose-env-from-values.rb`.
+
+Optional worker job container limits (applied per job container by `worker-service`):
+- `WORKER_JOB_CPU_LIMIT` (e.g. `0.5`, `1`, `2`, converted to Docker `NanoCPUs`)
+- `WORKER_JOB_NANO_CPUS` (exact `NanoCPUs`; cannot be set together with `WORKER_JOB_CPU_LIMIT`)
+- `WORKER_JOB_MEMORY_LIMIT_MB` (memory limit in MB)
 
 #### Local parallel execution (RabbitMQ + worker)
 
@@ -530,15 +535,15 @@ To run services directly (without Docker Compose):
 ./scripts/start-services.sh
 ```
 
-Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `EXECUTION_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
+Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `ORCHESTRATOR_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
 
 ### Report store database
 
-For the `report` subcommand, execution and report services need a PostgreSQL database. With Docker Compose this is handled automatically (Postgres + migrations start together). For manual setup:
+For the `report` subcommand, execution and report services need a MySQL 8 database. With Docker Compose this is handled automatically (MySQL + migrations start together). For manual setup:
 
 ```bash
-docker compose --env-file compose.values.env up -d postgres db-migrate
-export DATABASE_URL="postgres://cicd:cicd@localhost:5432/reportstore?sslmode=disable"
+docker compose --env-file compose.values.env up -d mysql db-migrate
+export DATABASE_URL="cicd:cicd@tcp(localhost:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC"
 ```
 
 See [dev-docs/report-db-setup.md](dev-docs/report-db-setup.md) for connection config (`DATABASE_URL` or `REPORT_DB_URL`) and CI notes.
@@ -567,7 +572,7 @@ e-team/
 │   ├── tempo/                    # Tempo tracing config
 │   ├── otel-collector/           # OpenTelemetry Collector pipeline config
 │   └── grafana/                  # Grafana provisioning and dashboards
-├── charts/e-team/                # Helm chart for Kubernetes deployment (canonical)
+├── charts/cicd/                # Helm chart for Kubernetes deployment (canonical)
 ├── k8s/                          # Notes for Kubernetes (see k8s/README.md)
 ├── scripts/                      # Dev scripts (start services, verify DB)
 ├── .pipelines/                   # Pipeline configurations
@@ -639,7 +644,7 @@ job-b:
 - **Language**: Go 1.25
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
-- **Database**: PostgreSQL 16 with pgx driver
+- **Database**: MySQL 8 with `go-sql-driver/mysql`
 - **Observability**: OpenTelemetry SDK, Prometheus, Loki, Tempo, Grafana
 - **Containers**: Docker, Docker Compose
 - **Kubernetes**: Helm, Kustomize, raw manifests

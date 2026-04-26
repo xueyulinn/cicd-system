@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CS7580-SEA-SP26/e-team/internal/api"
-	"github.com/CS7580-SEA-SP26/e-team/internal/messages"
-	"github.com/CS7580-SEA-SP26/e-team/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/messages"
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestPostJobCallback_SendsExpectedPayload(t *testing.T) {
@@ -33,8 +33,8 @@ func TestPostJobCallback_SendsExpectedPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{executionURL: srv.URL, httpClient: &http.Client{Timeout: time.Second}}
-	msg := messages.JobExecutionMessage{RunNo: 9, Pipeline: "p", Stage: "build", Job: models.JobExecutionPlan{Name: "compile"}}
+	svc := &Service{orchestratorURL: srv.URL, httpClient: &http.Client{Timeout: time.Second}}
+	msg := messages.JobExecutionMessage{RunNo: 9, PipelineName: "p", Stage: "build", Job: models.JobExecutionPlan{Name: "compile"}}
 
 	if err := svc.callbackJobStarted(context.Background(), msg); err != nil {
 		t.Fatalf("callbackJobStarted error: %v", err)
@@ -63,7 +63,7 @@ func TestPostJobCallback_ReturnsErrorOnNonOK(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &Service{executionURL: srv.URL, httpClient: srv.Client()}
+	svc := &Service{orchestratorURL: srv.URL, httpClient: srv.Client()}
 	err := svc.postJobCallback(context.Background(), "/callbacks/job-finished", api.JobStatusCallbackRequest{})
 	if err == nil {
 		t.Fatal("expected error")
@@ -74,7 +74,7 @@ func TestPostJobCallback_ReturnsErrorOnNonOK(t *testing.T) {
 }
 
 func TestPostJobCallback_ReturnsErrorWhenHTTPClientMissing(t *testing.T) {
-	svc := &Service{executionURL: "http://example.invalid", httpClient: nil}
+	svc := &Service{orchestratorURL: "http://example.invalid", httpClient: nil}
 	err := svc.postJobCallback(context.Background(), "/callbacks/job-started", api.JobStatusCallbackRequest{})
 	if err == nil {
 		t.Fatal("expected error")
@@ -86,8 +86,8 @@ func TestPostJobCallback_ReturnsErrorWhenHTTPClientMissing(t *testing.T) {
 
 func TestPostJobCallback_SendRequestError(t *testing.T) {
 	svc := &Service{
-		httpClient:   &http.Client{Timeout: 100 * time.Millisecond},
-		executionURL: "http://127.0.0.1:1",
+		httpClient:      &http.Client{Timeout: 100 * time.Millisecond},
+		orchestratorURL: "http://127.0.0.1:1",
 	}
 	err := svc.postJobCallback(context.Background(), "/callbacks/job-started", api.JobStatusCallbackRequest{})
 	if err == nil {
