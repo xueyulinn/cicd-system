@@ -3,11 +3,9 @@ package validation
 import (
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/xueyulinn/cicd-system/internal/api"
-	"github.com/xueyulinn/cicd-system/internal/observability"
 )
 
 // Handler handles HTTP requests for validation service
@@ -90,17 +88,10 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := observability.WithTraceContext(r.Context(), slog.Default())
+	ctx := r.Context()
+	response := h.service.DryRunYAML(ctx, req.YAMLContent)
 
-	response := h.service.DryRunYAML(req.YAMLContent)
-
-	if response.Valid {
-		log.Info("dryrun ok")
-		api.WriteJSON(w, http.StatusOK, response)
-	} else {
-		log.Info("dryrun failed", "errors", response.Errors)
-		api.WriteJSON(w, http.StatusBadRequest, response)
-	}
+	api.WriteJSON(w, http.StatusOK, response)
 }
 
 // handleReady returns readiness status

@@ -91,7 +91,22 @@ func (s *Service) ValidateYAML(ctx context.Context, yamlContent string) api.Vali
 }
 
 // DryRunYAML validates YAML and returns dry run output.
-func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
+func (s *Service) DryRunYAML(ctx context.Context, yamlContent string) api.DryRunResponse {
+	key := cache.DryRunKey(s.cacheCfg.KeyPrefix, yamlContent)
+
+	val, err := s.cacheStore.Get(ctx, key)
+	if err == nil {
+		var response api.DryRunResponse
+		unmarshalErr := json.Unmarshal(val, &response)
+		if unmarshalErr == nil {
+			return response
+		}
+		slog.Warn("dryrun cache payload invalid; fallback to compute", "error", unmarshalErr)
+	}
+	if err != nil && !errors.Is(err, cache.ErrCacheMiss) {
+		slog.Warn("dryrun cache get failed; fallback to compute", "error", err)
+	}
+
 	pipeline, errors := validatePipelineContent(yamlContent)
 	if len(errors) > 0 {
 		return api.DryRunResponse{
@@ -109,26 +124,21 @@ func (s *Service) DryRunYAML(yamlContent string) api.DryRunResponse {
 		}
 	}
 
-	return api.DryRunResponse{
+	response := api.DryRunResponse{
 		Valid:         true,
 		Errors:        []string{},
 		ExecutionPlan: plan,
 	}
-}
 
-// marshalExecutionPlan converts an execution plan into the dry-run YAML view.
-func marshalExecutionPlan(plan *models.ExecutionPlan) (string, error) {
-	result := ""
-	for _, stage := range plan.Stages {
-		result += stage.Name + ":\n"
-		for _, job := range stage.Jobs {
-			result += fmt.Sprintf("  %s:\n", job.Name)
-			result += fmt.Sprintf("    image: %s\n", job.Image)
-			result += "    script:\n"
-			for _, script := range job.Script {
-				result += fmt.Sprintf("      - %s\n", script)
-			}
-		}
+	payload, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		slog.Warn("dryrun cache marshal failed; skip cache write", "error", marshalErr)
+		return response
 	}
-	return result, nil
+
+	if setErr := s.cacheStore.Set(ctx, key, payload, s.cacheCfg.DryRunTTL); setErr != nil {
+		slog.Warn("dryrun cache set failed; response still served", "error", setErr)
+	}
+
+	return response
 }
