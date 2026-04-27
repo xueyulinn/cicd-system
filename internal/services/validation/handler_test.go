@@ -37,8 +37,13 @@ compile:
     - go test ./...
 `
 
-func newValidationMux() *http.ServeMux {
-	h := NewHandler()
+func newValidationMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return mux
@@ -72,7 +77,10 @@ func doRequestWithBody(t *testing.T, mux *http.ServeMux, method, path string, bo
 }
 
 func TestNewHandler(t *testing.T) {
-	h := NewHandler()
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
 	if h == nil {
 		t.Fatal("expected handler to be initialized")
 		return
@@ -83,7 +91,7 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestHandleHealth(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/health", nil)
 	if rec.Code != http.StatusOK {
@@ -103,7 +111,7 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleReady(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/ready", nil)
 	if rec.Code != http.StatusOK {
@@ -120,7 +128,7 @@ func TestHandleReady(t *testing.T) {
 }
 
 func TestHandleValidate(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/validate", nil)
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -169,7 +177,7 @@ func TestHandleValidate(t *testing.T) {
 }
 
 func TestHandleDryRun(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/dryrun", nil)
 	if rec.Code != http.StatusMethodNotAllowed {

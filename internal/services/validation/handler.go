@@ -16,10 +16,14 @@ type Handler struct {
 }
 
 // NewHandler creates a new validation handler
-func NewHandler() *Handler {
-	return &Handler{
-		service: NewService(),
+func NewHandler() (*Handler, error) {
+	service, err := NewService()
+	if err != nil {
+		return nil, err
 	}
+	return &Handler{
+		service: service,
+	}, nil
 }
 
 // RegisterRoutes registers validation service routes
@@ -60,7 +64,8 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.service.ValidateYAML(req.YAMLContent)
+	ctx := r.Context()
+	response := h.service.ValidateYAML(ctx, req.YAMLContent)
 
 	api.WriteJSON(w, http.StatusOK, response)
 }

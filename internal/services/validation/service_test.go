@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -8,18 +9,24 @@ import (
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(validPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), validPipelineYAML)
 	if !resp.Valid {
 		t.Fatalf("ValidateYAML valid = false, errors = %+v", resp.Errors)
 	}
 }
 
 func TestValidateYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(invalidPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), invalidPipelineYAML)
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -29,7 +36,10 @@ func TestValidateYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
 	resp := svc.DryRunYAML(validPipelineYAML)
 	if !resp.Valid {
@@ -38,7 +48,10 @@ func TestDryRunYAMLValidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
 	resp := svc.DryRunYAML(invalidPipelineYAML)
 	if resp.Valid {
@@ -50,9 +63,12 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestValidateYAMLParserError(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(":::")
+	resp := svc.ValidateYAML(context.Background(), ":::")
 	if resp.Valid {
 		t.Fatal("expected invalid response for malformed YAML")
 	}

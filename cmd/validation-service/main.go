@@ -33,7 +33,11 @@ func main() {
 		}
 	}()
 
-	handler := validation.NewHandler()
+	handler, err := validation.NewHandler()
+	if err != nil {
+		slog.Error("failed to init handler", "error", err)
+		os.Exit(1)
+	}
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
