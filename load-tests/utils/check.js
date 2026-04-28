@@ -17,3 +17,10 @@ export function checkDryRunResponse(response, body) {
     "dryrun result is valid=true": () => body !== null && body.valid === true,
   });
 }
+
+export function checkSubmitResponse(response, body) {
+  return check(response, {
+    "status is 200": (r) => r.status === 200,
+    "pipeline has been queued": () => body && body.status == "queued",
+  });
+}
