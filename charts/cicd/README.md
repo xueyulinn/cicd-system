@@ -11,12 +11,15 @@ Kubernetes-enabled by this chart:
 - `execution-service`
 - `worker-service`
 - `reporting-service`
+- `redis` Deployment, Service, and optional PVC when `redis.enabled=true` (used by validation-service response caching)
 - `rabbitmq` Deployment, Service, and credentials `Secret` when `rabbitmq.enabled=true` (AMQP for pipeline job dispatch; aligns with Docker Compose)
 - `MySQL` StatefulSet, Service, Secret, and migration `Job` when `mysql.enabled=true`
 
 Execution and worker receive `RABBITMQ_URL` from the RabbitMQ `Secret`. Execution also gets `PUBLISHER_CONCURRENCY` (RabbitMQ publishers per Pod), and worker gets `ORCHESTRATOR_URL` (HTTP callbacks to execution) plus `WORKER_CONCURRENCY` (RabbitMQ consumers per Pod, for parallel-ready jobs). Override `executionService.publisherConcurrency` and `workerService.concurrency` in `values.yaml` as needed.
 
-**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `ORCHESTRATOR_URL`, `PUBLISHER_CONCURRENCY`, `WORKER_CONCURRENCY`) so local Compose stays aligned with these defaults.
+Validation-service receives `VALIDATION_CACHE_*` from the chart and, by default, points its cache client at the in-cluster Redis service. Override `validationService.cache.*` for TTL/timeouts/prefix, set `validationService.cache.redisURL` to use an external Redis endpoint, or disable caching entirely with `validationService.cache.enabled=false`.
+
+**Docker Compose:** `scripts/gen-compose-env-from-values.rb` reads the same `values.yaml` and writes `compose.values.env` (including `RABBITMQ_*`, `ORCHESTRATOR_URL`, `PUBLISHER_CONCURRENCY`, `WORKER_CONCURRENCY`, and `VALIDATION_CACHE_*`) so local Compose stays aligned with these defaults.
 
 Not Kubernetes-enabled in this chart:
 
@@ -275,6 +278,7 @@ At the time of writing, `run` reaches the Kubernetes execution and worker servic
 - Image architecture mismatch: rebuild/load images for the Minikube node architecture
 - Readiness probe returns `404`: you are likely using stale service images; rebuild the local Minikube images from this repository and run `helm upgrade`
 - Worker startup failures: confirm `/var/run/docker.sock` exists inside the node and the `hostPath` mount is allowed
+- Validation-service cache warnings: confirm `redis.enabled=true` for the in-cluster cache, or provide `validationService.cache.redisURL` when using external Redis
 - `run` fails with Git clone/authentication errors: the worker is trying to clone the repository revision inside Kubernetes; public repos work more easily, while private repos need credentials injected into the worker
 - External DB mode misconfigured: when `mysql.enabled=false`, set `externalDatabase.url`; if the DB wait init containers remain enabled, also set `externalDatabase.host`, `port`, `username`, `password`, and `database`
 - Observability pods fail to start: inspect `kubectl -n e-team logs deploy/e-team-e-team-grafana` and `kubectl -n e-team logs deploy/e-team-e-team-otel-collector`
