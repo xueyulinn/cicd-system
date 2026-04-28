@@ -1,25 +1,29 @@
 package validation
 
 import (
-	"strings"
+	"context"
 	"testing"
-
-	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(validPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), validPipelineYAML)
 	if !resp.Valid {
 		t.Fatalf("ValidateYAML valid = false, errors = %+v", resp.Errors)
 	}
 }
 
 func TestValidateYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(invalidPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), invalidPipelineYAML)
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -29,18 +33,24 @@ func TestValidateYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.DryRunYAML(validPipelineYAML)
+	resp := svc.DryRunYAML(context.Background(), validPipelineYAML)
 	if !resp.Valid {
 		t.Fatalf("DryRunYAML valid = false, errors = %+v", resp.Errors)
 	}
 }
 
 func TestDryRunYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.DryRunYAML(invalidPipelineYAML)
+	resp := svc.DryRunYAML(context.Background(), invalidPipelineYAML)
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -50,44 +60,16 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestValidateYAMLParserError(t *testing.T) {
-	svc := NewService()
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	resp := svc.ValidateYAML(":::")
+	resp := svc.ValidateYAML(context.Background(), ":::")
 	if resp.Valid {
 		t.Fatal("expected invalid response for malformed YAML")
 	}
 	if len(resp.Errors) == 0 {
 		t.Fatal("expected parser errors")
-	}
-}
-
-func TestMarshalExecutionPlan(t *testing.T) {
-	plan := &models.ExecutionPlan{
-		Stages: []models.StageExecutionPlan{
-			{
-				Name: "build",
-				Jobs: []models.JobExecutionPlan{
-					{
-						Name:   "compile",
-						Image:  "golang:1.25",
-						Script: []string{"go test ./...", "go build ./..."},
-					},
-				},
-			},
-		},
-	}
-
-	out, err := marshalExecutionPlan(plan)
-	if err != nil {
-		t.Fatalf("marshalExecutionPlan error = %v", err)
-	}
-	if !strings.Contains(out, "build:") {
-		t.Fatalf("expected stage in output, got %q", out)
-	}
-	if !strings.Contains(out, "compile:") {
-		t.Fatalf("expected job in output, got %q", out)
-	}
-	if !strings.Contains(out, "- go test ./...") {
-		t.Fatalf("expected script line in output, got %q", out)
 	}
 }

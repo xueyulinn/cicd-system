@@ -50,6 +50,16 @@ validationService:
     pullPolicy: IfNotPresent
   service:
     port: 8001
+  cache:
+    enabled: true
+    # Leave empty to use the in-cluster Redis service when redis.enabled=true.
+    redisURL: ""
+    keyPrefix: cicd
+    validateTTL: 10m
+    dryRunTTL: 5m
+    dialTimeout: 2s
+    readTimeout: 500ms
+    writeTimeout: 500ms
   resources:
     requests:
       cpu: 100m
@@ -187,6 +197,28 @@ externalDatabase:
   username: ""
   password: ""
   database: ""
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  persistence:
+    enabled: false
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 # In-cluster RabbitMQ (same role as docker-compose rabbitmq service).
 rabbitmq:
@@ -356,4 +388,3 @@ observability:
       limits:
         cpu: 500m
         memory: 512Mi
-
