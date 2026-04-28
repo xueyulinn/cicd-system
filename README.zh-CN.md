@@ -32,6 +32,11 @@ e-team 项目是一个 CI/CD 流水线管理系统，提供以下能力：
 - 内置可观测性：OpenTelemetry + Prometheus + Loki + Tempo + Grafana
 - 支持 Docker Compose 本地部署与 Kubernetes Helm 部署
 
+## 待实现功能
+
+- Artifacts 上传/下载：采集并打包任务声明的产物，存储到制品存储，并在运行结果/报告中提供可下载链接。
+- 失败重试/重跑：支持失败任务重试或整条流水线重跑，并保留每次尝试的历史与最终状态。
+
 ## 安装
 
 ### 前置要求

@@ -30,7 +30,7 @@ var reportCmd = &cobra.Command{
 }
 
 func init() {
-	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Pipeline run number (required)")
+	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Pipeline run number (optional)")
 	reportCmd.Flags().StringVar(&reportStage, "stage", "", "Stage filter (requires --run)")
 	reportCmd.Flags().StringVar(&reportJob, "job", "", "Job filter (requires --run and --stage)")
 	reportCmd.Flags().StringP("format", "f", formatYAML, "Output format (yaml|json)")

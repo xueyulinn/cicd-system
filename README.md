@@ -32,6 +32,11 @@ The e-team project is a CI/CD pipeline management system that provides:
 - Built-in observability: OpenTelemetry instrumentation, Prometheus metrics, structured logs, and Grafana/Loki/Tempo dashboards
 - Deployment flexibility: local Docker Compose and Kubernetes Helm chart support
 
+## Planned Features
+
+- Artifacts upload/download: collect declared job outputs, store them in artifact storage, and expose downloadable links in run/report results.
+- Failed job retry and run rerun: support retrying failed jobs or rerunning a full pipeline run while preserving attempt history and final status.
+
 ## Installation
 
 ### Prerequisites
