@@ -2,14 +2,7 @@
 
 A Go-based CLI tool for validating and managing CI/CD pipeline configurations. This tool parses YAML pipeline files, verifies their structure and dependencies, and can execute pipelines locally through a microservices architecture.
 
-## Documentation Map
-
-- [Feature status](FeatureStatus.md)
-- [System design](dev-docs/design/high-level-design.md)
-- [CLI reference](dev-docs/cli-reference.md)
-- [Report database schema](dev-docs/design/design-db-schema.md)
-- [Control component API reference](dev-docs/control-component-api.md)
-- [Evaluator verification steps](dev-docs/verification-steps.md)
+中文版文档：[`README.zh-CN.md`](README.zh-CN.md)
 
 ## Overview
 
@@ -17,189 +10,41 @@ The e-team project is a CI/CD pipeline management system that provides:
 
 - **Pipeline Validation**: Parse and validate YAML pipeline configurations (via Validation Service)
 - **API Gateway**: Single entry point that routes requests to validation, dry-run, and execution
-- **Execution Service**: Orchestrates pipeline runs (stages, jobs, dependencies)
+- **Orchestrator Service**: Orchestrates pipeline runs (stages, jobs, dependencies)
 - **Worker Layer**: Executes individual jobs (e.g. in containers) and reports status
 - **Queue Deduplication**: Reuses the oldest in-flight run for identical requests and drops duplicates
 - **CLI Interface**: Command-line tool for verify, dryrun, and run
 
-## Architecture (Current Sprint)
-
-| Component            | Port | Description                    |
-|----------------------|------|--------------------------------|
-| API Gateway          | 8000 | Routes to validation/dryrun/execution |
-| Validation Service   | 8001 | Validates pipeline YAML        |
-| Execution Service    | 8002 | Runs pipelines, coordinates jobs |
-| Worker Service       | 8003 | Executes job steps             |
-| Reporting Service    | 8004 | Pipeline run reports           |
-| MySQL 8           | 3306 | Report store database          |
-| Prometheus           | 9090 | Metrics collection & storage   |
-| Loki                 | 3100 | Log aggregation & storage      |
-| Tempo                | 3200 | Distributed tracing storage    |
-| OTel Collector       | 4318 | Telemetry ingestion & routing  |
-| Grafana              | 3000 | Unified observability UI       |
-
-## Kubernetes Support
-
-The repository supports Kubernetes deployment for all current stateless services and optional in-cluster deployment for the report database.
-
-| Component | Type | K8s Enabled | Notes |
-|-----------|------|-------------|-------|
-| API Gateway | Stateless | Yes | Deploy via Helm (`charts/cicd/`) |
-| Validation Service | Stateless | Yes | Same as API Gateway |
-| Execution Service | Stateless | Yes | Same as API Gateway |
-| Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
-| Reporting Service | Stateless | Yes | Same as API Gateway |
-| MySQL 8 report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
-
-### Kubernetes Deployment Modes
-
-- **All-in-cluster**: install the Helm chart with `mysql.enabled=true` to run stateless services, MySQL, and the migration Job inside Kubernetes.
-- **Hybrid**: install the Helm chart with `mysql.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
-
-Service-to-service communication inside the cluster is done through Kubernetes Services and environment variables:
-
-- `VALIDATION_URL`
-- `ORCHESTRATOR_URL`
-- `REPORTING_URL`
-- `WORKER_URL`
-- `DATABASE_URL`
-
-For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/cicd/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/cicd/README.md).
-
-**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/cicd/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, execution publisher concurrency (`executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`), worker consumer concurrency (`workerService.concurrency` as `WORKER_CONCURRENCY`), and worker `ORCHESTRATOR_URL`. Cluster deployment uses Helm (`charts/cicd/`); run `helm template` if you need to inspect rendered YAML.
-
-**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/cicd/README.md`](charts/cicd/README.md).
-
-### Queue Deduplication
-
-The execution service deduplicates identical in-flight run requests. If a second request arrives while an equivalent run for the same pipeline is still `queued` or `running`, the oldest request continues and the duplicate request is dropped. The duplicate response returns the original `run_no` together with a message indicating that the existing in-flight run was reused.
-
-The deduplication key is derived from the pipeline name, YAML content, branch, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
-
-### Repository-Backed Runs in Kubernetes
-
-For repo-backed runs, the worker clones the requested repository revision inside Kubernetes before executing the job container. Public repositories work without extra configuration. Private repositories require Git credentials to be injected into the worker pod.
-
-For Helm deployments, configure one of:
-
-- `workerService.gitAuth.githubToken`
-- `workerService.gitAuth.username` with `workerService.gitAuth.password`
-- `workerService.gitAuth.existingSecret`
-
-The worker uses those credentials when cloning private repositories. If repo-backed runs fail with GitHub `401` or `Repository not found`, verify that the token has read access to the target repository.
-
-## Observability
-
-All CI/CD services are instrumented across three pillars — metrics, logs, and traces — using an open-source stack deployed alongside the application via Docker Compose.
-
-### Stack
-
-| Role | Component | Config location |
-|------|-----------|-----------------|
-| Metrics collection & storage | Prometheus | `observability/prometheus/prometheus.yml` |
-| Log aggregation | Loki + Promtail | `observability/loki/loki-config.yml`, `observability/promtail/promtail-config.yml` |
-| Distributed tracing | Tempo | `observability/tempo/tempo.yml` |
-| Telemetry routing | OpenTelemetry Collector | `observability/otel-collector/config.yml` |
-| Visualization | Grafana | `observability/grafana/` |
-
-This implementation uses the recommended stack with one documented substitution: traces are emitted to the OTel Collector, Prometheus scrapes `/metrics` endpoints directly, and Promtail scrapes structured container logs and forwards them to Loki. This keeps job-container stdout/stderr observable without modifying job images while still using only open-source components. Grafana queries Prometheus, Loki, and Tempo.
-
-### Metrics
-
-Every service exposes a `/metrics` endpoint scraped by Prometheus. The following CI/CD-specific metrics are recorded:
-
-| Metric | Type | Labels | Emitted by |
-|--------|------|--------|------------|
-| `cicd_pipeline_runs_total` | Counter | `pipeline`, `status` (+ `run_no`) | Execution Service |
-| `cicd_pipeline_duration_seconds` | Histogram | `pipeline` (+ `run_no`) | Execution Service |
-| `cicd_stage_duration_seconds` | Histogram | `pipeline`, `stage` (+ `run_no`) | Execution Service |
-| `cicd_job_duration_seconds` | Histogram | `pipeline`, `stage`, `job` (+ `run_no`) | Worker Service |
-| `cicd_job_runs_total` | Counter | `pipeline`, `stage`, `job`, `status` (+ `run_no`) | Worker Service |
-| `cicd_mq_jobs_published_total` | Counter | `queue`, `outcome` (`success` / `failure`) | Execution Service (via MQ publisher) |
-| `cicd_mq_delivery_outcomes_total` | Counter | `queue`, `outcome` (`acked`, `nack_requeue`, `ack_error`) | Worker Service (RabbitMQ consumer) |
-| `cicd_execution_ready_batch_size` | Histogram | — | Execution Service (batch of parallel-ready jobs per dispatch) |
-| `cicd_execution_jobs_enqueued_total` | Counter | `pipeline`, `stage` | Execution Service |
-
-Inbound HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) are recorded by all services via middleware. Outbound calls from the API Gateway and Execution Service use `http_client_requests_total` and `http_client_request_duration_seconds` (labels `client`, `upstream`, and `code` for the counter). The Grafana dashboard **HTTP Latency (Server & Client)** (`observability/grafana/dashboards/http-latency.json`) charts both. Async pipeline execution (RabbitMQ and parallel-ready job batches) is covered by **Parallel execution & RabbitMQ** (`observability/grafana/dashboards/parallel-mq.json`).
-
-### Structured Logs
-
-All services emit JSON-structured logs via Go's `log/slog`. Each entry includes `time`, `level`, `service`, and `msg`. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. When the execution service dispatches more than one parallel-ready job in a single batch, it logs `event: "mq-dispatch-batch"` with `batch_size`. Job container stdout/stderr is forwarded by the Worker Service with a `source: "job-container"` label.
-
-### Distributed Tracing
-
-Services use OpenTelemetry SDK with W3C Trace Context propagation. The following spans are emitted:
-
-- **`pipeline.run`** (root span) — full pipeline execution, with `pipeline` and `run_no` attributes
-- **`stage.run`** (child) — per-stage execution
-- **`job.run`** (child) — per-job execution in the Worker
-- **`mq.job.publish`** — execution service publishes one job message to the queue (`pipeline`, `run_no`, `stage`, `job`)
-- **`mq.job.consume`** — worker handles one delivery (`pipeline`, `run_no`, `stage`, `job`)
-
-Outbound HTTP calls between services automatically propagate trace context.
-
-The `trace-id` is persisted in the report database and included in `report --run` output, allowing operators to correlate a report with its trace in Grafana/Tempo.
-
-### Accessing the Observability Stack
-
-After `docker compose --env-file compose.values.env up -d`:
-
-| Tool | URL | Credentials |
-|------|-----|-------------|
-| Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | — |
-| Tempo (API) | http://localhost:3200 | — |
-| Loki (API) | http://localhost:3100 | — |
-
-In Grafana, use the Explore view to query Prometheus (metrics), Loki (logs), or Tempo (traces). Paste a `trace-id` from a report into Tempo to view the full span hierarchy.
-
-The following dashboards are provisioned from files committed to the repository:
-
-- `Pipeline Overview`
-- `Stage and Job Breakdown`
-- `Logs Viewer`
-- `Trace Explorer`
-- `Parallel execution & RabbitMQ`
-
-`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
-
-### Configuration
-
-Observability is controlled by environment variables set in `docker-compose.yaml`:
-
-| Variable | Purpose |
-|----------|---------|
-| `SERVICE_NAME` | Identifies the service in logs and traces |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTel Collector endpoint for traces |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol (`http/protobuf`) |
-
-All observability configuration files are committed under `observability/`. The shared instrumentation library lives in `internal/observability/`.
-
 ## Features
 
-- Validate pipeline configuration files (YAML format)
-- Check for circular dependencies between jobs
-- Verify stage definitions and job assignments
-- Support for complex dependency graphs
-- Detailed error reporting with file locations
-- Batch validation of multiple pipeline files
-- Git repository validation
-- Dryrun: show execution order without running
-- **Run**: execute a pipeline locally (requires services to be running)
+- `verify`: validate one pipeline file or recursively validate a directory of YAML pipelines
+- Strict validation rules: stage/job schema checks, undefined reference detection, and cycle detection
+- Error messages with file/line context for fast troubleshooting
+- `dryrun`: generate an execution plan without running jobs (`yaml` or `json` output)
+- `run`: execute pipelines through the API Gateway and Orchestrator Service
+- Git-aware runs: lock execution to a specific branch/commit (local detached worktree or remote repository mode)
+- In-flight run deduplication: identical requests reuse the oldest queued/running run instead of starting duplicates
+- Asynchronous orchestration: ready jobs are published to RabbitMQ and consumed by Worker Service
+- Parallel execution controls: configurable orchestrator publisher concurrency and worker consumer concurrency
+- Containerized job execution in Worker Service with optional per-job CPU/memory limits
+- `report`: query execution history at pipeline/run/stage/job scope (`yaml` or `json` output)
+- Persistent report store (MySQL 8) for runs, stages, jobs, statuses, git metadata, and trace correlation IDs
+- Built-in observability: OpenTelemetry instrumentation, Prometheus metrics, structured logs, and Grafana/Loki/Tempo dashboards
+- Deployment flexibility: local Docker Compose and Kubernetes Helm chart support
 
 ## Installation
 
 ### Prerequisites
 
 - Go 1.25.6 or later
-- Git repository (validation requires git repo)
+- Git
 
 ### Build from Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/xueyulinn/cicd-system.git
-cd e-team
+cd cicd-system
 
 # Build (Windows / macOS / Linux)
 make build
@@ -219,13 +64,11 @@ The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by de
 
 ## Quick Start: Run a Pipeline
 
-1. **Start all services** (API Gateway, Validation, Execution, Worker):
+1. **Start all services** (API Gateway, Validation, Orchestrator, Worker, Reporting, dependencies):
 
    ```bash
-   ./scripts/start-services.sh
+   docker compose --env-file compose.values.env up -d
    ```
-
-   Leave this terminal running. In another terminal, continue with the steps below.
 
 2. **Build the CLI** (if not already installed):
 
@@ -251,6 +94,9 @@ The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by de
 ## Usage: How to Run and Observe Pipelines
 
 This section describes how a user can run example pipelines and observe both successful and failing behavior, as well as reports generated by the system.
+
+> Run command constraint: pipelines you execute with `cicd run` must be placed under the Git repository root `.pipelines/` directory.  
+> Use `--file .pipelines/<file>.yaml` or `--name <pipeline-name>` (which is resolved from `.pipelines/`).
 
 ### Repository and Example Pipelines
 
@@ -283,138 +129,19 @@ cicd dryrun path/to/pipeline.yaml
 
 ```bash
 # Run pipeline (services must be running)
+# The run target must be under <repo-root>/.pipelines/
 cicd run --file .pipelines/pipeline.yaml
 cicd run --name pipeline.yaml --branch main --commit HEAD
 ```
 
-### Commands to Run After Installation
-
-> All commands below are assumed to be run from the repository root `e-team/`.
-> Make sure the components are installed and verified as described in `dev-docs/verification-steps.md`.
-
-#### Pipelines That Succeed
-
-1. **Start the services (if not already running)**:
-
-   ```bash
-   ./scripts/start-services.sh
-   ```
-
-2. **Run the default successful pipeline**:
-
-   ```bash
-   cicd run --file .pipelines/pipeline.yaml
-   # or, using the logical pipeline name:
-   cicd run --name "Default Pipeline"
-   ```
-
-   Expected behavior:
-
-   - Logs show the execution of stages `build`, `test`, and `deploy`.
-   - The command prints `Run completed successfully.` and exits with status code `0`.
-
-#### Pipelines That Fail During a Run
-
-1. **Validation‑time failure (invalid configuration)**:
-
-   ```bash
-   cicd verify .pipelines/circular_dependency.yaml
-   ```
-
-   This pipeline (`Circular Dependencies Pipeline`) contains a circular dependency between jobs.  
-   Expected behavior:
-
-   - The CLI prints clear validation errors that describe the cycle.
-   - The command exits with a non‑zero status code.
-
-2. **Execution‑time failure (job script error)**:
-
-   - Modify `.pipelines/pipeline.yaml` so that one job’s `script` contains a failing command, for example:
-
-     ```yaml
-     - script:
-       - "go test -v ./internal/... ./cmd/..."
-       - "exit 1"  # force a runtime failure for demonstration
-     ```
-
-   - Re‑run:
-
-     ```bash
-     cicd run --file .pipelines/pipeline.yaml
-     ```
-
-   Expected behavior:
-
-   - Logs show which job failed and why.
-   - The CLI prints `run failed` and exits with a non‑zero status code.
-
-#### Reports That Users Can Generate
-
-1. **Prepare data by running a pipeline**:
-
-   ```bash
-   docker compose --env-file compose.values.env up -d mysql db-migrate
-   ./scripts/start-services.sh         # start services (if not already running)
-   cicd run --file .pipelines/pipeline.yaml
-   ```
-
-2. **Generate reports at different granularities**:
-
-   - All runs for a pipeline:
-
-     ```bash
-     cicd report --pipeline "Default Pipeline"
-     ```
-
-   - A specific run (for example, run number 1):
-
-     ```bash
-     cicd report --pipeline "Default Pipeline" --run 1
-     ```
-
-   - A specific stage within a run:
-
-     ```bash
-     cicd report --pipeline "Default Pipeline" --run 1 --stage build
-     ```
-
-   - A specific job within a stage and run:
-
-     ```bash
-     cicd report --pipeline "Default Pipeline" --run 1 --stage test --job unit-tests
-     ```
-
-   - JSON output for programmatic consumption:
-
-     ```bash
-     cicd report --pipeline "Default Pipeline" --run 1 -f json
-     ```
-
-#### Pipelines That Fail Validation
-
-To observe how the system reports invalid configurations (without executing them), run `cicd verify` against the example files in `.pipelines/`, for example:
-
 ```bash
-# No stages defined
-cicd verify .pipelines/no_stages.yaml
-
-# Duplicate stages or jobs
-cicd verify .pipelines/duplicate_stages.yaml
-cicd verify .pipelines/duplicate_jobs.yaml
-
-# References to undefined jobs or stages
-cicd verify .pipelines/undefined_jobs.yaml
-cicd verify .pipelines/wrong_stage_type.yaml
+# Report pipeline execution results
+# report takes pipeline name as a positional argument
+cicd report "Default Pipeline" --run 1
+cicd report "Default Pipeline" --run 1 --stage build
+cicd report "Default Pipeline" --run 1 --stage test --job unit-tests
+cicd report "Default Pipeline" --run 1 -f json
 ```
-
-For each invalid pipeline, the CLI prints detailed error messages (including file name and location where available) and exits with a non‑zero status code, demonstrating the system’s behavior on malformed inputs.
-
-### Available Sub-commands
-
-- `verify [config-file]` - Validate pipeline configuration files (via gateway or direct)
-- `dryrun [config-file]` - Show execution order for stages and jobs
-- `run` - Execute a pipeline locally (requires Execution Service; use `--file` or `--name`, optional `--branch`, `--commit`)
-- `help` - Show help information
 
 ## Pipeline Configuration Format
 
@@ -456,29 +183,152 @@ another-job:
   - `script`: Commands to execute (required)
   - `needs`: List of job dependencies (optional)
 
-## Dryrun Output
+## System Architecture
 
-``` yaml
-build:
-    compile:
-        image: golang:1.21
-        script:
-            - make build
-test:
-    unit-tests:
-        image: golang:1.21
-        script:
-            - make test
-    integration-tests:
-        image: golang:1.21
-        script:
-            - make integration
-deploy:
-    deploy-staging:
-        image: alpine:latest
-        script:
-            - deploy staging
-```
+| Component            | Port | Description                    |
+|----------------------|------|--------------------------------|
+| API Gateway          | 8000 | Routes to validation/dryrun/execution |
+| Validation Service   | 8001 | Validates pipeline YAML        |
+| Orchestrator Service    | 8002 | Runs pipelines, coordinates jobs |
+| Worker Service       | 8003 | Executes job steps             |
+| Reporting Service    | 8004 | Pipeline run reports           |
+| Redis                | 6379 | Validation cache backend       |
+| MySQL 8              | 3306 | Report store database          |
+| Prometheus           | 9090 | Metrics collection & storage   |
+| Loki                 | 3100 | Log aggregation & storage      |
+| Tempo                | 3200 | Distributed tracing storage    |
+| OTel Collector       | 4318 | Telemetry ingestion & routing  |
+| Grafana              | 3000 | Unified observability UI       |
+
+## Kubernetes Support
+
+The repository supports Kubernetes deployment for all current stateless services and optional in-cluster deployment for the report database.
+
+| Component | Type | K8s Enabled | Notes |
+|-----------|------|-------------|-------|
+| API Gateway | Stateless | Yes | Deploy via Helm (`charts/cicd/`) |
+| Validation Service | Stateless | Yes | Same as API Gateway |
+| Orchestrator Service | Stateless | Yes | Same as API Gateway |
+| Worker Service | Stateless | Yes | Requires Docker socket access on the cluster node |
+| Reporting Service | Stateless | Yes | Same as API Gateway |
+| MySQL 8 report store | Stateful | Optional | Can run in-cluster via StatefulSet + PVC or externally |
+
+### Kubernetes Deployment Modes
+
+- **All-in-cluster**: install the Helm chart with `mysql.enabled=true` to run stateless services, MySQL, and the migration Job inside Kubernetes.
+- **Hybrid**: install the Helm chart with `mysql.enabled=false` and point `externalDatabase.*` / `externalDatabase.url` at a database outside Kubernetes.
+
+Service-to-service communication inside the cluster is done through Kubernetes Services and environment variables:
+
+- `VALIDATION_URL`
+- `ORCHESTRATOR_URL`
+- `REPORTING_URL`
+- `WORKER_URL`
+- `DATABASE_URL`
+
+For Helm packaging, install/upgrade/uninstall commands, log access, Minikube validation, and troubleshooting, see [`charts/cicd/README.md`](https://github.com/xueyulinn/cicd-system/blob/review/charts/cicd/README.md).
+
+**Single source of truth:** local Compose reads `compose.values.env`, generated from `charts/cicd/values.yaml` (`ruby scripts/gen-compose-env-from-values.rb`) — images (default **GHCR** paths from CI; CI publishes **multi-arch** `amd64`/`arm64`, see `.github/workflows/publish-images.yaml`), MySQL, RabbitMQ image/credentials/`RABBITMQ_URL`, execution publisher concurrency (`executionService.publisherConcurrency` as `PUBLISHER_CONCURRENCY`), worker consumer concurrency (`workerService.concurrency` as `WORKER_CONCURRENCY`), and worker `ORCHESTRATOR_URL`. Cluster deployment uses Helm (`charts/cicd/`); run `helm template` if you need to inspect rendered YAML.
+
+**Private GHCR:** pulling images in Kubernetes requires a GitHub token with **`read:packages`** and a `docker-registry` secret wired via Helm `global.imagePullSecrets` — see the **Private GHCR images** subsection in [`charts/cicd/README.md`](charts/cicd/README.md).
+
+### Queue Deduplication
+
+The Orchestrator Service deduplicates identical in-flight run requests. If a second request arrives while an equivalent run for the same pipeline is still `queued` or `running`, the oldest request continues and the duplicate request is dropped. The duplicate response returns the original `run_no` together with a message indicating that the existing in-flight run was reused.
+
+The deduplication key is derived from the pipeline name, YAML content, branch, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
+
+### Repository-Backed Runs in Kubernetes
+
+For repo-backed runs, the worker clones the requested repository revision inside Kubernetes before executing the job container. Public repositories work without extra configuration. Private repositories require Git credentials to be injected into the worker pod.
+
+For Helm deployments, configure one of:
+
+- `workerService.gitAuth.githubToken`
+- `workerService.gitAuth.username` with `workerService.gitAuth.password`
+- `workerService.gitAuth.existingSecret`
+
+The worker uses those credentials when cloning private repositories. If repo-backed runs fail with GitHub `401` or `Repository not found`, verify that the token has read access to the target repository.
+
+## Observability
+
+All CI/CD services are instrumented across three pillars — metrics, logs, and traces — using an open-source stack deployed alongside the application via Docker Compose.
+
+### Stack
+
+| Role | Component | Config location |
+|------|-----------|-----------------|
+| Metrics collection & storage | Prometheus | `observability/prometheus/prometheus.yml` |
+| Log aggregation | Loki (via OpenTelemetry Collector) | `observability/loki/loki-config.yml`, `observability/otel-collector/config.yml` |
+| Distributed tracing | Tempo | `observability/tempo/tempo.yml` |
+| Telemetry routing | OpenTelemetry Collector | `observability/otel-collector/config.yml` |
+| Visualization | Grafana | `observability/grafana/` |
+
+In this repository, services export telemetry (logs, metrics, traces) to the OpenTelemetry Collector via OTLP. The collector routes traces to Tempo, exposes a Prometheus-scrapable metrics endpoint, and forwards logs to Loki. Grafana queries Prometheus, Loki, and Tempo.
+
+### Metrics
+
+Prometheus scrapes the OpenTelemetry Collector metrics endpoint (`otel-collector:8889` in Compose).
+
+Current metrics are emitted primarily by OpenTelemetry HTTP instrumentation:
+
+- inbound server HTTP metrics from `TracingMiddleware` (`otelhttp.NewHandler`)
+- outbound client HTTP metrics from `NewInstrumentedHTTPClient` (`otelhttp.NewTransport`)
+
+Service-specific CI/CD metrics (for example `cicd_*`) are not currently registered in code.
+
+### Structured Logs
+
+All services emit structured logs via Go's `log/slog` bridged to OpenTelemetry. Context fields (`pipeline`, `run_no`, `stage`, `job`, `trace_id`, `span_id`) are added where applicable. When the Orchestrator Service dispatches more than one parallel-ready job in a single batch, it logs `event: "mq-dispatch-batch"` with `batch_size`.
+
+### Distributed Tracing
+
+Services use OpenTelemetry SDK with W3C Trace Context propagation. The following spans are emitted:
+
+- **`pipeline.run`** (root span) — full pipeline execution, with `pipeline` and `run_no` attributes
+- **`stage.run`** (child) — per-stage execution
+- **`job.run`** (child) — per-job execution in the Worker
+- **`mq.job.publish`** — Orchestrator Service publishes one job message to the queue (`pipeline`, `run_no`, `stage`, `job`)
+- **`mq.job.consume`** — worker handles one delivery (`pipeline`, `run_no`, `stage`, `job`)
+
+Outbound HTTP calls between services automatically propagate trace context.
+
+The `trace-id` is persisted in the report database and included in `report --run` output, allowing operators to correlate a report with its trace in Grafana/Tempo.
+
+### Accessing the Observability Stack
+
+After `docker compose --env-file compose.values.env up -d`:
+
+| Tool | URL | Credentials |
+|------|-----|-------------|
+| Grafana | http://localhost:3000 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| Tempo (API) | http://localhost:3200 | — |
+| Loki (API) | http://localhost:3100 | — |
+
+In Grafana, use the Explore view to query Prometheus (metrics), Loki (logs), or Tempo (traces). Paste a `trace-id` from a report into Tempo to view the full span hierarchy.
+
+The following dashboards are provisioned from files committed to the repository:
+
+- `Pipeline Overview`
+- `Stage and Job Breakdown`
+- `Logs Viewer`
+- `Trace Explorer`
+- `Parallel execution & RabbitMQ`
+
+`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
+
+### Configuration
+
+Observability is controlled by environment variables set in `docker-compose.yaml`:
+
+| Variable | Purpose |
+|----------|---------|
+| `SERVICE_NAME` | Identifies the service in logs and traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTel Collector endpoint for logs, metrics, and traces |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol (`http/protobuf`) |
+
+All observability configuration files are committed under `observability/`. The shared instrumentation library lives in `internal/observability/`.
 
 ## Development
 
@@ -527,16 +377,6 @@ To exercise **multiple ready jobs in one stage** (parallel dispatch to the queue
 
    See `.pipelines/parallel-local.yaml` for the DAG (two independent jobs in `build`). With `WORKER_CONCURRENCY>=2`, both can run concurrently; with `1`, they still dispatch in one batch but run serially.
 
-### Running services without Docker
-
-To run services directly (without Docker Compose):
-
-```bash
-./scripts/start-services.sh
-```
-
-Use another terminal for CLI commands. To point the CLI at a different Execution Service, set `ORCHESTRATOR_URL` (default `http://localhost:8002`). Press Ctrl+C in the script terminal to stop all services.
-
 ### Report store database
 
 For the `report` subcommand, execution and report services need a MySQL 8 database. With Docker Compose this is handled automatically (MySQL + migrations start together). For manual setup:
@@ -556,7 +396,7 @@ e-team/
 │   ├── cicd/                     # CLI (verify, dryrun, run, report)
 │   ├── api-gateway/              # API Gateway (port 8000)
 │   ├── validation-service/       # Validation Service (port 8001)
-│   ├── execution-service/        # Execution Service (port 8002)
+│   ├── execution-service/        # Orchestrator Service (port 8002)
 │   ├── worker-service/           # Worker Service (port 8003)
 │   └── reporting-service/        # Reporting Service (port 8004)
 ├── internal/
@@ -641,7 +481,7 @@ job-b:
 
 ## Technology Stack
 
-- **Language**: Go 1.25
+- **Language**: Go 1.25.6
 - **CLI Framework**: Cobra
 - **YAML Parsing**: gopkg.in/yaml.v3
 - **Database**: MySQL 8 with `go-sql-driver/mysql`
@@ -659,10 +499,19 @@ job-b:
 5. Run `go test -coverprofile=coverage.out ./internal/...` to ensure coverage
 6. Submit a pull request
 
+## Documentation Map
+
+- [Feature status](FeatureStatus.md)
+- [System design](dev-docs/design/high-level-design.md)
+- [CLI reference](dev-docs/cli-reference.md)
+- [Report database schema](dev-docs/design/design-db-schema.md)
+- [Control component API reference](dev-docs/control-component-api.md)
+- [Evaluator verification steps](dev-docs/verification-steps.md)
+
 ## License
 
 This project is licensed under the terms specified in the [LICENSE](LICENSE) file.
 
 ## Team
 
-This project is developed by the e-team for CS7580 SEA-SP26.
+This project is developed by the e-team for CS7580 SEA-SP26 and continually improved by yulinxue.
