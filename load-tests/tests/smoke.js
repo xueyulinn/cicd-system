@@ -1,5 +1,6 @@
 import { runValidateScenario } from "../scenarios/validate.js";
 import { runDryRunScenario } from "../scenarios/dryrun.js";
+import { runSubmitScenario } from "../scenarios/run.js";
 
 const TEST_SCENARIO = __ENV.TEST_SCENARIO || "validate";
 const DEFAULT_DURATION = "30s";
@@ -23,6 +24,15 @@ const SCENARIOS = {
       dryrun_success_rate: ["rate>0.99"],
     },
   },
+  runSubmit: {
+    run: runSubmitScenario,
+    defaultVUs: 5,
+    thresholds: {
+      http_req_failed: ["rate<0.01"],
+      http_req_duration: ["p(95)<100", "p(99)<300"],
+      dryrun_success_rate: ["rate>0.99"],
+    },
+  }
 };
 
 const selectedScenario = SCENARIOS[TEST_SCENARIO];
