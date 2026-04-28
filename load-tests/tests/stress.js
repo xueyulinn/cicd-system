@@ -12,9 +12,9 @@ const SCENARIOS = {
       validate_success_rate: ["rate>0.99"],
     },
     stages: [
-        { duration: '2m', target: 150 }, // traffic ramp-up from 1 to 100 users over 5 minutes.
-        { duration: '10m', target: 150 }, // stay at 100 users for 30 minutes
-        { duration: '2m', target: 0 }, // ramp-down to 0 users
+        { duration: '2m', target: 150 },
+        { duration: '15m', target: 150 },
+        { duration: '2m', target: 0 },
     ],
   },
   dryrun: {
@@ -25,9 +25,9 @@ const SCENARIOS = {
       dryrun_success_rate: ["rate>0.99"],
     },
     stages: [
-        { duration: '2m', target: 150 }, // traffic ramp-up from 1 to 100 users over 5 minutes.
-        { duration: '15m', target: 150 }, // stay at 100 users for 30 minutes
-        { duration: '2m', target: 0 }, // ramp-down to 0 users
+        { duration: '2m', target: 150 },
+        { duration: '15m', target: 150 },
+        { duration: '2m', target: 0 },
     ],
   },
 };
