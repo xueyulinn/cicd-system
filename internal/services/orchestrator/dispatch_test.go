@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,27 @@ func (p *capturePublisher) PublishJob(_ context.Context, msg messages.JobExecuti
 }
 
 func (p *capturePublisher) Close() error { return nil }
+
+type scriptedPublisher struct {
+	published []messages.JobExecutionMessage
+	errs      []error
+	onPublish func(messages.JobExecutionMessage)
+}
+
+func (p *scriptedPublisher) PublishJob(_ context.Context, msg messages.JobExecutionMessage) error {
+	p.published = append(p.published, msg)
+	if p.onPublish != nil {
+		p.onPublish(msg)
+	}
+	if len(p.errs) == 0 {
+		return nil
+	}
+	err := p.errs[0]
+	p.errs = p.errs[1:]
+	return err
+}
+
+func (p *scriptedPublisher) Close() error { return nil }
 
 func TestBuildJobExecutionMessage(t *testing.T) {
 	svc := &Service{}
@@ -82,6 +104,51 @@ func TestEnqueueJobPublisherError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "publish fail") {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestEnqueueJobRetriesConnectionClosedAndRepublishesMessage(t *testing.T) {
+	successPublisher := &capturePublisher{}
+	successSet := &publisherSet{gen: 1, pubs: []mq.Publisher{successPublisher}}
+	manager := &publisherManager{}
+
+	firstPublisher := &scriptedPublisher{
+		errs: []error{mq.ErrConnectionClosed},
+		onPublish: func(messages.JobExecutionMessage) {
+			manager.mu.Lock()
+			manager.current = successSet
+			manager.mu.Unlock()
+		},
+	}
+	manager.current = &publisherSet{gen: 0, pubs: []mq.Publisher{firstPublisher}}
+
+	svc := &Service{publisherManager: manager}
+	msg := messages.JobExecutionMessage{
+		RunNo:        7,
+		PipelineName: "pipe",
+		Stage:        "build",
+		Job:          models.JobExecutionPlan{Name: "compile"},
+	}
+
+	err := svc.enqueueJob(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("enqueueJob error: %v", err)
+	}
+
+	if len(firstPublisher.published) != 1 {
+		t.Fatalf("first publisher publish count = %d, want 1", len(firstPublisher.published))
+	}
+	if len(successPublisher.published) != 1 {
+		t.Fatalf("second publisher publish count = %d, want 1", len(successPublisher.published))
+	}
+
+	firstMsg := firstPublisher.published[0]
+	secondMsg := successPublisher.published[0]
+	if !reflect.DeepEqual(firstMsg, msg) {
+		t.Fatalf("first published message = %#v, want %#v", firstMsg, msg)
+	}
+	if !reflect.DeepEqual(secondMsg, msg) {
+		t.Fatalf("second published message = %#v, want %#v", secondMsg, msg)
 	}
 }
 
