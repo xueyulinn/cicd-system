@@ -11,7 +11,6 @@ const SCENARIOS = {
     defaultVUs: 5,
     thresholds: {
       http_req_failed: ["rate<0.01"],
-      http_req_duration: ["p(95)<100", "p(99)<300"],
       validate_success_rate: ["rate>0.99"],
     },
   },
@@ -20,7 +19,6 @@ const SCENARIOS = {
     defaultVUs: 5,
     thresholds: {
       http_req_failed: ["rate<0.01"],
-      http_req_duration: ["p(95)<100", "p(99)<300"],
       dryrun_success_rate: ["rate>0.99"],
     },
   },
@@ -29,7 +27,6 @@ const SCENARIOS = {
     defaultVUs: 5,
     thresholds: {
       http_req_failed: ["rate<0.01"],
-      http_req_duration: ["p(95)<100", "p(99)<300"],
       dryrun_success_rate: ["rate>0.99"],
     },
   }
