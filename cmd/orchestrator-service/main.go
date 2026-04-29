@@ -33,7 +33,11 @@ func main() {
 		}
 	}()
 
-	handler := orchestrator.NewHandler()
+	handler, err := orchestrator.NewHandler()
+	if err != nil {
+		slog.Error("handler init failed", "error", err)
+		os.Exit(1)
+	}
 	defer handler.Close()
 
 	mux := http.NewServeMux()

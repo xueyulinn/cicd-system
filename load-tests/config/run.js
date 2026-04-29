@@ -3,7 +3,7 @@ import { generateRandomYAMLContent } from "../utils/yaml.js";
 
 const DEFAULT_BASE_URL = "http://localhost:8000";
 const DEFAULT_RUN_PATH = "/run";
-const DEFAULT_THINK_TIME = 0;
+const DEFAULT_THINK_TIME = 1;
 
 export const runConfig = {
   baseURL: __ENV.BASE_URL || DEFAULT_BASE_URL,

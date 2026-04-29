@@ -87,8 +87,6 @@ services:
         condition: service_healthy
       validation-service:
         condition: service_started
-      worker-service:
-        condition: service_started
     ports:
       - "${ORCHESTRATOR_SERVICE_PORT}:${ORCHESTRATOR_SERVICE_PORT}"
 

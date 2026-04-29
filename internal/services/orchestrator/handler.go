@@ -17,15 +17,18 @@ type Handler struct {
 }
 
 // NewHandler creates a Handler and initializes its underlying Service.
-func NewHandler() *Handler {
+func NewHandler() (*Handler, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	svc, err := NewService(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		service: svc,
 		initErr: err,
-	}
+	}, nil
 }
 
 // Close releases resources held by the underlying orchestrator service.
