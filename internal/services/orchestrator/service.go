@@ -416,14 +416,15 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 			Pipeline: pipelinePlan.Pipeline.Name,
 			RunNo:    runtime.runNo,
 			Status:   status,
-			Message:  fmt.Sprintf("Duplicate run request dropped; using in-flight run %d.", runtime.runNo),
+			Message:  fmt.Sprintf("duplicate run request dropped; using in-flight run %d.", runtime.runNo),
 		}, nil
 	}
 
 	s.putRuntime(runtime)
 
 	go func(ctx context.Context, runtime *pipelineRuntime) {
-		dispatchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		dispatchCtx := context.WithoutCancel(ctx)
+		dispatchCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		if err := s.dispatchPipelineStartJobs(dispatchCtx, runtime); err != nil {
 			slog.Error("dispatch initial ready jobs failed", "error", err)

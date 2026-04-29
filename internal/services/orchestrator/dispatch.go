@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/models"
@@ -43,10 +42,7 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		))
 	defer span.End()
 
-	publishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	if err := publisher.PublishJob(publishCtx, msg); err != nil {
+	if err := publisher.PublishJob(ctx, msg); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err

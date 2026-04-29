@@ -13,7 +13,6 @@ import (
 // Handler exposes HTTP endpoints for orchestrator service operations.
 type Handler struct {
 	service *Service
-	initErr error
 }
 
 // NewHandler creates a Handler and initializes its underlying Service.
@@ -27,7 +26,6 @@ func NewHandler() (*Handler, error) {
 	}
 	return &Handler{
 		service: svc,
-		initErr: err,
 	}, nil
 }
 
@@ -50,11 +48,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -81,11 +74,6 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -125,11 +113,6 @@ func (h *Handler) handleJobFinished(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn func(context.Context, api.JobStatusCallbackRequest) error) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
