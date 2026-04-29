@@ -23,8 +23,8 @@ type ValidateResponse struct {
 
 // DryRunResponse is the response for POST /dryrun.
 type DryRunResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
+	Valid         bool                  `json:"valid"`
+	Errors        []string              `json:"errors,omitempty"`
 	ExecutionPlan *models.ExecutionPlan `json:"execution_plan,omitempty"`
 }
 

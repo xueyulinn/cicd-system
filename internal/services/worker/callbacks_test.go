@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/store"
 )
 
 func TestPostJobCallback_SendsExpectedPayload(t *testing.T) {
@@ -95,5 +97,43 @@ func TestPostJobCallback_SendRequestError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "send callback request") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestReportJobFinishedUntilSuccessRetriesUntilCallbackSucceeds(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/callbacks/job-finished" {
+			t.Fatalf("path=%q, want /callbacks/job-finished", r.URL.Path)
+		}
+		if attempts.Add(1) < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	originalRetryDelay := finishedCallbackRetryDelay
+	finishedCallbackRetryDelay = time.Millisecond
+	defer func() { finishedCallbackRetryDelay = originalRetryDelay }()
+
+	svc := &Service{
+		httpClient:      srv.Client(),
+		orchestratorURL: srv.URL,
+	}
+	msg := messages.JobExecutionMessage{
+		RunNo:        9,
+		PipelineName: "p",
+		Stage:        "build",
+		Job:          models.JobExecutionPlan{Name: "compile"},
+	}
+
+	err := svc.reportJobFinishedUntilSuccess(context.Background(), msg, store.StatusSuccess, "logs", "")
+	if err != nil {
+		t.Fatalf("reportJobFinishedUntilSuccess error = %v, want nil", err)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Fatalf("finished callback attempts = %d, want 3", got)
 	}
 }

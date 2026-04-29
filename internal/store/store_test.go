@@ -158,12 +158,12 @@ func TestStore_CreateJob_UpdateJob_GetJobsForRun(t *testing.T) {
 		t.Fatalf("CreateRun: %v", err)
 	}
 	_ = s.CreateStage(ctx, CreateStageInput{
-		Pipeline:  pipeline, RunNo: runNo, Stage: "build",
+		Pipeline: pipeline, RunNo: runNo, Stage: "build",
 		StartTime: time.Now().UTC(), Status: StatusRunning,
 	})
 
 	err = s.CreateJob(ctx, CreateJobInput{
-		Pipeline:  pipeline, RunNo: runNo, Stage: "build", Job: "compile",
+		Pipeline: pipeline, RunNo: runNo, Stage: "build", Job: "compile",
 		StartTime: time.Now().UTC(), Status: StatusRunning,
 	})
 	if err != nil {

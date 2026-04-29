@@ -148,10 +148,12 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 					"consume.message",
 					trace.WithSpanKind(trace.SpanKindConsumer),
 				)
-
+				
+				// server internal error
 				if err := handler(deliveryCtx, delivery.Body); err != nil {
 					span.End()
 					// observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
+					// deliveries to other consumers
 					_ = delivery.Nack(false, true)
 					slog.Warn("mq nack delivery",
 						"queue", queue,

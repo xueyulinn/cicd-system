@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/xueyulinn/cicd-system/internal/api"
@@ -40,30 +41,40 @@ func (s *Service) callbackJobFinished(ctx context.Context, msg messages.JobExecu
 }
 
 func (s *Service) postJobCallback(ctx context.Context, path string, payload api.JobStatusCallbackRequest) error {
+	_, err := s.doJobCallbackRequest(ctx, path, payload)
+	return err
+}
+
+func (s *Service) doJobCallbackRequest(ctx context.Context, path string, payload api.JobStatusCallbackRequest) ([]byte, error) {
 	if s.httpClient == nil {
-		return fmt.Errorf("http client is not initialized")
+		return nil, fmt.Errorf("http client is not initialized")
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal callback payload: %w", err)
+		return nil, fmt.Errorf("marshal callback payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.orchestratorURL+path, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create callback request: %w", err)
+		return nil, fmt.Errorf("create callback request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send callback request: %w", err)
+		return nil, fmt.Errorf("send callback request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("callback returned status %d", resp.StatusCode)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read callback response: %w", err)
 	}
 
-	return nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("callback returned status %d", resp.StatusCode)
+	}
+
+	return respBody, nil
 }

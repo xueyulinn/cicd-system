@@ -111,21 +111,8 @@ func (h *Handler) handleJobFinished(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn func(context.Context, api.JobStatusCallbackRequest) error) {
-	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
-	defer func() { _ = r.Body.Close() }()
-
-	var req api.JobStatusCallbackRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+	req, ok := h.decodeJobCallbackRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -135,4 +122,26 @@ func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn f
 	}
 
 	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ok"})
+}
+
+func (h *Handler) decodeJobCallbackRequest(w http.ResponseWriter, r *http.Request) (api.JobStatusCallbackRequest, bool) {
+	if r.Method != http.MethodPost {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return api.JobStatusCallbackRequest{}, false
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
+		return api.JobStatusCallbackRequest{}, false
+	}
+	defer func() { _ = r.Body.Close() }()
+
+	var req api.JobStatusCallbackRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return api.JobStatusCallbackRequest{}, false
+	}
+
+	return req, true
 }
