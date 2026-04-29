@@ -44,21 +44,27 @@ func TestBuildJobExecutionMessage(t *testing.T) {
 func TestNextPublisherRoundRobin(t *testing.T) {
 	p1 := &capturePublisher{}
 	p2 := &capturePublisher{}
-	svc := &Service{jobPublishers: []mq.Publisher{p1, p2}}
+	svc := &Service{publisherManager: &publisherManager{current: &publisherSet{pubs: []mq.Publisher{p1, p2}}}}
 
-	if got := svc.nextPublisher(); got != p1 {
+	set := svc.publisherManager.acquireCurrentSet()
+	if set == nil {
+		t.Fatal("expected current publisher set")
+	}
+	defer svc.publisherManager.releaseSet(set)
+
+	if got := set.nextPublisher(); got != p1 {
 		t.Fatal("first publisher should be p1")
 	}
-	if got := svc.nextPublisher(); got != p2 {
+	if got := set.nextPublisher(); got != p2 {
 		t.Fatal("second publisher should be p2")
 	}
-	if got := svc.nextPublisher(); got != p1 {
+	if got := set.nextPublisher(); got != p1 {
 		t.Fatal("third publisher should cycle to p1")
 	}
 }
 
 func TestEnqueueJobNoPublisher(t *testing.T) {
-	svc := &Service{}
+	svc := &Service{publisherManager: &publisherManager{}}
 	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{PipelineName: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
 	if err == nil {
 		t.Fatal("enqueueJob error=nil, want non-nil")
@@ -69,7 +75,7 @@ func TestEnqueueJobNoPublisher(t *testing.T) {
 }
 
 func TestEnqueueJobPublisherError(t *testing.T) {
-	svc := &Service{jobPublishers: []mq.Publisher{&capturePublisher{err: errors.New("publish fail")}}}
+	svc := &Service{publisherManager: &publisherManager{current: &publisherSet{pubs: []mq.Publisher{&capturePublisher{err: errors.New("publish fail")}}}}}
 	err := svc.enqueueJob(context.Background(), messages.JobExecutionMessage{PipelineName: "p", Stage: "s", Job: models.JobExecutionPlan{Name: "j"}})
 	if err == nil {
 		t.Fatal("enqueueJob error=nil, want non-nil")
@@ -81,7 +87,7 @@ func TestEnqueueJobPublisherError(t *testing.T) {
 
 func TestEnqueueReadyJobsPublishesAllJobs(t *testing.T) {
 	pub := &capturePublisher{}
-	svc := &Service{jobPublishers: []mq.Publisher{pub}}
+	svc := &Service{publisherManager: &publisherManager{current: &publisherSet{pubs: []mq.Publisher{pub}}}}
 	jobs := []models.JobExecutionPlan{{Name: "a"}, {Name: "b"}}
 
 	err := svc.enqueueReadyJobs(context.Background(), "pipe", "build", 2, jobs, runInfo{Branch: "main"})
@@ -103,7 +109,7 @@ func TestEnqueueFirstReadyStageJobsPropagatesStageError(t *testing.T) {
 		JobByName: map[string]models.JobExecutionPlan{"compile": {Name: "compile"}},
 	})
 
-	svc := &Service{}
+	svc := &Service{publisherManager: &publisherManager{}}
 	err := svc.enqueueFirstReadyStageJobs(
 		context.Background(),
 		"pipe",

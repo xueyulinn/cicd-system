@@ -2,21 +2,24 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/mq"
 	"github.com/xueyulinn/cicd-system/internal/store"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
+const maxPublishAttempts = 3
+
 // buildJobExecutionMessage constructs the MQ payload for a single job in a pipeline run.
-func (s *Service) buildJobExecutionMessage(runNo int, pipeline, stage string, job models.JobExecutionPlan, runInfo runInfo) messages.JobExecutionMessage {
+func (s *Service) buildJobExecutionMessage(runNo int, pipelineName, stage string, job models.JobExecutionPlan, runInfo runInfo) messages.JobExecutionMessage {
 	return messages.JobExecutionMessage{
 		RunNo:         runNo,
-		PipelineName:  pipeline,
+		PipelineName:  pipelineName,
 		Stage:         stage,
 		RepoURL:       runInfo.RepoURL,
 		Branch:        runInfo.Branch,
@@ -28,11 +31,6 @@ func (s *Service) buildJobExecutionMessage(runNo int, pipeline, stage string, jo
 
 // enqueueJob publishes a single job execution message to MQ.
 func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessage) error {
-	publisher := s.nextPublisher()
-	if publisher == nil {
-		return fmt.Errorf("job publisher is not initialized")
-	}
-
 	ctx, span := s.serviceTracer().Start(ctx, "publish.job.message",
 		trace.WithAttributes(
 			attribute.String("pipeline_name", msg.PipelineName),
@@ -42,12 +40,37 @@ func (s *Service) enqueueJob(ctx context.Context, msg messages.JobExecutionMessa
 		))
 	defer span.End()
 
-	if err := publisher.PublishJob(ctx, msg); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+	var lastErr error
+	for attemp := 1; attemp <= maxPublishAttempts; attemp++ {
+		set := s.publisherManager.acquireCurrentSet()
+		if set == nil {
+			return fmt.Errorf("job publisher is not initialized")
+		}
+
+		publisher := set.nextPublisher()
+		err := publisher.PublishJob(ctx, msg)
+		lastErr = err
+
+		if err == nil {
+			s.publisherManager.releaseSet(set)
+			return nil
+		}
+
+		if errors.Is(err, mq.ErrConnectionClosed) {
+			rebuildErr := s.publisherManager.rebuildIfCurrent(set)
+			s.publisherManager.releaseSet(set)
+
+			if rebuildErr == nil {
+				continue
+			}
+			return rebuildErr
+		}
+
+		s.publisherManager.releaseSet(set)
 		return err
 	}
-	return nil
+
+	return lastErr
 }
 
 // enqueueReadyJobs publishes all ready jobs for the current stage.
