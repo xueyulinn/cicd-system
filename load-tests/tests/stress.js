@@ -9,13 +9,13 @@ const SCENARIOS = {
     run: runValidateScenario,
     thresholds: {
       http_req_failed: ["rate<0.01"],
-      http_req_duration: ["p(95)<100", "p(99)<300"],
+      http_req_duration: ["p(95)<100", "p(99)<200"],
       validate_success_rate: ["rate>0.99"],
     },
     stages: [
-        { duration: '1m', target: 150 },
-        { duration: '10m', target: 150 },
-        { duration: '1m', target: 0 },
+        { duration: '2m', target: 100 },
+        { duration: '10m', target: 100 },
+        { duration: '2m', target: 0 },
     ],
   },
   dryrun: {

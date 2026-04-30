@@ -49,10 +49,12 @@ func main() {
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      wrapped,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+	
 	errCh := make(chan error, 1)
 
 	go func() {
