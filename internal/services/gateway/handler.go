@@ -76,7 +76,8 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.client.forwardValidate(r.Context(), w, r); err != nil {
 		log.Warn("gateway forward validate failed", "error", err)
-		api.WriteError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
+		status, code, message := classifyError(err)
+		api.WriteError(w, status, code, message)
 		return
 	}
 }
@@ -92,7 +93,8 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.client.forwardDryRun(r.Context(), w, r); err != nil {
 		log.Warn("gateway forward dryrun failed", "error", err)
-		api.WriteError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
+		status, code, message := classifyError(err)
+		api.WriteError(w, status, code, message)
 		return
 	}
 }
@@ -108,7 +110,8 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
 		logger.Error("gateway forward run failed", "error", err)
-		api.WriteError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
+		status, code, message := classifyError(err)
+		api.WriteError(w, status, code, message)
 		return
 	}
 }
@@ -134,7 +137,8 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.client.forwardReport(r.Context(), w, query); err != nil {
-		api.WriteError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
+		status, code, message := classifyError(err)
+		api.WriteError(w, status, code, message)
 		return
 	}
 }

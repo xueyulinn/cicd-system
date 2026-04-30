@@ -2,8 +2,10 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,21 +38,30 @@ func NewClient() *Client {
 	}
 }
 
-// ForwardValidate proxies validation responses from downstream directly to upstream response writer.
-func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", r.Body)
+func doUpstreamRequest(client *http.Client, req *http.Request, serviceName string) (*http.Response, error) {
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("construct request failed: %w", err)
+		return nil, wrapUpstreamCallError(serviceName, err)
 	}
+	return resp, nil
+}
 
-	resp, err := c.validationClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to call validation service: %w", err)
+func wrapUpstreamCallError(serviceName string, err error) error {
+	if isTimeoutError(err) {
+		return upstreamServiceTimeout(fmt.Sprintf("%s: %v", serviceName, err))
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	return fmt.Errorf("failed to call %s: %w", serviceName, err)
+}
 
+func isTimeoutError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func proxyDownstreamResponse(w http.ResponseWriter, resp *http.Response) error {
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
@@ -62,6 +73,24 @@ func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *
 	return nil
 }
 
+// ForwardValidate proxies validation responses from downstream directly to upstream response writer.
+func (c *Client) forwardValidate(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/validate", r.Body)
+	if err != nil {
+		return fmt.Errorf("construct request failed: %w", err)
+	}
+
+	resp, err := doUpstreamRequest(c.validationClient, req, "validation service")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	return proxyDownstreamResponse(w, resp)
+}
+
 // ForwardDryRun proxies dryrun responses from downstream directly to upstream response writer.
 func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.validationURL+"/dryrun", r.Body)
@@ -69,23 +98,15 @@ func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 		return fmt.Errorf("construct request failed: %w", err)
 	}
 
-	resp, err := c.validationClient.Do(req)
+	resp, err := doUpstreamRequest(c.validationClient, req, "dryrun service")
 	if err != nil {
-		return fmt.Errorf("failed to call dryrun service: %w", err)
+		return err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		return fmt.Errorf("copy downstream response failed: %w", err)
-	}
-	return nil
+	return proxyDownstreamResponse(w, resp)
 }
 
 // ForwardRun forwards run request to orchestrator service.
@@ -96,23 +117,15 @@ func (c *Client) forwardRun(ctx context.Context, w http.ResponseWriter, r *http.
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.orchestratorClient.Do(req)
+	resp, err := doUpstreamRequest(c.orchestratorClient, req, "orchestrator service")
 	if err != nil {
-		return fmt.Errorf("failed to call orchestrator service: %w", err)
+		return err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		return fmt.Errorf("copy downstream response failed: %w", err)
-	}
-	return nil
+	return proxyDownstreamResponse(w, resp)
 }
 
 // ForwardReport forwards report request to reporting service.
@@ -139,22 +152,13 @@ func (c *Client) forwardReport(ctx context.Context, w http.ResponseWriter, query
 		return fmt.Errorf("construct request failed: %w", err)
 	}
 
-	resp, err := c.reportingClient.Do(req)
+	resp, err := doUpstreamRequest(c.reportingClient, req, "reporting service")
 	if err != nil {
-		return fmt.Errorf("failed to call reporting service: %w", err)
+		return err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		return fmt.Errorf("copy downstream response failed: %w", err)
-	}
-
-	return nil
+	return proxyDownstreamResponse(w, resp)
 }
