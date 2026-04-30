@@ -48,7 +48,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // handleReady reports reporting-service readiness based on report-store reachability.
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
+		api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	log := observability.WithTraceContext(r.Context(), slog.Default())
@@ -58,7 +58,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.Ping(ctx); err != nil {
 		log.Warn("reporting readiness failed", "error", err)
-		api.WriteJSONError(w, http.StatusServiceUnavailable, &api.ErrorResponse{Code:"service_unready", Message: http.StatusText(http.StatusServiceUnavailable)})
+		api.WriteError(w, http.StatusServiceUnavailable, "service_unready", http.StatusText(http.StatusServiceUnavailable))
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 // handleHealth reports reporting-service liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
+		api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleReport parses report filters and returns the requested report view.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
+		api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	log := observability.WithTraceContext(r.Context(), slog.Default())
@@ -87,7 +87,7 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	query, parseErr := parseReportQuery(r)
 	if parseErr != nil {
 		log.Error("invalid report query", "error", parseErr)
-		api.WriteJSONError(w, http.StatusBadRequest,  &api.ErrorResponse{Code: "invalid_argument", Message: parseErr.Error()})
+		api.WriteError(w, http.StatusBadRequest, "invalid_argument", parseErr.Error())
 		return
 	}
 
@@ -96,8 +96,8 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	report, err := h.service.GetReport(ctx, query)
 	if err != nil {
-		status, code, message :=  classifyError(err)
-		api.WriteJSONError(w, status, &api.ErrorResponse{Code: code, Message: message})
+		status, code, message := classifyError(err)
+		api.WriteError(w, status, code, message)
 		return
 	}
 
