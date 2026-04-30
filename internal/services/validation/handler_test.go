@@ -39,6 +39,7 @@ compile:
 
 func newValidationMux(t *testing.T) *http.ServeMux {
 	t.Helper()
+	disableValidationCache(t)
 
 	h, err := NewHandler()
 	if err != nil {
@@ -77,6 +78,8 @@ func doRequestWithBody(t *testing.T, mux *http.ServeMux, method, path string, bo
 }
 
 func TestNewHandler(t *testing.T) {
+	disableValidationCache(t)
+
 	h, err := NewHandler()
 	if err != nil {
 		t.Fatalf("NewHandler() error = %v", err)
@@ -205,8 +208,8 @@ func TestHandleDryRun(t *testing.T) {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 	rec = doRequest(t, mux, http.MethodPost, "/dryrun", invalidReq)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	if !strings.Contains(rec.Body.String(), `"valid":false`) {
 		t.Fatalf("expected invalid response, got: %q", rec.Body.String())

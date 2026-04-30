@@ -91,8 +91,6 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log = observability.WithReportQueryContext(log, query)
-
 	ctx := r.Context()
 	report, err := h.service.GetReport(ctx, query)
 	if err != nil {

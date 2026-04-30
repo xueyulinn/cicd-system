@@ -37,6 +37,8 @@ func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string
 }
 
 func TestRunVerify_ValidFile(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -64,6 +66,8 @@ compile:
 }
 
 func TestRunVerify_InvalidFile_ReturnsError(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test"
