@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +32,7 @@ func NewClient() *Client {
 		reportURL:          config.GetEnvOrDefaultURL("REPORTING_URL", config.DefaultReportingURL),
 		validationClient:   observability.NewInstrumentedHTTPClient("validation", 2*time.Minute),
 		orchestratorClient: observability.NewInstrumentedHTTPClient("orchestrator", 2*time.Minute),
-		reportingClient:    observability.NewInstrumentedHTTPClient("reporting", 2*time.Minute),
+		reportingClient:    observability.NewInstrumentedHTTPClient("reporting", 1*time.Minute),
 	}
 }
 
@@ -89,7 +88,7 @@ func (c *Client) forwardDryRun(ctx context.Context, w http.ResponseWriter, r *ht
 	return nil
 }
 
-// RunRequest forwards run request to orchestrator service.
+// ForwardRun forwards run request to orchestrator service.
 func (c *Client) forwardRun(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.orchestratorURL+"/run", r.Body)
 	if err != nil {
@@ -116,8 +115,8 @@ func (c *Client) forwardRun(ctx context.Context, w http.ResponseWriter, r *http.
 	return nil
 }
 
-// ReportRequest forwards report request to reporting service.
-func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse, int, error) {
+// ForwardReport forwards report request to reporting service.
+func (c *Client) forwardReport(ctx context.Context, w http.ResponseWriter, query models.ReportQuery) error {
 	params := url.Values{}
 	params.Set("pipeline", query.Pipeline)
 	if query.Run != nil {
@@ -130,30 +129,32 @@ func (c *Client) ReportRequest(query models.ReportQuery) (*models.ReportResponse
 		params.Set("job", query.Job)
 	}
 
-	resp, err := c.reportingClient.Get(c.reportURL + "/report?" + params.Encode())
+	endpoint := c.reportURL + "/report"
+	if encoded := params.Encode(); encoded != "" {
+		endpoint += "?" + encoded
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, http.StatusBadGateway, fmt.Errorf("failed to call reporting service: %w", err)
+		return fmt.Errorf("construct request failed: %w", err)
+	}
+
+	resp, err := c.reportingClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call reporting service: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, http.StatusBadGateway, fmt.Errorf("failed to read response: %w", err)
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("copy downstream response failed: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		var errorResp map[string]string
-		if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil && errorResp["error"] != "" {
-			return nil, resp.StatusCode, fmt.Errorf("%s", errorResp["error"])
-		}
-		return nil, resp.StatusCode, fmt.Errorf("reporting service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var out models.ReportResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, http.StatusBadGateway, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-	return &out, http.StatusOK, nil
+	return nil
 }

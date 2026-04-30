@@ -7,11 +7,11 @@ import (
 	"net/http"
 )
 
-// WriteJSONError writes a JSON error response with the standard shape {"error": "message"}.
+// WriteJSONError writes a JSON error response with the standard shape {"code": "", "message": ""}.
 // All server-side handlers should use this for error responses so clients get a consistent format.
 // Use statusCode for the HTTP status (e.g. http.StatusBadRequest, http.StatusInternalServerError).
-func WriteJSONError(w http.ResponseWriter, statusCode int, message string) {
-	WriteJSON(w, statusCode, map[string]string{"error": message})
+func WriteJSONError(w http.ResponseWriter, statusCode int, errorResponse *ErrorResponse) {
+	WriteJSON(w, statusCode, errorResponse)
 }
 
 // WriteJSON writes v as a JSON response with the provided HTTP status code.

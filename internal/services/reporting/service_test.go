@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -30,20 +31,28 @@ func TestServiceClose_AndPingWhenStoreNil(t *testing.T) {
 	}
 }
 
-func TestServiceErrorHelpers(t *testing.T) {
-	e := &serviceError{StatusCode: 418, Message: "teapot"}
-	if e.Error() != "teapot" {
-		t.Fatalf("error=%q", e.Error())
+func TestReportErrorHelpers(t *testing.T) {
+	bad := invalidReportQuery("bad")
+	if !errors.Is(bad, errInvalidReportQuery) {
+		t.Fatalf("invalidReportQuery err=%v", bad)
 	}
-	if badRequest("bad").StatusCode != 400 {
-		t.Fatal("badRequest status")
+	status, _, _ := classifyError(bad)
+	if status != 400 {
+		t.Fatal("invalidReportQuery status")
 	}
-	if notFound("missing").StatusCode != 404 {
-		t.Fatal("notFound status")
+
+	missing := reportNotFound("missing")
+	if !errors.Is(missing, errReportNotFound) {
+		t.Fatalf("reportNotFound err=%v", missing)
 	}
-	ie := internalError("x=%d", 1)
-	if ie.StatusCode != 500 || ie.Message != "x=1" {
-		t.Fatalf("internalError=%#v", ie)
+	status, _, _ = classifyError(missing)
+	if status != 404 {
+		t.Fatal("reportNotFound status")
+	}
+
+	status, _, _ = classifyError(errors.New("boom"))
+	if status != 500 {
+		t.Fatal("unexpected status for internal error")
 	}
 }
 
@@ -57,7 +66,8 @@ func TestGetReport_ValidationBranches(t *testing.T) {
 	}
 	for _, q := range cases {
 		report, err := svc.GetReport(context.Background(), q)
-		if err == nil || err.StatusCode != 400 {
+		status, _, _ := classifyError(err)
+		if err == nil || status != 400 {
 			t.Fatalf("query=%+v report=%#v err=%v", q, report, err)
 		}
 	}

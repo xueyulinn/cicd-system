@@ -39,7 +39,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // handleHealth reports gateway liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -49,7 +49,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleServices returns status of all services
 func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *Handler) handleServices(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
@@ -76,14 +76,14 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.client.forwardValidate(r.Context(), w, r); err != nil {
 		log.Warn("gateway forward validate failed", "error", err)
-		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
+		writeError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
 		return
 	}
 }
 
 func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
@@ -92,14 +92,14 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.client.forwardDryRun(r.Context(), w, r); err != nil {
 		log.Warn("gateway forward dryrun failed", "error", err)
-		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
+		writeError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
 		return
 	}
 }
 
 func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -108,14 +108,14 @@ func (h *Handler) handleRun(w http.ResponseWriter, r *http.Request) {
 	err := h.client.forwardRun(r.Context(), w, r)
 	if err != nil {
 		logger.Error("gateway forward run failed", "error", err)
-		api.WriteJSONError(w, http.StatusBadGateway, err.Error())
+		writeError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
 		return
 	}
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -127,33 +127,21 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if runParam := strings.TrimSpace(r.URL.Query().Get("run")); runParam != "" {
 		runNo, err := strconv.Atoi(runParam)
 		if err != nil {
-			api.WriteJSONError(w, http.StatusBadRequest, "run must be an integer: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_argument", "run must be an integer: "+err.Error())
 			return
 		}
 		query.Run = &runNo
 	}
 
-	log := observability.WithTraceContext(r.Context(), slog.Default()).With(
-		"pipeline", query.Pipeline,
-	)
-
-	response, statusCode, err := h.client.ReportRequest(query)
-	if err != nil {
-		if statusCode == 0 {
-			statusCode = http.StatusBadGateway
-		}
-		log.Warn("report proxy failed", "error", err, "status", statusCode)
-		api.WriteJSONError(w, statusCode, err.Error())
+	if err := h.client.forwardReport(r.Context(), w, query); err != nil {
+		writeError(w, http.StatusBadGateway, "upstream_unavailable", err.Error())
 		return
 	}
-
-	log.Info("report ok")
-	api.WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 
@@ -246,4 +234,8 @@ func getGatewayPublicURL() string {
 		return config.DefaultGatewayURL
 	}
 	return strings.TrimRight(url, "/")
+}
+
+func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
+	api.WriteJSONError(w, statusCode, &api.ErrorResponse{Code: code, Message: message})
 }

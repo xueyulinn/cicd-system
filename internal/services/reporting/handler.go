@@ -48,7 +48,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // handleReady reports reporting-service readiness based on report-store reachability.
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}
 	log := observability.WithTraceContext(r.Context(), slog.Default())
@@ -58,7 +58,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.Ping(ctx); err != nil {
 		log.Warn("reporting readiness failed", "error", err)
-		api.WriteJSONError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable))
+		api.WriteJSONError(w, http.StatusServiceUnavailable, &api.ErrorResponse{Code:"service_unready", Message: http.StatusText(http.StatusServiceUnavailable)})
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 // handleHealth reports reporting-service liveness only.
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}
 
@@ -79,35 +79,25 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleReport parses report filters and returns the requested report view.
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, &api.ErrorResponse{Code:"method_not_allowed", Message: http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}
 	log := observability.WithTraceContext(r.Context(), slog.Default())
 
 	query, parseErr := parseReportQuery(r)
 	if parseErr != nil {
-		log.Warn("invalid report query", "error", parseErr)
-		api.WriteJSONError(w, http.StatusBadRequest, parseErr.Error())
+		log.Error("invalid report query", "error", parseErr)
+		api.WriteJSONError(w, http.StatusBadRequest,  &api.ErrorResponse{Code: "invalid_argument", Message: parseErr.Error()})
 		return
 	}
-	log = log.With("pipeline", query.Pipeline)
-	if query.Run != nil {
-		log = log.With("run_no", *query.Run)
-	}
-	if query.Stage != "" {
-		log = log.With("stage", query.Stage)
-	}
-	if query.Job != "" {
-		log = log.With("job", query.Job)
-	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
+	log = observability.WithReportQueryContext(log, query)
 
+	ctx := r.Context()
 	report, err := h.service.GetReport(ctx, query)
 	if err != nil {
-		log.Warn("report request failed", "status_code", err.StatusCode, "error", err.Message)
-		api.WriteJSONError(w, err.StatusCode, err.Error())
+		status, code, message :=  classifyError(err)
+		api.WriteJSONError(w, status, &api.ErrorResponse{Code: code, Message: message})
 		return
 	}
 

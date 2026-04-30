@@ -57,3 +57,8 @@ type JobStatusCallbackRequest struct {
 	Logs     string `json:"logs,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
+
+type ErrorResponse struct {
+	Code string `json:"code"`
+	Message string `json:"message"`
+}
