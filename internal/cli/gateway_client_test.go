@@ -58,7 +58,7 @@ func TestGatewayClientValidate_ErrorBodyAndStatusFallback(t *testing.T) {
 	t.Run("json error body", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":"bad request"}`))
+			_, _ = w.Write([]byte(`{"code":"invalid_argument","message":"bad request"}`))
 		}))
 		defer srv.Close()
 
@@ -152,7 +152,7 @@ func TestGatewayClient_Non200ForDryRunRunReport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadGateway)
-				_, _ = w.Write([]byte(`{"error":"gateway down"}`))
+				_, _ = w.Write([]byte(`{"code":"upstream_unavailable","message":"gateway down"}`))
 			}))
 			defer srv.Close()
 			c := &GatewayClient{baseURL: srv.URL, httpClient: srv.Client()}
