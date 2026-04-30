@@ -41,3 +41,6 @@ temp/
 
 # Local env overrides for host-process startup
 .env.local.*
+
+# envs containing secrets
+.env.prod
