@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/xueyulinn/cicd-system/internal/models"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -41,6 +42,21 @@ func WithPipelineContext(l *slog.Logger, pipeline string, runNo int) *slog.Logge
 		slog.String("pipeline", pipeline),
 		slog.Int("run_no", runNo),
 	)
+}
+
+// WithReportQueryContext enriches a logger with report query fields when present.
+func WithReportQueryContext(l *slog.Logger, query models.ReportQuery) *slog.Logger {
+	l = l.With(slog.String("pipeline", query.Pipeline))
+	if query.Run != nil {
+		l = l.With(slog.Int("run_no", *query.Run))
+	}
+	if query.Stage != "" {
+		l = l.With(slog.String("stage", query.Stage))
+	}
+	if query.Job != "" {
+		l = l.With(slog.String("job", query.Job))
+	}
+	return l
 }
 
 func slogLevelFromEnv() slog.Level {

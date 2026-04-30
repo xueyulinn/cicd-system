@@ -6,6 +6,8 @@ import (
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
+	disableValidationCache(t)
+
 	svc, err := NewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -18,6 +20,8 @@ func TestValidateYAMLValidPipeline(t *testing.T) {
 }
 
 func TestValidateYAMLInvalidPipeline(t *testing.T) {
+	disableValidationCache(t)
+
 	svc, err := NewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -33,6 +37,8 @@ func TestValidateYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLValidPipeline(t *testing.T) {
+	disableValidationCache(t)
+
 	svc, err := NewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -45,6 +51,8 @@ func TestDryRunYAMLValidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLInvalidPipeline(t *testing.T) {
+	disableValidationCache(t)
+
 	svc, err := NewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -60,6 +68,8 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestValidateYAMLParserError(t *testing.T) {
+	disableValidationCache(t)
+
 	svc, err := NewService()
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

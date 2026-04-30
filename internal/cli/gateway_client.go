@@ -136,19 +136,10 @@ func decodeJSONResponse(resp *http.Response, out any) error {
 }
 
 func parseGatewayError(statusCode int, body []byte) error {
-	var errorResp struct {
-		Error  string   `json:"error"`
-		Errors []string `json:"errors"`
-	}
-	if parseErr := json.Unmarshal(body, &errorResp); parseErr == nil {
-		if msg := strings.TrimSpace(errorResp.Error); msg != "" {
+	var typed api.ErrorResponse
+	if parseErr := json.Unmarshal(body, &typed); parseErr == nil {
+		if msg := strings.TrimSpace(typed.Message); msg != "" {
 			return fmt.Errorf("%s", msg)
-		}
-		for _, msg := range errorResp.Errors {
-			msg = strings.TrimSpace(msg)
-			if msg != "" {
-				return fmt.Errorf("%s", msg)
-			}
 		}
 	}
 

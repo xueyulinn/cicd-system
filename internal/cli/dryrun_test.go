@@ -10,6 +10,8 @@ import (
 )
 
 func TestRunDryRun_PrintsOrderedJobs(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath := writeTempPipeline(t, `
 pipeline:
   name: "Test Pipeline"
@@ -65,6 +67,8 @@ integration-tests:
 }
 
 func TestRunDryRun_FailsOnEmptyStage(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath := writeTempPipeline(t, `
 pipeline:
   name: "Test Pipeline"
@@ -92,6 +96,8 @@ compile:
 }
 
 func TestDryRunCmd_ValidatesQuietlyAndPrintsDryRunOutput(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -129,6 +135,8 @@ unit-tests:
 }
 
 func TestDryRunCmd_FailsOnInvalidConfig(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"

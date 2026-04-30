@@ -5,6 +5,8 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+
+	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 func TestSlogLevelFromEnv_debug(t *testing.T) {
@@ -28,6 +30,19 @@ func TestContextWithLogger_roundTrip(t *testing.T) {
 func TestWithPipelineContext(t *testing.T) {
 	l := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	out := WithPipelineContext(l, "pipe-a", 7)
+	// Ensure With was applied (no panic); child should carry attrs when logging.
+	_ = out
+}
+
+func TestWithReportQueryContext(t *testing.T) {
+	l := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	runNo := 7
+	out := WithReportQueryContext(l, models.ReportQuery{
+		Pipeline: "pipe-a",
+		Run:      &runNo,
+		Stage:    "build",
+		Job:      "compile",
+	})
 	// Ensure With was applied (no panic); child should carry attrs when logging.
 	_ = out
 }
