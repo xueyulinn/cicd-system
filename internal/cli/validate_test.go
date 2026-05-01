@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 // writeTempPipelineInGitRepo creates a temp dir, runs "git init", writes pipeline content
@@ -54,13 +52,11 @@ compile:
 `)
 	defer cleanup()
 
-	output, err := captureStdout(t, func() error {
-		return runValidate(&cobra.Command{}, []string{configPath})
-	})
+	output, err := runValidateCommand(t, configPath)
 	if err != nil {
-		t.Fatalf("runValidate returned error: %v", err)
+		t.Fatalf("validate command returned error: %v", err)
 	}
-	if !strings.Contains(output, "Configuration is valid") {
+	if !strings.Contains(output, "pipeline is valid") {
 		t.Errorf("Expected success message in output, got:\n%s", output)
 	}
 }
@@ -81,12 +77,10 @@ compile:
   - image: golang:1.21
   - script:
     - "go build"
-`)
+	`)
 	defer cleanup()
 
-	_, err := captureStdout(t, func() error {
-		return runValidate(&cobra.Command{}, []string{configPath})
-	})
+	_, err := runValidateCommand(t, configPath)
 	if err == nil {
 		t.Fatal("Expected error for stage with no jobs, got nil")
 	}
@@ -110,9 +104,7 @@ func TestRunValidate_MissingFile_ReturnsError(t *testing.T) {
 
 	configPath := filepath.Join(tmpDir, "does-not-exist.yaml")
 
-	_, err := captureStdout(t, func() error {
-		return runValidate(&cobra.Command{}, []string{configPath})
-	})
+	_, err := runValidateCommand(t, configPath)
 	if err == nil {
 		t.Fatal("Expected error for missing file, got nil")
 	}
@@ -123,6 +115,15 @@ func TestRunValidate_MissingFile_ReturnsError(t *testing.T) {
 		!strings.Contains(err.Error(), "cannot find the file") {
 		t.Errorf("Expected stat/no such file error, got: %v", err)
 	}
+}
+
+func runValidateCommand(t *testing.T, configPath string) (string, error) {
+	t.Helper()
+	cmd := *rootCmd
+	cmd.SetArgs([]string{"validate", configPath})
+	return captureStdout(t, func() error {
+		return cmd.Execute()
+	})
 }
 
 func captureStdout(t *testing.T, fn func() error) (string, error) {

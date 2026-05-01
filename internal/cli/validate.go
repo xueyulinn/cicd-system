@@ -25,13 +25,13 @@ var validateCmd = &cobra.Command{
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {
-	repo, err := gitutil.Open(".")
-	if err != nil {
-		return err
+	repo, ok := cmd.Context().Value(repoKey).(*gitutil.Repository)
+	if !ok || repo == nil {
+		return fmt.Errorf("git repository context is missing")
 	}
 	rootDir := repo.Root()
-	pipelinePath := args[0]
 
+	pipelinePath := args[0]
 	completePath := pipelinePath
 	if !filepath.IsAbs(pipelinePath) {
 		completePath = filepath.Join(rootDir, pipelinePath)
@@ -53,7 +53,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if valid {
-		fmt.Println("Configuration is valid")
+		fmt.Println("pipeline is valid")
 	}
 
 	return nil

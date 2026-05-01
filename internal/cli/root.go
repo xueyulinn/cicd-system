@@ -1,16 +1,23 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 )
+
+type repoContextKey struct{}
+var repoKey = repoContextKey{}
 
 var rootCmd = &cobra.Command{
 	Use:           "cicd",
 	Short:         "CI/CD pipeline management tool",
+	Long: "",
+	PersistentPreRunE: openGitRepo,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 }
@@ -21,6 +28,17 @@ func init() {
 	rootCmd.AddCommand(reportCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(dryRunCmd)
+}
+
+func openGitRepo(cmd *cobra.Command, args []string) error {
+	gitRepo, err := gitutil.Open(".")
+	if err != nil {
+		return fmt.Errorf("validate, dryrun, run commands can only run within a git repo: %w", err)
+	}
+	
+	ctx := context.WithValue(cmd.Context(), repoKey, gitRepo)
+	cmd.SetContext(ctx)
+	return nil
 }
 
 // Execute runs the root command.
