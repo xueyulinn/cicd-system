@@ -28,6 +28,16 @@ func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git init failed: %v", err)
 	}
+	addCmd := exec.Command("git", "add", ".")
+	addCmd.Dir = tmpDir
+	if err := addCmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	commitCmd := exec.Command("git", "-c", "user.name=test-user", "-c", "user.email=test@example.com", "commit", "-m", "init")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
+	}
 	origWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -140,6 +150,11 @@ func TestRunValidate_MissingFile_ReturnsError(t *testing.T) {
 	cmd.Dir = tmpDir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git init failed: %v", err)
+	}
+	commitCmd := exec.Command("git", "-c", "user.name=test-user", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "init")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
 	}
 	origWd, _ := os.Getwd()
 	if err := os.Chdir(tmpDir); err != nil {

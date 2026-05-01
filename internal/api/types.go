@@ -13,6 +13,8 @@ type StatusResponse struct {
 // ValidateRequest is the request body for POST /validate and POST /dryrun.
 type ValidateRequest struct {
 	YAMLContent string `json:"yaml_content"`
+	Commit string `json:"commit"`
+	PipelinePath string `json:"pipeline_path"`
 }
 
 // ValidateResponse is the response for POST /validate.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v6"
@@ -107,6 +108,68 @@ func (r *Repository) CreateDetachedWorktree(commit string) (string, func(), erro
 		_ = os.RemoveAll(tmpDir)
 	}
 	return tmpDir, cleanup, nil
+}
+
+// ReadFileAtCommit reads filePath from the given commit via a temporary
+// detached worktree and removes that worktree before returning. filePath may
+// be absolute or relative to the current working directory, but it must
+// resolve inside the repository.
+func (r *Repository) ReadFileAtCommit(commit, filePath string) ([]byte, error) {
+	commit = strings.TrimSpace(commit)
+	filePath = strings.TrimSpace(filePath)
+	if commit == "" {
+		return nil, fmt.Errorf("commit is required")
+	}
+	if filePath == "" {
+		return nil, fmt.Errorf("file path is required")
+	}
+
+	relPath, err := r.resolveRepoRelativePath(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	worktreeDir, cleanup, err := r.CreateDetachedWorktree(commit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare workspace for commit %q: %w", commit, err)
+	}
+	defer cleanup()
+
+	targetPath := filepath.Join(worktreeDir, relPath)
+	content, err := os.ReadFile(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %q at commit %q: %w", filePath, commit, err)
+	}
+
+	return content, nil
+}
+
+func (r *Repository) resolveRepoRelativePath(filePath string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	absPath := filePath
+	if !filepath.IsAbs(absPath) {
+		absPath = filepath.Join(cwd, filePath)
+	}
+	absPath = filepath.Clean(absPath)
+
+	relPath, err := filepath.Rel(r.root, absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve file %q relative to repository root: %w", filePath, err)
+	}
+	relPath = filepath.Clean(relPath)
+	if pathEscapesParent(relPath) {
+		return "", fmt.Errorf("file is outside repository: %s", filePath)
+	}
+
+	return relPath, nil
+}
+
+func pathEscapesParent(path string) bool {
+	return path == ".." || strings.HasPrefix(path, ".."+string(os.PathSeparator))
 }
 
 func (r *Repository) BranchContainsCommit(branch string, commitSHA string) (bool, error) {
