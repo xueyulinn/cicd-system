@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	// register all subcommands
-	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(reportCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(dryRunCmd)

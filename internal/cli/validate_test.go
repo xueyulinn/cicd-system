@@ -36,7 +36,7 @@ func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string
 	return path, func() { _ = os.Chdir(origWd) }
 }
 
-func TestRunVerify_ValidFile(t *testing.T) {
+func TestRunValidate_ValidFile(t *testing.T) {
 	startValidationGatewayServer(t)
 
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
@@ -55,17 +55,17 @@ compile:
 	defer cleanup()
 
 	output, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
+		return runValidate(&cobra.Command{}, []string{configPath})
 	})
 	if err != nil {
-		t.Fatalf("runVerify returned error: %v", err)
+		t.Fatalf("runValidate returned error: %v", err)
 	}
 	if !strings.Contains(output, "Configuration is valid") {
 		t.Errorf("Expected success message in output, got:\n%s", output)
 	}
 }
 
-func TestRunVerify_InvalidFile_ReturnsError(t *testing.T) {
+func TestRunValidate_InvalidFile_ReturnsError(t *testing.T) {
 	startValidationGatewayServer(t)
 
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
@@ -85,7 +85,7 @@ compile:
 	defer cleanup()
 
 	_, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
+		return runValidate(&cobra.Command{}, []string{configPath})
 	})
 	if err == nil {
 		t.Fatal("Expected error for stage with no jobs, got nil")
@@ -95,7 +95,7 @@ compile:
 	}
 }
 
-func TestRunVerify_MissingFile_ReturnsError(t *testing.T) {
+func TestRunValidate_MissingFile_ReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 	cmd := exec.Command("git", "init")
 	cmd.Dir = tmpDir
@@ -111,12 +111,12 @@ func TestRunVerify_MissingFile_ReturnsError(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "does-not-exist.yaml")
 
 	_, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
+		return runValidate(&cobra.Command{}, []string{configPath})
 	})
 	if err == nil {
 		t.Fatal("Expected error for missing file, got nil")
 	}
-	// runVerify returns the error from os.Stat (platform-specific message)
+	// runValidate returns the error from os.Stat (platform-specific message)
 	if !strings.Contains(err.Error(), "stat") &&
 		!strings.Contains(err.Error(), "no such file") &&
 		!strings.Contains(err.Error(), "GetFileAttributesEx") &&

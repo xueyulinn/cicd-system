@@ -25,7 +25,7 @@ var dryRunCmd = &cobra.Command{
 	Long:                  "Validates the specified pipeline file and prints the execution plan without running any jobs. Output defaults to YAML and can be changed with --format json.",
 	Example:               "cicd dryrun .pipelines/pipeline.yaml\ncicd dryrun .pipelines/pipeline.yaml --format json",
 	Args:                  cobra.ExactArgs(1),
-	PreRunE:               runVerifyQuiet,
+	PreRunE:               runValidateQuiet,
 	RunE:                  runDryRun,
 	DisableFlagsInUseLine: true,
 }
@@ -109,8 +109,8 @@ func formatOutput(plan *models.ExecutionPlan, format string) (string, error) {
 	return string(out), nil
 }
 
-// runVerifyQuiet runs the verify command but redirects stdout to /dev/null
-func runVerifyQuiet(cmd *cobra.Command, args []string) error {
+// runValidateQuiet runs the validate command but redirects stdout to /dev/null.
+func runValidateQuiet(cmd *cobra.Command, args []string) error {
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		return err
@@ -119,5 +119,5 @@ func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 	stdout := os.Stdout
 	os.Stdout = devNull
 	defer func() { os.Stdout = stdout }()
-	return runVerify(cmd, args)
+	return runValidate(cmd, args)
 }

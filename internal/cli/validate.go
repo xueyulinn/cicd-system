@@ -13,17 +13,18 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 )
 
-var verifyCmd = &cobra.Command{
-	Use:                   "verify {pipeline-path|pipeline-directory}",
+var validateCmd = &cobra.Command{
+	Use:                   "validate {pipeline-path|pipeline-directory}",
 	Short:                 "Validate a pipeline file or directory",
 	Long:                  "Validate a single pipeline YAML file, or recursively validate all pipeline YAML files under a directory. The command stops at the first failure and prints the exact error location.",
-	Example:               "cicd verify ./.pipelines/build.yaml\ncicd verify ./.pipelines",
+	Example:               "cicd validate ./.pipelines/build.yaml\ncicd validate ./.pipelines",
 	Args:                  cobra.ExactArgs(1),
-	RunE:                  runVerify,
+	RunE:                  runValidate,
+	Aliases:               []string{"verify"},
 	DisableFlagsInUseLine: true,
 }
 
-func runVerify(cmd *cobra.Command, args []string) error {
+func runValidate(cmd *cobra.Command, args []string) error {
 	repo, err := gitutil.Open(".")
 	if err != nil {
 		return err
@@ -44,10 +45,10 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 	gatewayClient := NewGatewayClient()
 	if info.IsDir() {
-		return verifyPipelineDir(completePath, gatewayClient)
+		return validatePipelineDir(completePath, gatewayClient)
 	}
 
-	valid, err := verifySinglePipeline(completePath, gatewayClient)
+	valid, err := validateSinglePipeline(completePath, gatewayClient)
 	if err != nil {
 		return err
 	}
@@ -58,7 +59,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
+func validatePipelineDir(dir string, gatewayClient *GatewayClient) error {
 	targets, err := collectYAMLFiles(dir)
 	if err != nil {
 		return fmt.Errorf("failed to enumerate directory %q: %w", dir, err)
@@ -70,7 +71,7 @@ func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
 	sort.Strings(targets)
 
 	for _, target := range targets {
-		valid, err := verifySinglePipeline(target, gatewayClient)
+		valid, err := validateSinglePipeline(target, gatewayClient)
 		if err != nil {
 			// Fast fail: stop at the first invalid file or validation request error.
 			return err
@@ -84,7 +85,7 @@ func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
 	return nil
 }
 
-func verifySinglePipeline(pipelinePath string, gatewayClient *GatewayClient) (bool, error) {
+func validateSinglePipeline(pipelinePath string, gatewayClient *GatewayClient) (bool, error) {
 	fileContent, err := os.ReadFile(pipelinePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to read file content %q: %w", pipelinePath, err)
