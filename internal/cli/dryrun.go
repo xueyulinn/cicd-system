@@ -10,6 +10,7 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/formatter"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
@@ -36,30 +37,36 @@ func init() {
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
-	repo, err := gitutil.Open(".")
+	repo, ok := cmd.Context().Value(repoKey).(*gitutil.Repository)
+	if !ok || repo == nil {
+		return fmt.Errorf("git repository context is missing")
+	}
+	rootDir := repo.Root()
+
+	completePath, _, err := pipelinepath.ResolveInputPath(rootDir, args[0])
 	if err != nil {
 		return err
 	}
-	rootDir := repo.Root()
-	pipelinePath := args[0]
 
-	completePath := pipelinePath
-	if !filepath.IsAbs(pipelinePath) {
-		completePath = filepath.Join(rootDir, pipelinePath)
-	}
-	completePath = filepath.Clean(completePath)
-
-	// Read file content
-	fileContent, err := os.ReadFile(completePath)
+	commit, err := repo.GetHeadCommit()
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("get head commit failed: %w", err)
 	}
 
-	// Create gateway client
+	pipelineData, err := repo.ReadFileAtCommit(commit, completePath)
+	if err != nil {
+		return fmt.Errorf("read pipeline file failed: %w", err)
+	}
+
 	client := NewGatewayClient()
 
 	// Call gateway for dry run
-	response, err := client.DryRun(api.ValidateRequest{YAMLContent: string(fileContent)})
+	response, err := client.DryRun(api.ValidateRequest{
+		YAMLContent: string(pipelineData),
+		Commit: commit,
+		PipelinePath: filepath.Base(completePath),
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("dry run failed, error: %w", err)
 	}
