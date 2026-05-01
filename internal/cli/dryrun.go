@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/formatter"
-	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
@@ -37,9 +36,9 @@ func init() {
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
-	repo, ok := cmd.Context().Value(repoKey).(*gitutil.Repository)
-	if !ok || repo == nil {
-		return fmt.Errorf("git repository context is missing")
+	repo, err := repoFromCommandContext(cmd)
+	if err != nil {
+		return err
 	}
 	rootDir := repo.Root()
 
@@ -62,10 +61,10 @@ func runDryRun(cmd *cobra.Command, args []string) error {
 
 	// Call gateway for dry run
 	response, err := client.DryRun(api.ValidateRequest{
-		YAMLContent: string(pipelineData),
-		Commit: commit,
+		YAMLContent:  string(pipelineData),
+		Commit:       commit,
 		PipelinePath: filepath.Base(completePath),
-		},
+	},
 	)
 	if err != nil {
 		return fmt.Errorf("dry run failed, error: %w", err)
