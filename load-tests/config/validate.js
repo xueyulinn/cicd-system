@@ -1,7 +1,7 @@
 import { yamlGenerationConfig } from "./yaml.js";
 import { generateRandomYAMLContent } from "../utils/yaml.js";
 
-const DEFAULT_BASE_URL = "http://localhost:8000";
+const DEFAULT_BASE_URL = "http://localhost:8001";
 const DEFAULT_VALIDATE_PATH = "/validate";
 const DEFAULT_THINK_TIME = 0;
 

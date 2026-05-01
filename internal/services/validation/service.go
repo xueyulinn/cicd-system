@@ -55,8 +55,8 @@ func validatePipelineContent(yamlContent string) (*models.Pipeline, []string) {
 }
 
 // ValidateYAML validates YAML pipeline content.
-func (s *Service) ValidateYAML(ctx context.Context, yamlContent string) api.ValidateResponse {
-	key := cache.ValidateKey(s.cacheCfg.KeyPrefix, yamlContent)
+func (s *Service) ValidateYAML(ctx context.Context, req *api.ValidateRequest) api.ValidateResponse {
+	key := cache.ValidateKey(s.cacheCfg.KeyPrefix, req.PipelinePath, req.Commit)
 
 	val, err := s.cacheStore.Get(ctx, key)
 	if err == nil {
@@ -71,7 +71,7 @@ func (s *Service) ValidateYAML(ctx context.Context, yamlContent string) api.Vali
 		slog.Warn("validation cache get failed; fallback to compute", "error", err)
 	}
 
-	_, errs := validatePipelineContent(yamlContent)
+	_, errs := validatePipelineContent(req.YAMLContent)
 	response := api.ValidateResponse{
 		Valid:  len(errs) == 0,
 		Errors: errs,
@@ -91,8 +91,8 @@ func (s *Service) ValidateYAML(ctx context.Context, yamlContent string) api.Vali
 }
 
 // DryRunYAML validates YAML and returns dry run output.
-func (s *Service) DryRunYAML(ctx context.Context, yamlContent string) api.DryRunResponse {
-	key := cache.DryRunKey(s.cacheCfg.KeyPrefix, yamlContent)
+func (s *Service) DryRunYAML(ctx context.Context, req *api.ValidateRequest) api.DryRunResponse {
+	key := cache.DryRunKey(s.cacheCfg.KeyPrefix, req.PipelinePath, req.Commit)
 
 	val, err := s.cacheStore.Get(ctx, key)
 	if err == nil {
@@ -107,7 +107,7 @@ func (s *Service) DryRunYAML(ctx context.Context, yamlContent string) api.DryRun
 		slog.Warn("dryrun cache get failed; fallback to compute", "error", err)
 	}
 
-	pipeline, errors := validatePipelineContent(yamlContent)
+	pipeline, errors := validatePipelineContent(req.YAMLContent)
 	if len(errors) > 0 {
 		return api.DryRunResponse{
 			Valid:  false,

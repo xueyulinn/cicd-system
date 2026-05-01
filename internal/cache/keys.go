@@ -1,35 +1,34 @@
 package cache
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 )
 
 const (
-	validateNamespace = "validate:v1"
-	dryRunNamespace   = "dryrun:v1"
+	validateNamespace = "validate:v2"
+	dryRunNamespace   = "dryrun:v2"
 )
 
 // ValidateKey returns a stable redis key for validate response cache.
-func ValidateKey(prefix, yamlContent string) string {
-	return buildKey(prefix, validateNamespace, yamlContent)
+func ValidateKey(prefix, path, commit string) string {
+	return buildKey(prefix, validateNamespace, path, commit)
 }
 
 // DryRunKey returns a stable redis key for dryrun response cache.
-func DryRunKey(prefix, yamlContent string) string {
-	return buildKey(prefix, dryRunNamespace, yamlContent)
+func DryRunKey(prefix, path, commit string) string {
+	return buildKey(prefix, dryRunNamespace, path, commit)
 }
 
-func buildKey(prefix, namespace, content string) string {
-	sum := sha256.Sum256([]byte(content))
-	hash := hex.EncodeToString(sum[:])
+func buildKey(prefix, namespace, path, commit string) string {
+	path = strings.TrimSpace(path)
+	commit = strings.TrimSpace(commit)
+
+	val := commit + ":" + path
 
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
-		return namespace + ":" + hash
+		return namespace + ":" + val
 	}
 
-	return prefix + ":" + namespace + ":" + hash
+	return prefix + ":" + namespace + ":" + val
 }
-

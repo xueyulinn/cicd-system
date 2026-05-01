@@ -3,6 +3,8 @@ package validation
 import (
 	"context"
 	"testing"
+
+	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
@@ -13,7 +15,7 @@ func TestValidateYAMLValidPipeline(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	resp := svc.ValidateYAML(context.Background(), validPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(validPipelineYAML))
 	if !resp.Valid {
 		t.Fatalf("ValidateYAML valid = false, errors = %+v", resp.Errors)
 	}
@@ -27,7 +29,7 @@ func TestValidateYAMLInvalidPipeline(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	resp := svc.ValidateYAML(context.Background(), invalidPipelineYAML)
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(invalidPipelineYAML))
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -44,7 +46,7 @@ func TestDryRunYAMLValidPipeline(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	resp := svc.DryRunYAML(context.Background(), validPipelineYAML)
+	resp := svc.DryRunYAML(context.Background(), newValidateRequest(validPipelineYAML))
 	if !resp.Valid {
 		t.Fatalf("DryRunYAML valid = false, errors = %+v", resp.Errors)
 	}
@@ -58,7 +60,7 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	resp := svc.DryRunYAML(context.Background(), invalidPipelineYAML)
+	resp := svc.DryRunYAML(context.Background(), newValidateRequest(invalidPipelineYAML))
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -75,11 +77,19 @@ func TestValidateYAMLParserError(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	resp := svc.ValidateYAML(context.Background(), ":::")
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(":::"))
 	if resp.Valid {
 		t.Fatal("expected invalid response for malformed YAML")
 	}
 	if len(resp.Errors) == 0 {
 		t.Fatal("expected parser errors")
+	}
+}
+
+func newValidateRequest(yamlContent string) *api.ValidateRequest {
+	return &api.ValidateRequest{
+		YAMLContent:  yamlContent,
+		Commit:       "abc123",
+		PipelinePath: "build.yaml",
 	}
 }

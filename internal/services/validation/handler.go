@@ -63,7 +63,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	response := h.service.ValidateYAML(ctx, req.YAMLContent)
+	response := h.service.ValidateYAML(ctx, &req)
 
 	api.WriteJSON(w, http.StatusOK, response)
 }
@@ -89,7 +89,7 @@ func (h *Handler) handleDryRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	response := h.service.DryRunYAML(ctx, req.YAMLContent)
+	response := h.service.DryRunYAML(ctx, &req)
 
 	api.WriteJSON(w, http.StatusOK, response)
 }
