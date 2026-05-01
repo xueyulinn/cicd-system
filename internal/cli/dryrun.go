@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
+	"github.com/xueyulinn/cicd-system/internal/common/formatter"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
@@ -97,9 +98,9 @@ func formatOutput(plan *models.ExecutionPlan, format string) (string, error) {
 	)
 	switch format {
 	case formatYAML:
-		out, err = FormatExecutionPlanYAML(plan)
+		out, err = formatter.FormatExecutionPlanYAML(plan)
 	case formatJSON:
-		out, err = FormatExecutionPlanJSON(plan)
+		out, err = formatter.FormatExecutionPlanJSON(plan)
 	default:
 		return "", fmt.Errorf("invalid format %q (supported: yaml, json)", format)
 	}

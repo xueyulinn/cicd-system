@@ -1,4 +1,4 @@
-package cli
+package formatter
 
 import (
 	"strings"
@@ -108,7 +108,6 @@ func TestFormatReportJSON_NilReport(t *testing.T) {
 	}
 }
 
-// TestFormatReportYAML_JobFailuresField verifies that job output always includes the failures field.
 func TestFormatReportYAML_JobFailuresField(t *testing.T) {
 	start := time.Date(2025, 9, 1, 10, 0, 0, 0, time.UTC)
 	end := time.Date(2025, 9, 1, 10, 5, 0, 0, time.UTC)

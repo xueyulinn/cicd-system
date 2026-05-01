@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 )
 
 var validateCmd = &cobra.Command{
@@ -31,16 +32,9 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 	rootDir := repo.Root()
 
-	pipelinePath := args[0]
-	completePath := pipelinePath
-	if !filepath.IsAbs(pipelinePath) {
-		completePath = filepath.Join(rootDir, pipelinePath)
-	}
-	completePath = filepath.Clean(completePath)
-
-	info, err := os.Stat(completePath)
+	completePath, info, err := pipelinepath.ResolveInputPath(rootDir, args[0])
 	if err != nil {
-		return fmt.Errorf("failed to get the info of path %q: %w", completePath, err)
+		return err
 	}
 
 	gatewayClient := NewGatewayClient()
@@ -78,7 +72,7 @@ func validatePipelineDir(dir string, gatewayClient *GatewayClient) error {
 		}
 
 		if valid {
-			fmt.Printf("%s: Configuration is valid\n", target)
+			fmt.Printf("%s: pipeline is valid\n", target)
 		}
 	}
 
