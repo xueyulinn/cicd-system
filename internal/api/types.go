@@ -13,6 +13,8 @@ type StatusResponse struct {
 // ValidateRequest is the request body for POST /validate and POST /dryrun.
 type ValidateRequest struct {
 	YAMLContent string `json:"yaml_content"`
+	Commit string `json:"commit"`
+	PipelinePath string `json:"pipeline_path"`
 }
 
 // ValidateResponse is the response for POST /validate.
@@ -23,8 +25,8 @@ type ValidateResponse struct {
 
 // DryRunResponse is the response for POST /dryrun.
 type DryRunResponse struct {
-	Valid  bool     `json:"valid"`
-	Errors []string `json:"errors,omitempty"`
+	Valid         bool                  `json:"valid"`
+	Errors        []string              `json:"errors,omitempty"`
 	ExecutionPlan *models.ExecutionPlan `json:"execution_plan,omitempty"`
 }
 
@@ -56,4 +58,9 @@ type JobStatusCallbackRequest struct {
 	Status   string `json:"status"`
 	Logs     string `json:"logs,omitempty"`
 	Error    string `json:"error,omitempty"`
+}
+
+type ErrorResponse struct {
+	Code string `json:"code"`
+	Message string `json:"message"`
 }

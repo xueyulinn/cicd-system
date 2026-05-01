@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 // writeTempPipelineInGitRepo creates a temp dir, runs "git init", writes pipeline content
@@ -17,7 +15,11 @@ import (
 func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string, cleanup func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "pipeline.yaml")
+	pipelineDir := filepath.Join(tmpDir, ".pipelines")
+	if err := os.MkdirAll(pipelineDir, 0o755); err != nil {
+		t.Fatalf("Failed to create pipeline dir: %v", err)
+	}
+	path := filepath.Join(pipelineDir, "pipeline.yaml")
 	if err := os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644); err != nil {
 		t.Fatalf("Failed to write pipeline file: %v", err)
 	}
@@ -25,6 +27,16 @@ func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string
 	cmd.Dir = tmpDir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git init failed: %v", err)
+	}
+	addCmd := exec.Command("git", "add", ".")
+	addCmd.Dir = tmpDir
+	if err := addCmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	commitCmd := exec.Command("git", "-c", "user.name=test-user", "-c", "user.email=test@example.com", "commit", "-m", "init")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
 	}
 	origWd, err := os.Getwd()
 	if err != nil {
@@ -36,7 +48,9 @@ func writeTempPipelineInGitRepo(t *testing.T, content string) (configPath string
 	return path, func() { _ = os.Chdir(origWd) }
 }
 
-func TestRunVerify_ValidFile(t *testing.T) {
+func TestRunValidate_ValidFile(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -52,18 +66,55 @@ compile:
 `)
 	defer cleanup()
 
-	output, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
-	})
+	output, err := runValidateCommand(t, configPath)
 	if err != nil {
-		t.Fatalf("runVerify returned error: %v", err)
+		t.Fatalf("validate command returned error: %v", err)
 	}
-	if !strings.Contains(output, "Configuration is valid") {
+	if !strings.Contains(output, "pipeline is valid") {
 		t.Errorf("Expected success message in output, got:\n%s", output)
 	}
 }
 
-func TestRunVerify_InvalidFile_ReturnsError(t *testing.T) {
+func TestRunValidate_FromPipelinesWorkingDir_ValidFile(t *testing.T) {
+	startValidationGatewayServer(t)
+
+	_, cleanup := writeTempPipelineInGitRepo(t, `
+pipeline:
+  name: "Test Pipeline"
+
+stages:
+  - build
+
+compile:
+  - stage: build
+  - image: golang:1.21
+  - script:
+    - "go build"
+`)
+	defer cleanup()
+
+	repoRoot, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	pipelineDir := filepath.Join(repoRoot, ".pipelines")
+	if err := os.Chdir(pipelineDir); err != nil {
+		t.Fatalf("chdir pipeline dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(repoRoot) }()
+
+	output, err := runValidateCommand(t, "pipeline.yaml")
+	if err != nil {
+		t.Fatalf("validate command returned error: %v", err)
+	}
+	if !strings.Contains(output, "pipeline is valid") {
+		t.Errorf("Expected success message in output, got:\n%s", output)
+	}
+}
+
+func TestRunValidate_InvalidFile_ReturnsError(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test"
@@ -77,12 +128,10 @@ compile:
   - image: golang:1.21
   - script:
     - "go build"
-`)
+	`)
 	defer cleanup()
 
-	_, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
-	})
+	_, err := runValidateCommand(t, configPath)
 	if err == nil {
 		t.Fatal("Expected error for stage with no jobs, got nil")
 	}
@@ -91,12 +140,21 @@ compile:
 	}
 }
 
-func TestRunVerify_MissingFile_ReturnsError(t *testing.T) {
+func TestRunValidate_MissingFile_ReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
+	pipelineDir := filepath.Join(tmpDir, ".pipelines")
+	if err := os.MkdirAll(pipelineDir, 0o755); err != nil {
+		t.Fatalf("mkdir pipeline dir: %v", err)
+	}
 	cmd := exec.Command("git", "init")
 	cmd.Dir = tmpDir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git init failed: %v", err)
+	}
+	commitCmd := exec.Command("git", "-c", "user.name=test-user", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "init")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
 	}
 	origWd, _ := os.Getwd()
 	if err := os.Chdir(tmpDir); err != nil {
@@ -104,21 +162,28 @@ func TestRunVerify_MissingFile_ReturnsError(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(origWd) }()
 
-	configPath := filepath.Join(tmpDir, "does-not-exist.yaml")
+	configPath := filepath.Join(pipelineDir, "does-not-exist.yaml")
 
-	_, err := captureStdout(t, func() error {
-		return runVerify(&cobra.Command{}, []string{configPath})
-	})
+	_, err := runValidateCommand(t, configPath)
 	if err == nil {
 		t.Fatal("Expected error for missing file, got nil")
 	}
-	// runVerify returns the error from os.Stat (platform-specific message)
+	// runValidate returns the error from os.Stat (platform-specific message)
 	if !strings.Contains(err.Error(), "stat") &&
 		!strings.Contains(err.Error(), "no such file") &&
 		!strings.Contains(err.Error(), "GetFileAttributesEx") &&
 		!strings.Contains(err.Error(), "cannot find the file") {
 		t.Errorf("Expected stat/no such file error, got: %v", err)
 	}
+}
+
+func runValidateCommand(t *testing.T, configPath string) (string, error) {
+	t.Helper()
+	cmd := *rootCmd
+	cmd.SetArgs([]string{"validate", configPath})
+	return captureStdout(t, func() error {
+		return cmd.Execute()
+	})
 }
 
 func captureStdout(t *testing.T, fn func() error) (string, error) {

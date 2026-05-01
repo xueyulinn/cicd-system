@@ -34,7 +34,7 @@ mysql_port = v.dig("mysql", "service", "port") || 3306
 rabbit_amqp_port = v.dig("rabbitmq", "service", "amqpPort") || 5672
 rabbit_mgmt_port = v.dig("rabbitmq", "service", "managementPort") || 15672
 redis_image = v.dig("composeLocal", "redis", "image") || "redis:7-alpine"
-redis_port = v.dig("composeLocal", "redis", "port") || 6379
+redis_port = v.dig("redis", "service", "port") || v.dig("composeLocal", "redis", "port") || 6379
 gateway_port = v.dig("apiGateway", "service", "port") || 8000
 validation_port = v.dig("validationService", "service", "port") || 8001
 exec_port = v.dig("executionService", "service", "port") || 8002
@@ -114,7 +114,14 @@ lines << "ORCHESTRATOR_URL=http://orchestrator-service:#{exec_port}"
 lines << "WORKER_URL=http://worker-service:#{worker_port}"
 lines << "REPORTING_URL=http://reporting-service:#{reporting_port}"
 lines << "REPORT_DB_DSN=#{v.dig('mysql', 'auth', 'username')}:#{v.dig('mysql', 'auth', 'password')}@tcp(mysql:#{mysql_port})/#{v.dig('mysql', 'auth', 'database')}?parseTime=true&charset=utf8mb4&loc=UTC"
+lines << "VALIDATION_CACHE_ENABLED=#{v.dig('validationService', 'cache', 'enabled').nil? ? true : v.dig('validationService', 'cache', 'enabled')}"
 lines << "VALIDATION_CACHE_REDIS_URL=redis://redis:#{redis_port}/0"
+lines << "VALIDATION_CACHE_KEY_PREFIX=#{v.dig('validationService', 'cache', 'keyPrefix') || 'cicd'}"
+lines << "VALIDATION_CACHE_VALIDATE_TTL=#{v.dig('validationService', 'cache', 'validateTTL') || '10m'}"
+lines << "VALIDATION_CACHE_DRYRUN_TTL=#{v.dig('validationService', 'cache', 'dryRunTTL') || '5m'}"
+lines << "VALIDATION_CACHE_DIAL_TIMEOUT=#{v.dig('validationService', 'cache', 'dialTimeout') || '2s'}"
+lines << "VALIDATION_CACHE_READ_TIMEOUT=#{v.dig('validationService', 'cache', 'readTimeout') || '500ms'}"
+lines << "VALIDATION_CACHE_WRITE_TIMEOUT=#{v.dig('validationService', 'cache', 'writeTimeout') || '500ms'}"
 
 lines << "PUBLISHER_CONCURRENCY=#{v.dig('executionService', 'publisherConcurrency') || 1}"
 lines << "WORKER_CONCURRENCY=#{v.dig('workerService', 'concurrency') || 1}"

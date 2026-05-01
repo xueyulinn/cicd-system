@@ -13,19 +13,20 @@ import (
 // Handler exposes HTTP endpoints for orchestrator service operations.
 type Handler struct {
 	service *Service
-	initErr error
 }
 
 // NewHandler creates a Handler and initializes its underlying Service.
-func NewHandler() *Handler {
+func NewHandler() (*Handler, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	svc, err := NewService(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		service: svc,
-		initErr: err,
-	}
+	}, nil
 }
 
 // Close releases resources held by the underlying orchestrator service.
@@ -47,11 +48,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -78,11 +74,6 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleExecution(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
 		return
 	}
 
@@ -120,26 +111,8 @@ func (h *Handler) handleJobFinished(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn func(context.Context, api.JobStatusCallbackRequest) error) {
-	if r.Method != http.MethodPost {
-		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
-		return
-	}
-
-	if h.initErr != nil {
-		api.WriteJSONError(w, http.StatusServiceUnavailable, "orchestrator service not ready: "+h.initErr.Error())
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
-		return
-	}
-	defer func() { _ = r.Body.Close() }()
-
-	var req api.JobStatusCallbackRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+	req, ok := h.decodeJobCallbackRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -149,4 +122,26 @@ func (h *Handler) handleJobCallback(w http.ResponseWriter, r *http.Request, fn f
 	}
 
 	api.WriteJSON(w, http.StatusOK, api.StatusResponse{Status: "ok"})
+}
+
+func (h *Handler) decodeJobCallbackRequest(w http.ResponseWriter, r *http.Request) (api.JobStatusCallbackRequest, bool) {
+	if r.Method != http.MethodPost {
+		api.WriteJSONError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
+		return api.JobStatusCallbackRequest{}, false
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, "failed to read request body: "+err.Error())
+		return api.JobStatusCallbackRequest{}, false
+	}
+	defer func() { _ = r.Body.Close() }()
+
+	var req api.JobStatusCallbackRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		api.WriteJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return api.JobStatusCallbackRequest{}, false
+	}
+
+	return req, true
 }

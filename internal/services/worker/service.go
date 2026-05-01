@@ -22,9 +22,13 @@ import (
 const (
 	defaultJobTimeout = 10 * time.Minute
 
-	workerTracerScope             = "internal/services/worker"
-	orchestratorHTTPDownstreamTag = "orchestrator"
+	workerTracerScope                 = "internal/services/worker"
+	orchestratorHTTPDownstreamTag     = "orchestrator"
+	defaultFinishedCallbackRetryDelay = time.Second
+	maxFinishedCallbackRetryDelay     = 30 * time.Second
 )
+
+var finishedCallbackRetryDelay = defaultFinishedCallbackRetryDelay
 
 // Service runs the worker consumers and dependency checks.
 type Service struct {
@@ -119,6 +123,16 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		span.End()
 	}()
 
+	job := msg.Job
+	jobName := job.Name
+	if jobName == "" {
+		jobName = "unnamed"
+	}
+
+	if callbackErr := s.callbackJobStarted(ctx, msg); callbackErr != nil {
+		return fmt.Errorf("callback job started: %w", callbackErr)
+	}
+
 	if s.docker == nil {
 		return fmt.Errorf("docker client not available")
 	}
@@ -127,28 +141,18 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 	jobCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	job := msg.Job
-	jobName := job.Name
-	if jobName == "" {
-		jobName = "unnamed"
-	}
-
-	if err := s.callbackJobStarted(ctx, msg); err != nil {
-		return fmt.Errorf("callback job started: %w", err)
-	}
-
 	logs, execErr := s.ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
-	
+
 	if execErr != nil {
 		slog.Error("execute job failed",
-      	"pipeline", msg.PipelineName,
-      	"run_no", msg.RunNo,
-      	"stage", msg.Stage,
-      	"job", jobName,
-      	"error", execErr,
-      	"logs", logs,
-  	)
-		if callbackErr := s.callbackJobFinished(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
+			"pipeline", msg.PipelineName,
+			"run_no", msg.RunNo,
+			"stage", msg.Stage,
+			"job", jobName,
+			"error", execErr,
+			"logs", logs,
+		)
+		if callbackErr := s.reportJobFinishedUntilSuccess(ctx, msg, store.StatusFailed, "", execErr.Error()); callbackErr != nil {
 			return fmt.Errorf("callback job finished (failed): %w", callbackErr)
 		}
 		// Execution-level failures are terminal for this job message once status
@@ -156,9 +160,43 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 		return nil
 	}
 
-	if err := s.callbackJobFinished(ctx, msg, store.StatusSuccess, logs, ""); err != nil {
-		return fmt.Errorf("callback job finished: %w", err)
+	if callbackErr := s.reportJobFinishedUntilSuccess(ctx, msg, store.StatusSuccess, logs, ""); callbackErr != nil {
+		return fmt.Errorf("callback job finished: %w", callbackErr)
 	}
 
 	return nil
+}
+
+func (s *Service) reportJobFinishedUntilSuccess(ctx context.Context, msg messages.JobExecutionMessage, status string, logs string, errMsg string) error {
+	retryDelay := finishedCallbackRetryDelay
+	if retryDelay <= 0 {
+		retryDelay = defaultFinishedCallbackRetryDelay
+	}
+
+	for {
+		err := s.callbackJobFinished(ctx, msg, status, logs, errMsg)
+		if err == nil {
+			return nil
+		}
+
+		slog.Warn("callback job finished failed; retrying",
+			"pipeline", msg.PipelineName,
+			"run_no", msg.RunNo,
+			"stage", msg.Stage,
+			"job", msg.Job.Name,
+			"status", status,
+			"error", err,
+		)
+
+		if waitErr := waitForRetry(ctx, retryDelay); waitErr != nil {
+			return fmt.Errorf("retry callback job finished: %w", err)
+		}
+
+		if retryDelay < maxFinishedCallbackRetryDelay {
+			retryDelay *= 2
+			if retryDelay > maxFinishedCallbackRetryDelay {
+				retryDelay = maxFinishedCallbackRetryDelay
+			}
+		}
+	}
 }

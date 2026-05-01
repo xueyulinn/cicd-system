@@ -37,8 +37,14 @@ compile:
     - go test ./...
 `
 
-func newValidationMux() *http.ServeMux {
-	h := NewHandler()
+func newValidationMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	disableValidationCache(t)
+
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return mux
@@ -72,7 +78,12 @@ func doRequestWithBody(t *testing.T, mux *http.ServeMux, method, path string, bo
 }
 
 func TestNewHandler(t *testing.T) {
-	h := NewHandler()
+	disableValidationCache(t)
+
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
 	if h == nil {
 		t.Fatal("expected handler to be initialized")
 		return
@@ -83,7 +94,7 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestHandleHealth(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/health", nil)
 	if rec.Code != http.StatusOK {
@@ -103,7 +114,7 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleReady(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/ready", nil)
 	if rec.Code != http.StatusOK {
@@ -120,7 +131,7 @@ func TestHandleReady(t *testing.T) {
 }
 
 func TestHandleValidate(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/validate", nil)
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -169,7 +180,7 @@ func TestHandleValidate(t *testing.T) {
 }
 
 func TestHandleDryRun(t *testing.T) {
-	mux := newValidationMux()
+	mux := newValidationMux(t)
 
 	rec := doRequest(t, mux, http.MethodGet, "/dryrun", nil)
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -197,8 +208,8 @@ func TestHandleDryRun(t *testing.T) {
 		t.Fatalf("marshal request failed: %v", err)
 	}
 	rec = doRequest(t, mux, http.MethodPost, "/dryrun", invalidReq)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid pipeline status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	if !strings.Contains(rec.Body.String(), `"valid":false`) {
 		t.Fatalf("expected invalid response, got: %q", rec.Body.String())

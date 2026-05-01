@@ -20,7 +20,7 @@ func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo
 		GitBranch:  runInfo.Branch,
 		GitHash:    runInfo.Commit,
 		GitRepo:    runInfo.RepoURL,
-		TraceID: getSpanTraceId(ctx),
+		TraceID:    getSpanTraceId(ctx),
 		RequestKey: requestKey,
 	}
 	if strings.TrimSpace(in.GitRepo) == "" {
@@ -119,7 +119,7 @@ func (s *Service) markJobRunning(ctx context.Context, pipeline string, runNo int
 	return s.store.UpdateJob(ctx, pipeline, runNo, stage, job, update)
 }
 
-func getSpanTraceId (ctx context.Context) string {
+func getSpanTraceId(ctx context.Context) string {
 	sc := trace.SpanContextFromContext(ctx)
 	if !sc.IsValid() {
 		return ""

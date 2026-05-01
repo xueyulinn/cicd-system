@@ -1,8 +1,7 @@
 package cli
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 	"strings"
 	"testing"
 
@@ -10,7 +9,9 @@ import (
 )
 
 func TestRunDryRun_PrintsOrderedJobs(t *testing.T) {
-	configPath := writeTempPipeline(t, `
+	startValidationGatewayServer(t)
+
+	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
 
@@ -37,9 +38,12 @@ integration-tests:
   - script:
     - "make integration"
 `)
+	defer cleanup()
+
+	cmd := newRepoContextCommand(t)
 
 	output, err := captureStdout(t, func() error {
-		return runDryRun(&cobra.Command{}, []string{configPath})
+		return runDryRun(cmd, []string{configPath})
 	})
 	if err != nil {
 		t.Fatalf("runDryRun returned error: %v", err)
@@ -65,7 +69,9 @@ integration-tests:
 }
 
 func TestRunDryRun_FailsOnEmptyStage(t *testing.T) {
-	configPath := writeTempPipeline(t, `
+	startValidationGatewayServer(t)
+
+	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
 
@@ -79,9 +85,12 @@ compile:
   - script:
     - "make build"
 `)
+	defer cleanup()
+
+	cmd := newRepoContextCommand(t)
 
 	_, err := captureStdout(t, func() error {
-		return runDryRun(&cobra.Command{}, []string{configPath})
+		return runDryRun(cmd, []string{configPath})
 	})
 	if err == nil {
 		t.Fatal("Expected error for stage with no jobs, got nil")
@@ -92,6 +101,8 @@ compile:
 }
 
 func TestDryRunCmd_ValidatesQuietlyAndPrintsDryRunOutput(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -129,6 +140,8 @@ unit-tests:
 }
 
 func TestDryRunCmd_FailsOnInvalidConfig(t *testing.T) {
+	startValidationGatewayServer(t)
+
 	configPath, cleanup := writeTempPipelineInGitRepo(t, `
 pipeline:
   name: "Test Pipeline"
@@ -163,12 +176,13 @@ func runDryRunCommand(t *testing.T, configPath string) (string, error) {
 	})
 }
 
-func writeTempPipeline(t *testing.T, content string) string {
+func newRepoContextCommand(t *testing.T) *cobra.Command {
 	t.Helper()
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "pipeline.yaml")
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644); err != nil {
-		t.Fatalf("Failed to write pipeline file: %v", err)
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	if err := openGitRepo(cmd, nil); err != nil {
+		t.Fatalf("openGitRepo: %v", err)
 	}
-	return path
+	return cmd
 }

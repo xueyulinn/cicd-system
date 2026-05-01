@@ -14,7 +14,7 @@ schema_config:
   configs:
     - from: 2026-01-01
       store: tsdb
-      object_store: filesystem
+      object_store: s3
       schema: v13
       index:
         # index_2024-04-22 
@@ -22,8 +22,15 @@ schema_config:
         period: 24h
 
 storage_config:
-  filesystem:
-    directory: /loki/chunks
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/index_cache
+    cache_ttl: 24h         # Can be increased for faster performance over longer query periods, uses more disk space
+  aws:
+    bucketnames: ${S3_BUCKET}
+    region: ${AWS_REGION}
+    access_key_id: ${AWS_ACCESS_KEY_ID}
+    secret_access_key: ${AWS_SECRET_ACCESS_KEY}
 
 limits_config:
   # enable log to contain key-value metadata e.g. Otel log attributes
@@ -33,6 +40,14 @@ limits_config:
 
 compactor:
   working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: s3
+
+ingester:
+  chunk_idle_period: 30m
+  max_chunk_age: 2h
+  chunk_target_size: 1.5MB
+  chunk_retain_period: 0s
 
 analytics:
   # not report data used to Grafana

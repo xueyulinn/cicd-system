@@ -87,8 +87,6 @@ services:
         condition: service_healthy
       validation-service:
         condition: service_started
-      worker-service:
-        condition: service_started
     ports:
       - "${ORCHESTRATOR_SERVICE_PORT}:${ORCHESTRATOR_SERVICE_PORT}"
 
@@ -96,7 +94,14 @@ services:
     image: ${VALIDATION_SERVICE_IMAGE}
     environment:
       PORT: "${VALIDATION_SERVICE_PORT}"
+      VALIDATION_CACHE_ENABLED: ${VALIDATION_CACHE_ENABLED}
       VALIDATION_CACHE_REDIS_URL: ${VALIDATION_CACHE_REDIS_URL}
+      VALIDATION_CACHE_KEY_PREFIX: ${VALIDATION_CACHE_KEY_PREFIX}
+      VALIDATION_CACHE_VALIDATE_TTL: ${VALIDATION_CACHE_VALIDATE_TTL}
+      VALIDATION_CACHE_DRYRUN_TTL: ${VALIDATION_CACHE_DRYRUN_TTL}
+      VALIDATION_CACHE_DIAL_TIMEOUT: ${VALIDATION_CACHE_DIAL_TIMEOUT}
+      VALIDATION_CACHE_READ_TIMEOUT: ${VALIDATION_CACHE_READ_TIMEOUT}
+      VALIDATION_CACHE_WRITE_TIMEOUT: ${VALIDATION_CACHE_WRITE_TIMEOUT}
       SERVICE_NAME: validation-service
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
@@ -164,6 +169,12 @@ services:
     image: ${LOKI_IMAGE}
     command:
       - -config.file=/etc/loki/loki-config.yml
+      - -config.expand-env=true
+    environment:
+      AWS_REGION: ${AWS_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
@@ -214,6 +225,7 @@ services:
     ports:
       - "${GRAFANA_PORT}:${GRAFANA_PORT}"
 
+# declare volume explictly
 volumes:
   prometheus-data:
   loki-data:

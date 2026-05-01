@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -147,10 +148,12 @@ func (c *RabbitClient) Consume(ctx context.Context, queue string, handler func(c
 					"consume.message",
 					trace.WithSpanKind(trace.SpanKindConsumer),
 				)
-
+				
+				// server internal error
 				if err := handler(deliveryCtx, delivery.Body); err != nil {
 					span.End()
 					// observability.RecordMQDeliveryOutcome(queue, "nack_requeue")
+					// deliveries to other consumers
 					_ = delivery.Nack(false, true)
 					slog.Warn("mq nack delivery",
 						"queue", queue,
@@ -225,6 +228,9 @@ func (c *RabbitClient) Publish(ctx context.Context, queue string, body []byte) e
 			break
 		}
 		if recErr := c.reconnect(); recErr != nil {
+			if errors.Is(recErr, ErrConnectionClosed) {
+				return recErr
+			}
 			slog.Warn("mq reconnect failed",
 				"queue", queue,
 				"error", recErr,
@@ -292,10 +298,6 @@ func (c *RabbitClient) startConsume(queue string) (<-chan amqp.Delivery, error) 
 func (c *RabbitClient) reconnect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if err := c.cfg.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", ErrFatal, err)
-	}
 
 	if c.conn == nil || c.conn.IsClosed() {
 		return ErrConnectionClosed

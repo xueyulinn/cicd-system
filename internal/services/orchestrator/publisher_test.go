@@ -2,10 +2,9 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
+	"sync/atomic"
 	"testing"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/xueyulinn/cicd-system/internal/messages"
 	"github.com/xueyulinn/cicd-system/internal/mq"
 )
@@ -50,54 +49,6 @@ func TestLoadPublisherConcurrency_InvalidFallsBack(t *testing.T) {
 	}
 }
 
-func TestCreateJobPublishers_CreatesRequestedCount(t *testing.T) {
-	originalFactory := newJobPublisher
-	defer func() { newJobPublisher = originalFactory }()
-
-	created := 0
-	newJobPublisher = func(cfg mq.Config, _ *amqp.Connection) (mq.Publisher, error) {
-		created++
-		return &fakePublisher{}, nil
-	}
-
-	publishers, err := createJobPublishers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
-	if err != nil {
-		t.Fatalf("createJobPublishers returned error: %v", err)
-	}
-	if len(publishers) != 2 {
-		t.Fatalf("len(publishers) = %d, want 2", len(publishers))
-	}
-	if created != 2 {
-		t.Fatalf("created = %d, want 2", created)
-	}
-}
-
-func TestCreateJobPublishers_ClosesAlreadyCreatedOnFailure(t *testing.T) {
-	originalFactory := newJobPublisher
-	defer func() { newJobPublisher = originalFactory }()
-
-	first := &fakePublisher{}
-	call := 0
-	newJobPublisher = func(cfg mq.Config, _ *amqp.Connection) (mq.Publisher, error) {
-		call++
-		if call == 1 {
-			return first, nil
-		}
-		return nil, errors.New("boom")
-	}
-
-	publishers, err := createJobPublishers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 2)
-	if err == nil {
-		t.Fatal("createJobPublishers error = nil, want non-nil")
-	}
-	if publishers != nil {
-		t.Fatalf("publishers = %v, want nil", publishers)
-	}
-	if !first.closed {
-		t.Fatal("expected first publisher to be closed on initialization failure")
-	}
-}
-
 func TestCreateJobPublishers_InvalidCount(t *testing.T) {
 	publishers, err := createJobPublishers(mq.Config{URL: "amqp://x", JobQueue: "q"}, nil, 0)
 	if err == nil {
@@ -105,5 +56,79 @@ func TestCreateJobPublishers_InvalidCount(t *testing.T) {
 	}
 	if publishers != nil {
 		t.Fatalf("publishers = %v, want nil", publishers)
+	}
+}
+
+func TestPublisherManagerCloseClosesIdlePublisherSets(t *testing.T) {
+	currentPub := &fakePublisher{}
+	stalePub := &fakePublisher{}
+	manager := &publisherManager{
+		current: &publisherSet{
+			gen:  1,
+			pubs: []mq.Publisher{currentPub},
+		},
+		stale: map[int]*publisherSet{
+			2: {
+				gen:     2,
+				pubs:    []mq.Publisher{stalePub},
+				retired: atomic.Bool{},
+			},
+		},
+	}
+	manager.stale[2].retired.Store(true)
+
+	if err := manager.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if manager.current != nil {
+		t.Fatal("expected current publisher set to be cleared")
+	}
+	if !currentPub.closed {
+		t.Fatal("expected idle current publisher set to be closed")
+	}
+	if !stalePub.closed {
+		t.Fatal("expected idle stale publisher set to be closed")
+	}
+	if len(manager.stale) != 0 {
+		t.Fatalf("expected stale sets to be drained, got %d", len(manager.stale))
+	}
+}
+
+func TestPublisherManagerCloseDefersBusyPublisherSetUntilRelease(t *testing.T) {
+	currentPub := &fakePublisher{}
+	currentSet := &publisherSet{
+		gen:  1,
+		pubs: []mq.Publisher{currentPub},
+	}
+	currentSet.refs.Add(1)
+
+	manager := &publisherManager{
+		current: currentSet,
+		stale:   make(map[int]*publisherSet),
+	}
+
+	if err := manager.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if manager.current != nil {
+		t.Fatal("expected current publisher set to be cleared")
+	}
+	if !currentSet.retired.Load() {
+		t.Fatal("expected current publisher set to be retired")
+	}
+	if currentPub.closed {
+		t.Fatal("expected busy publisher set to stay open until release")
+	}
+	if got := manager.stale[currentSet.gen]; got != currentSet {
+		t.Fatal("expected busy publisher set to remain tracked as stale")
+	}
+
+	manager.releaseSet(currentSet)
+
+	if !currentPub.closed {
+		t.Fatal("expected busy publisher set to close after final release")
+	}
+	if _, ok := manager.stale[currentSet.gen]; ok {
+		t.Fatal("expected stale publisher set to be removed after close")
 	}
 }

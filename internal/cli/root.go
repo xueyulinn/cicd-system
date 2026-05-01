@@ -1,26 +1,57 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 )
 
+type repoContextKey struct{}
+
+var repoKey = repoContextKey{}
+
 var rootCmd = &cobra.Command{
-	Use:           "cicd",
-	Short:         "CI/CD pipeline management tool",
-	SilenceErrors: true,
-	SilenceUsage:  true,
+	Use:   "cicd",
+	Short: "Manage CI/CD pipelines from the current repository",
+	Long: strings.Join([]string{
+		"Validate pipeline definitions, preview execution plans, inspect run reports,",
+		"and execute pipelines from the command line.",
+		"",
+		"Most commands resolve files relative to the current Git repository, so run",
+		"them from inside the repository that owns the pipeline files.",
+	}, "\n"),
+	Example: strings.Join([]string{
+		"  cicd validate ./.pipelines/build.yaml",
+		"  cicd dryrun ./.pipelines/build.yaml",
+		"  cicd run --name DefaultPipeline --branch main",
+		"  cicd report DefaultPipeline --run 1",
+	}, "\n"),
+	PersistentPreRunE: openGitRepo,
+	SilenceErrors:     true,
+	SilenceUsage:      true,
 }
 
 func init() {
 	// register all subcommands
-	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(reportCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(dryRunCmd)
+}
+
+func openGitRepo(cmd *cobra.Command, args []string) error {
+	gitRepo, err := gitutil.Open(".")
+	if err != nil {
+		return fmt.Errorf("validate, dryrun, run commands can only run within a git repo: %w", err)
+	}
+
+	ctx := context.WithValue(cmd.Context(), repoKey, gitRepo)
+	cmd.SetContext(ctx)
+	return nil
 }
 
 // Execute runs the root command.

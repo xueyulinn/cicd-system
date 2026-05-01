@@ -8,7 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
-	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/formatter"
+	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
@@ -25,7 +26,7 @@ var dryRunCmd = &cobra.Command{
 	Long:                  "Validates the specified pipeline file and prints the execution plan without running any jobs. Output defaults to YAML and can be changed with --format json.",
 	Example:               "cicd dryrun .pipelines/pipeline.yaml\ncicd dryrun .pipelines/pipeline.yaml --format json",
 	Args:                  cobra.ExactArgs(1),
-	PreRunE:               runVerifyQuiet,
+	PreRunE:               runValidateQuiet,
 	RunE:                  runDryRun,
 	DisableFlagsInUseLine: true,
 }
@@ -35,30 +36,36 @@ func init() {
 }
 
 func runDryRun(cmd *cobra.Command, args []string) error {
-	repo, err := gitutil.Open(".")
+	repo, err := repoFromCommandContext(cmd)
 	if err != nil {
 		return err
 	}
 	rootDir := repo.Root()
-	pipelinePath := args[0]
 
-	completePath := pipelinePath
-	if !filepath.IsAbs(pipelinePath) {
-		completePath = filepath.Join(rootDir, pipelinePath)
-	}
-	completePath = filepath.Clean(completePath)
-
-	// Read file content
-	fileContent, err := os.ReadFile(completePath)
+	completePath, _, err := pipelinepath.ResolveInputPath(rootDir, args[0])
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return err
 	}
 
-	// Create gateway client
+	commit, err := repo.GetHeadCommit()
+	if err != nil {
+		return fmt.Errorf("get head commit failed: %w", err)
+	}
+
+	pipelineData, err := repo.ReadFileAtCommit(commit, completePath)
+	if err != nil {
+		return fmt.Errorf("read pipeline file failed: %w", err)
+	}
+
 	client := NewGatewayClient()
 
 	// Call gateway for dry run
-	response, err := client.DryRun(api.ValidateRequest{YAMLContent: string(fileContent)})
+	response, err := client.DryRun(api.ValidateRequest{
+		YAMLContent:  string(pipelineData),
+		Commit:       commit,
+		PipelinePath: filepath.Base(completePath),
+	},
+	)
 	if err != nil {
 		return fmt.Errorf("dry run failed, error: %w", err)
 	}
@@ -97,9 +104,9 @@ func formatOutput(plan *models.ExecutionPlan, format string) (string, error) {
 	)
 	switch format {
 	case formatYAML:
-		out, err = FormatExecutionPlanYAML(plan)
+		out, err = formatter.FormatExecutionPlanYAML(plan)
 	case formatJSON:
-		out, err = FormatExecutionPlanJSON(plan)
+		out, err = formatter.FormatExecutionPlanJSON(plan)
 	default:
 		return "", fmt.Errorf("invalid format %q (supported: yaml, json)", format)
 	}
@@ -109,8 +116,8 @@ func formatOutput(plan *models.ExecutionPlan, format string) (string, error) {
 	return string(out), nil
 }
 
-// runVerifyQuiet runs the verify command but redirects stdout to /dev/null
-func runVerifyQuiet(cmd *cobra.Command, args []string) error {
+// runValidateQuiet runs the validate command but redirects stdout to /dev/null.
+func runValidateQuiet(cmd *cobra.Command, args []string) error {
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		return err
@@ -119,5 +126,5 @@ func runVerifyQuiet(cmd *cobra.Command, args []string) error {
 	stdout := os.Stdout
 	os.Stdout = devNull
 	defer func() { os.Stdout = stdout }()
-	return runVerify(cmd, args)
+	return runValidate(cmd, args)
 }

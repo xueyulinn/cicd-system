@@ -11,54 +11,59 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
+	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 )
 
-var verifyCmd = &cobra.Command{
-	Use:                   "verify {pipeline-path|pipeline-directory}",
+var validateCmd = &cobra.Command{
+	Use:                   "validate {pipeline-path|pipeline-directory}",
 	Short:                 "Validate a pipeline file or directory",
 	Long:                  "Validate a single pipeline YAML file, or recursively validate all pipeline YAML files under a directory. The command stops at the first failure and prints the exact error location.",
-	Example:               "cicd verify ./.pipelines/build.yaml\ncicd verify ./.pipelines",
+	Example:               "cicd validate ./.pipelines/build.yaml\ncicd validate ./.pipelines",
 	Args:                  cobra.ExactArgs(1),
-	RunE:                  runVerify,
+	RunE:                  runValidate,
+	Aliases:               []string{"verify"},
 	DisableFlagsInUseLine: true,
 }
 
-func runVerify(cmd *cobra.Command, args []string) error {
-	repo, err := gitutil.Open(".")
+func runValidate(cmd *cobra.Command, args []string) error {
+	repo, err := repoFromCommandContext(cmd)
 	if err != nil {
 		return err
 	}
 	rootDir := repo.Root()
-	pipelinePath := args[0]
 
-	completePath := pipelinePath
-	if !filepath.IsAbs(pipelinePath) {
-		completePath = filepath.Join(rootDir, pipelinePath)
-	}
-	completePath = filepath.Clean(completePath)
-
-	info, err := os.Stat(completePath)
+	completePath, info, err := pipelinepath.ResolveInputPath(rootDir, args[0])
 	if err != nil {
-		return fmt.Errorf("failed to get the info of path %q: %w", completePath, err)
+		return err
+	}
+
+	commit, err := repo.GetHeadCommit()
+	if err != nil {
+		return fmt.Errorf("get head commit failed: %w", err)
 	}
 
 	gatewayClient := NewGatewayClient()
 	if info.IsDir() {
-		return verifyPipelineDir(completePath, gatewayClient)
+		return validatePipelineDir(repo, completePath, gatewayClient, commit)
 	}
 
-	valid, err := verifySinglePipeline(completePath, gatewayClient)
+	pipelineData, err := repo.ReadFileAtCommit(commit, completePath)
+	if err != nil {
+		return fmt.Errorf("read pipeline file failed: %w", err)
+	}
+
+	valid, err := validateSinglePipeline(completePath, gatewayClient, commit, pipelineData)
 	if err != nil {
 		return err
 	}
 	if valid {
-		fmt.Println("Configuration is valid")
+		fmt.Println("pipeline is valid")
 	}
 
 	return nil
 }
 
-func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
+func validatePipelineDir(repo *gitutil.Repository, dir string, gatewayClient *GatewayClient, commit string) error {
 	targets, err := collectYAMLFiles(dir)
 	if err != nil {
 		return fmt.Errorf("failed to enumerate directory %q: %w", dir, err)
@@ -70,27 +75,33 @@ func verifyPipelineDir(dir string, gatewayClient *GatewayClient) error {
 	sort.Strings(targets)
 
 	for _, target := range targets {
-		valid, err := verifySinglePipeline(target, gatewayClient)
+		pipelineData, err := repo.ReadFileAtCommit(commit, target)
+		if err != nil {
+			return fmt.Errorf("read pipeline file failed: %w", err)
+		}
+
+		valid, err := validateSinglePipeline(target, gatewayClient, commit, pipelineData)
 		if err != nil {
 			// Fast fail: stop at the first invalid file or validation request error.
 			return err
 		}
 
 		if valid {
-			fmt.Printf("%s: Configuration is valid\n", target)
+			fmt.Printf("%s: pipeline is valid\n", target)
 		}
 	}
 
 	return nil
 }
 
-func verifySinglePipeline(pipelinePath string, gatewayClient *GatewayClient) (bool, error) {
-	fileContent, err := os.ReadFile(pipelinePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to read file content %q: %w", pipelinePath, err)
-	}
+func validateSinglePipeline(pipelinePath string, gatewayClient *GatewayClient, commit string, pipelineData []byte) (bool, error) {
+	pipelinePath = filepath.Base(pipelinePath)
 
-	response, err := gatewayClient.Validate(api.ValidateRequest{YAMLContent: string(fileContent)})
+	response, err := gatewayClient.Validate(api.ValidateRequest{
+		YAMLContent:  string(pipelineData),
+		Commit:       commit,
+		PipelinePath: pipelinePath,
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to verify %q: %w", pipelinePath, err)
 	}

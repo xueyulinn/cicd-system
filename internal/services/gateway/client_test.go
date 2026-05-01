@@ -32,6 +32,12 @@ func (errReadCloser) Close() error {
 	return nil
 }
 
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return false }
+
 func postJSON[T any](client *http.Client, endpoint string, reqBody any, errorPrefix string) (*T, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -267,7 +273,130 @@ func TestClientForwardValidateDryRunRun(t *testing.T) {
 	}
 }
 
-func TestReportRequestScenarios(t *testing.T) {
+func TestClientForwardValidateCallError(t *testing.T) {
+	t.Run("non-timeout call error", func(t *testing.T) {
+		validateReq := httptest.NewRequest(http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+		validateRec := httptest.NewRecorder()
+		c := &Client{
+			validationURL: "http://example.com",
+			validationClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("network down")
+				}),
+			},
+		}
+
+		err := c.forwardValidate(context.Background(), validateRec, validateReq)
+		if err == nil || !strings.Contains(err.Error(), "failed to call validation service") {
+			t.Fatalf("expected call error, got err=%v", err)
+		}
+		if errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("non-timeout error misclassified as timeout: %v", err)
+		}
+	})
+
+	t.Run("timeout call error", func(t *testing.T) {
+		validateReq := httptest.NewRequest(http.MethodPost, "/validate", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+		validateRec := httptest.NewRecorder()
+		c := &Client{
+			validationURL: "http://example.com",
+			validationClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, timeoutErr{}
+				}),
+			},
+		}
+
+		err := c.forwardValidate(context.Background(), validateRec, validateReq)
+		if err == nil || !errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("expected timeout classification, got err=%v", err)
+		}
+	})
+}
+
+func TestClientForwardDryRunCallError(t *testing.T) {
+	t.Run("non-timeout call error", func(t *testing.T) {
+		dryReq := httptest.NewRequest(http.MethodPost, "/dryrun", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+		dryRec := httptest.NewRecorder()
+		c := &Client{
+			validationURL: "http://example.com",
+			validationClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("network down")
+				}),
+			},
+		}
+
+		err := c.forwardDryRun(context.Background(), dryRec, dryReq)
+		if err == nil || !strings.Contains(err.Error(), "failed to call dryrun service") {
+			t.Fatalf("expected call error, got err=%v", err)
+		}
+		if errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("non-timeout error misclassified as timeout: %v", err)
+		}
+	})
+
+	t.Run("timeout call error", func(t *testing.T) {
+		dryReq := httptest.NewRequest(http.MethodPost, "/dryrun", strings.NewReader(`{"yaml_content":"pipeline: {}"}`))
+		dryRec := httptest.NewRecorder()
+		c := &Client{
+			validationURL: "http://example.com",
+			validationClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, timeoutErr{}
+				}),
+			},
+		}
+
+		err := c.forwardDryRun(context.Background(), dryRec, dryReq)
+		if err == nil || !errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("expected timeout classification, got err=%v", err)
+		}
+	})
+}
+
+func TestClientForwardRunCallError(t *testing.T) {
+	t.Run("non-timeout call error", func(t *testing.T) {
+		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+		runRec := httptest.NewRecorder()
+		c := &Client{
+			orchestratorURL: "http://example.com",
+			orchestratorClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("network down")
+				}),
+			},
+		}
+
+		err := c.forwardRun(context.Background(), runRec, runReq)
+		if err == nil || !strings.Contains(err.Error(), "failed to call orchestrator service") {
+			t.Fatalf("expected call error, got err=%v", err)
+		}
+		if errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("non-timeout error misclassified as timeout: %v", err)
+		}
+	})
+
+	t.Run("timeout call error", func(t *testing.T) {
+		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+		runRec := httptest.NewRecorder()
+		c := &Client{
+			orchestratorURL: "http://example.com",
+			orchestratorClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, timeoutErr{}
+				}),
+			},
+		}
+
+		err := c.forwardRun(context.Background(), runRec, runReq)
+		if err == nil || !errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("expected timeout classification, got err=%v", err)
+		}
+	})
+}
+
+func TestClientForwardReport(t *testing.T) {
 	t.Run("success with params", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/report" {
@@ -277,7 +406,8 @@ func TestReportRequestScenarios(t *testing.T) {
 			if q.Get("pipeline") != "p" || q.Get("run") != "3" || q.Get("stage") != "build" || q.Get("job") != "compile" {
 				t.Fatalf("unexpected query: %v", q)
 			}
-			_, _ = w.Write([]byte(`{"pipeline":{"runs":[{"run-no":3,"status":"success"}]}}`))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"pipeline":{"name":"p"}}`))
 		}))
 		defer srv.Close()
 
@@ -286,14 +416,21 @@ func TestReportRequestScenarios(t *testing.T) {
 			reportURL:       srv.URL,
 			reportingClient: srv.Client(),
 		}
-		resp, status, err := c.ReportRequest(models.ReportQuery{
+		rec := httptest.NewRecorder()
+		err := c.forwardReport(context.Background(), rec, models.ReportQuery{
 			Pipeline: "p",
 			Run:      &run,
 			Stage:    "build",
 			Job:      "compile",
 		})
-		if err != nil || status != http.StatusOK || len(resp.Pipeline.Runs) != 1 {
-			t.Fatalf("ReportRequest err=%v status=%d resp=%+v", err, status, resp)
+		if err != nil {
+			t.Fatalf("forwardReport err=%v", err)
+		}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("forwardReport code=%d want=%d", rec.Code, http.StatusOK)
+		}
+		if got := strings.TrimSpace(rec.Body.String()); got != `{"pipeline":{"name":"p"}}` {
+			t.Fatalf("forwardReport body=%q", got)
 		}
 	})
 
@@ -306,41 +443,51 @@ func TestReportRequestScenarios(t *testing.T) {
 				}),
 			},
 		}
-		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
-		if err == nil || status != http.StatusBadGateway {
-			t.Fatalf("expected bad gateway error, got status=%d err=%v", status, err)
+		rec := httptest.NewRecorder()
+		err := c.forwardReport(context.Background(), rec, models.ReportQuery{Pipeline: "p"})
+		if err == nil || !strings.Contains(err.Error(), "failed to call reporting service") {
+			t.Fatalf("expected call error, got err=%v", err)
 		}
 	})
 
-	t.Run("non-ok json error", func(t *testing.T) {
+	t.Run("timeout call error", func(t *testing.T) {
+		c := &Client{
+			reportURL: "http://example.com",
+			reportingClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, timeoutErr{}
+				}),
+			},
+		}
+		rec := httptest.NewRecorder()
+		err := c.forwardReport(context.Background(), rec, models.ReportQuery{Pipeline: "p"})
+		if err == nil || !errors.Is(err, errUpstreamTimeout) {
+			t.Fatalf("expected timeout classification, got err=%v", err)
+		}
+	})
+
+	t.Run("downstream non-ok is proxied", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":"bad request"}`))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"code":"report_not_found","message":"missing"}`))
 		}))
 		defer srv.Close()
 
 		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
-		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
-		if err == nil || status != http.StatusBadRequest || !strings.Contains(err.Error(), "bad request") {
-			t.Fatalf("expected parsed error, got status=%d err=%v", status, err)
+		rec := httptest.NewRecorder()
+		if err := c.forwardReport(context.Background(), rec, models.ReportQuery{Pipeline: "p"}); err != nil {
+			t.Fatalf("forwardReport err=%v", err)
+		}
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("forwardReport code=%d want=%d", rec.Code, http.StatusNotFound)
+		}
+		if got := strings.TrimSpace(rec.Body.String()); got != `{"code":"report_not_found","message":"missing"}` {
+			t.Fatalf("forwardReport body=%q", got)
 		}
 	})
 
-	t.Run("non-ok plain error", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`down`))
-		}))
-		defer srv.Close()
-
-		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
-		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
-		if err == nil || status != http.StatusServiceUnavailable || !strings.Contains(err.Error(), "returned status 503") {
-			t.Fatalf("expected status text error, got status=%d err=%v", status, err)
-		}
-	})
-
-	t.Run("read response error", func(t *testing.T) {
+	t.Run("copy response error", func(t *testing.T) {
 		c := &Client{
 			reportURL: "http://example.com",
 			reportingClient: &http.Client{
@@ -353,22 +500,10 @@ func TestReportRequestScenarios(t *testing.T) {
 				}),
 			},
 		}
-		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
-		if err == nil || status != http.StatusBadGateway || !strings.Contains(err.Error(), "failed to read response") {
-			t.Fatalf("expected read error, got status=%d err=%v", status, err)
-		}
-	})
-
-	t.Run("unmarshal error", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(`not-json`))
-		}))
-		defer srv.Close()
-
-		c := &Client{reportURL: srv.URL, reportingClient: srv.Client()}
-		_, status, err := c.ReportRequest(models.ReportQuery{Pipeline: "p"})
-		if err == nil || status != http.StatusBadGateway || !strings.Contains(err.Error(), "failed to unmarshal response") {
-			t.Fatalf("expected unmarshal error, got status=%d err=%v", status, err)
+		rec := httptest.NewRecorder()
+		err := c.forwardReport(context.Background(), rec, models.ReportQuery{Pipeline: "p"})
+		if err == nil || !strings.Contains(err.Error(), "copy downstream response failed") {
+			t.Fatalf("expected copy error, got err=%v", err)
 		}
 	})
 }

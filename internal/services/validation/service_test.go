@@ -1,25 +1,35 @@
 package validation
 
 import (
-	"strings"
+	"context"
 	"testing"
 
-	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/api"
 )
 
 func TestValidateYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	disableValidationCache(t)
 
-	resp := svc.ValidateYAML(validPipelineYAML)
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(validPipelineYAML))
 	if !resp.Valid {
 		t.Fatalf("ValidateYAML valid = false, errors = %+v", resp.Errors)
 	}
 }
 
 func TestValidateYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	disableValidationCache(t)
 
-	resp := svc.ValidateYAML(invalidPipelineYAML)
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(invalidPipelineYAML))
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -29,18 +39,28 @@ func TestValidateYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestDryRunYAMLValidPipeline(t *testing.T) {
-	svc := NewService()
+	disableValidationCache(t)
 
-	resp := svc.DryRunYAML(validPipelineYAML)
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resp := svc.DryRunYAML(context.Background(), newValidateRequest(validPipelineYAML))
 	if !resp.Valid {
 		t.Fatalf("DryRunYAML valid = false, errors = %+v", resp.Errors)
 	}
 }
 
 func TestDryRunYAMLInvalidPipeline(t *testing.T) {
-	svc := NewService()
+	disableValidationCache(t)
 
-	resp := svc.DryRunYAML(invalidPipelineYAML)
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resp := svc.DryRunYAML(context.Background(), newValidateRequest(invalidPipelineYAML))
 	if resp.Valid {
 		t.Fatal("expected invalid response")
 	}
@@ -50,9 +70,14 @@ func TestDryRunYAMLInvalidPipeline(t *testing.T) {
 }
 
 func TestValidateYAMLParserError(t *testing.T) {
-	svc := NewService()
+	disableValidationCache(t)
 
-	resp := svc.ValidateYAML(":::")
+	svc, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resp := svc.ValidateYAML(context.Background(), newValidateRequest(":::"))
 	if resp.Valid {
 		t.Fatal("expected invalid response for malformed YAML")
 	}
@@ -61,33 +86,10 @@ func TestValidateYAMLParserError(t *testing.T) {
 	}
 }
 
-func TestMarshalExecutionPlan(t *testing.T) {
-	plan := &models.ExecutionPlan{
-		Stages: []models.StageExecutionPlan{
-			{
-				Name: "build",
-				Jobs: []models.JobExecutionPlan{
-					{
-						Name:   "compile",
-						Image:  "golang:1.25",
-						Script: []string{"go test ./...", "go build ./..."},
-					},
-				},
-			},
-		},
-	}
-
-	out, err := marshalExecutionPlan(plan)
-	if err != nil {
-		t.Fatalf("marshalExecutionPlan error = %v", err)
-	}
-	if !strings.Contains(out, "build:") {
-		t.Fatalf("expected stage in output, got %q", out)
-	}
-	if !strings.Contains(out, "compile:") {
-		t.Fatalf("expected job in output, got %q", out)
-	}
-	if !strings.Contains(out, "- go test ./...") {
-		t.Fatalf("expected script line in output, got %q", out)
+func newValidateRequest(yamlContent string) *api.ValidateRequest {
+	return &api.ValidateRequest{
+		YAMLContent:  yamlContent,
+		Commit:       "abc123",
+		PipelinePath: "build.yaml",
 	}
 }

@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/xueyulinn/cicd-system/internal/common/formatter"
 	"github.com/xueyulinn/cicd-system/internal/models"
 )
 
 var (
-	reportRun      int
-	reportStage    string
-	reportJob      string
+	reportRun   int
+	reportStage string
+	reportJob   string
 )
 
 var reportCmd = &cobra.Command{
@@ -30,7 +31,7 @@ var reportCmd = &cobra.Command{
 }
 
 func init() {
-	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Pipeline run number (required)")
+	reportCmd.Flags().IntVar(&reportRun, "run", 0, "Pipeline run number (optional)")
 	reportCmd.Flags().StringVar(&reportStage, "stage", "", "Stage filter (requires --run)")
 	reportCmd.Flags().StringVar(&reportJob, "job", "", "Job filter (requires --run and --stage)")
 	reportCmd.Flags().StringP("format", "f", formatYAML, "Output format (yaml|json)")
@@ -70,9 +71,9 @@ func formatReport(report *models.ReportResponse, format string) ([]byte, error) 
 	var err error
 	switch format {
 	case formatJSON:
-		out, err = FormatReportJSON(report)
+		out, err = formatter.FormatReportJSON(report)
 	default:
-		out, err = FormatReportYAML(report)
+		out, err = formatter.FormatReportYAML(report)
 	}
 	if err != nil {
 		return nil, err

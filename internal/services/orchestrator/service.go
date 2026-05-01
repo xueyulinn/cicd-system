@@ -9,10 +9,8 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/planner"
 	"github.com/xueyulinn/cicd-system/internal/config"
@@ -30,9 +28,7 @@ type Service struct {
 	validationURL    string
 	validationClient *http.Client
 	store            *store.Store
-	mqConn           *amqp.Connection
-	jobPublishers    []mq.Publisher
-	publishIdx       uint64
+	publisherManager *publisherManager
 	runtimeMu        sync.Mutex
 	runtimes         map[string]*pipelineRuntime // isolate pipeline runs on parallel
 	tracer           trace.Tracer
@@ -98,27 +94,24 @@ func NewService(ctx context.Context) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect report store: %w", err)
 	}
 
-	// create MQ publishers
+	// only load config once for the service lifetime
 	cfg := mq.LoadConfig()
-	mqConn, err := amqp.Dial(cfg.URL)
-	if err != nil {
-		st.Close()
-		return nil, fmt.Errorf("fail to connect RabbitMQ: %w", err)
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("mq config is invalid: %w", err)
 	}
-	publisherConcurrency := loadPublisherConcurrency()
-	jobPublishers, err := createJobPublishers(cfg, mqConn, publisherConcurrency)
+
+	concurrency := loadPublisherConcurrency()
+	// create MQ publishers
+	publisherManager, err := newPublisherManager(cfg, concurrency)
 	if err != nil {
-		_ = mqConn.Close()
-		st.Close()
-		return nil, fmt.Errorf("fail to initialize job publishers: %w", err)
+		return nil, fmt.Errorf("failed to create publisher manager: %w", err)
 	}
 
 	return &Service{
 		validationURL:    config.GetEnvOrDefaultURL("VALIDATION_URL", config.DefaultValidationURL),
-		validationClient: observability.NewInstrumentedHTTPClient("validation", 2*time.Minute),
+		validationClient: observability.NewInstrumentedHTTPClient("validation", 500*time.Millisecond),
+		publisherManager: publisherManager,
 		store:            st,
-		mqConn:           mqConn,
-		jobPublishers:    jobPublishers,
 		runtimes:         make(map[string]*pipelineRuntime),
 		tracer:           observability.Tracer(orchestratorTracerScope),
 	}, nil
@@ -153,25 +146,12 @@ func buildRunRequestKey(req api.RunRequest, pipelineName string) string {
 
 // Close releases resources held by the Service, including MQ publisher and DB store.
 func (s *Service) Close() {
-	for _, publisher := range s.jobPublishers {
-		if publisher != nil {
-			_ = publisher.Close()
-		}
-	}
-	if s.mqConn != nil {
-		_ = s.mqConn.Close()
+	if s.publisherManager != nil {
+		_ = s.publisherManager.Close()
 	}
 	if s.store != nil {
 		s.store.Close()
 	}
-}
-
-func (s *Service) nextPublisher() mq.Publisher {
-	if s == nil || len(s.jobPublishers) == 0 {
-		return nil
-	}
-	idx := atomic.AddUint64(&s.publishIdx, 1) - 1
-	return s.jobPublishers[idx%uint64(len(s.jobPublishers))]
 }
 
 // Ready reports whether the orchestrator service can serve requests.
@@ -416,14 +396,15 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 			Pipeline: pipelinePlan.Pipeline.Name,
 			RunNo:    runtime.runNo,
 			Status:   status,
-			Message:  fmt.Sprintf("Duplicate run request dropped; using in-flight run %d.", runtime.runNo),
+			Message:  fmt.Sprintf("duplicate run request dropped; using in-flight run %d.", runtime.runNo),
 		}, nil
 	}
 
 	s.putRuntime(runtime)
 
 	go func(ctx context.Context, runtime *pipelineRuntime) {
-		dispatchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		dispatchCtx := context.WithoutCancel(ctx)
+		dispatchCtx, cancel := context.WithTimeout(dispatchCtx, 60*time.Second)
 		defer cancel()
 		if err := s.dispatchPipelineStartJobs(dispatchCtx, runtime); err != nil {
 			slog.Error("dispatch initial ready jobs failed", "error", err)

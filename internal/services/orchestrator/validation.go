@@ -63,7 +63,7 @@ func (s *Service) validatePipeline(ctx context.Context, yamlContent string) erro
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.validationURL+"/validate", bytes.NewReader(bodyBytes))
 	if err != nil {
-		return fmt.Errorf("fail to construct request %w", err)	
+		return fmt.Errorf("fail to construct request %w", err)
 	}
 
 	resp, err := s.validationClient.Do(req)

@@ -10,6 +10,7 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/api"
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/common/parser"
+	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
 	"github.com/xueyulinn/cicd-system/internal/config"
 )
 
@@ -22,7 +23,7 @@ var (
 )
 
 var runCmd = &cobra.Command{
-	Use:     "run {pipeline-path | pipeline-name} [--branch branch] [--commit commit] [--remote]",
+	Use:     "run {--file pipeline-path | --name pipeline-name} [--branch branch] [--commit commit] [--remote]",
 	Short:   "Run a pipeline",
 	Long:    "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
 	// Args:    cobra.ExactArgs(1),
@@ -128,10 +129,11 @@ func runPreRunE(cmd *cobra.Command, args []string) error {
 // runRun executes a pipeline against a temporary worktree for the resolved
 // commit so file reads and job execution use a consistent repository snapshot.
 func runRun(cmd *cobra.Command, args []string) error {
-	repo, err := gitutil.Open(".")
-	if err != nil {
-		return err
+	repo, ok := cmd.Context().Value(repoKey).(*gitutil.Repository)
+	if !ok || repo == nil {
+		return fmt.Errorf("git repository context is missing")
 	}
+	rootDir := repo.Root()
 
 	client := NewGatewayClient()
 	req := api.RunRequest{
@@ -146,17 +148,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 		}
 		// defer cleanup()
 
-		runFileAtCommit, err := resolveRunFileInWorkspace(runFile, repo.Root(), worktree)
+		completePath, _, err := pipelinepath.ResolveInputPath(rootDir, runFile)
 		if err != nil {
-			return fmt.Errorf("failed to resolve run file %q in commit workspace: %w", runFile, err)
+			return err
 		}
 
-		fileContent, err := os.ReadFile(runFileAtCommit)
+		pipelineData, err := repo.ReadFileAtCommit(runCommit, completePath)
 		if err != nil {
-			return fmt.Errorf("failed to read run file at commit %q: %w", runCommit, err)
+			return fmt.Errorf("read pipeline file failed: %w", err)
 		}
 
-		req.YAMLContent = string(fileContent)
+		req.YAMLContent = string(pipelineData)
 		req.RepoURL = ""
 		req.WorkspacePath = worktree
 	} else {
@@ -236,29 +238,4 @@ func findPipelineByName(name string, root string) (string, error) {
 	}
 
 	return "", fmt.Errorf("pipeline with name %s not found", name)
-}
-
-// resolveRunFileInWorkspace maps runFile from the current checkout to the same
-// repository-relative location inside targetWorkspace.
-func resolveRunFileInWorkspace(runFile, repoRoot, targetWorkspace string) (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	absRunFile := runFile
-	if !filepath.IsAbs(absRunFile) {
-		absRunFile = filepath.Join(cwd, runFile)
-	}
-	absRunFile = filepath.Clean(absRunFile)
-
-	rel, err := filepath.Rel(repoRoot, absRunFile)
-	if err != nil {
-		return "", err
-	}
-	if strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("run file is outside repository: %s", runFile)
-	}
-
-	return filepath.Join(targetWorkspace, rel), nil
 }

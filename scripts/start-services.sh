@@ -3,7 +3,42 @@
 # Start all services script
 echo "Starting e-team services..."
 
-# Reporting and execution services need MySQL. Use default if not set (run ./scripts/verify-report-db.sh first).
+ENV_FILE="${1:-.env.local}"
+
+trim() {
+  local s="$1"
+  # shellcheck disable=SC2001
+  s="$(echo "$s" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  printf '%s' "$s"
+}
+
+load_env_file() {
+  local file="$1"
+  local loaded=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "$line" ]] && continue
+    [[ "${line:0:1}" == "#" ]] && continue
+    [[ "$line" != *"="* ]] && continue
+
+    local key="${line%%=*}"
+    local value="${line#*=}"
+    key="$(trim "$key")"
+    [[ -z "$key" ]] && continue
+
+    export "${key}=${value}"
+    loaded=$((loaded + 1))
+  done < "$file"
+  echo "Loaded $loaded env vars from $file"
+}
+
+if [[ -f "$ENV_FILE" ]]; then
+  load_env_file "$ENV_FILE"
+else
+  echo "Env file not found: $ENV_FILE (continuing with current shell env/defaults)"
+fi
+
+# Reporting and orchestrator services need MySQL. Use default if not set (run ./scripts/verify-report-db.sh first).
 if [[ -z "${DATABASE_URL:-}" ]] && [[ -z "${REPORT_DB_URL:-}" ]]; then
   export DATABASE_URL="cicd:cicd@tcp(localhost:3306)/reportstore?parseTime=true&charset=utf8mb4&loc=UTC"
   echo "Note: DATABASE_URL not set, using default (start MySQL with: ./scripts/verify-report-db.sh)"
