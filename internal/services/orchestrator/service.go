@@ -55,10 +55,9 @@ type PipelinePlan struct {
 
 // context for this pipeline run
 type runInfo struct {
-	RepoURL       string
-	Branch        string
-	Commit        string
-	WorkspacePath string
+	RepoURL             string
+	Commit              string
+	WorkspaceObjectName string
 }
 
 type stageState struct {
@@ -126,10 +125,9 @@ func (s *Service) serviceTracer() trace.Tracer {
 
 func newRunInfo(req api.RunRequest) runInfo {
 	return runInfo{
-		RepoURL:       req.RepoURL,
-		Branch:        req.Branch,
-		Commit:        req.Commit,
-		WorkspacePath: req.WorkspacePath,
+		RepoURL:             req.RepoURL,
+		Commit:              req.Commit,
+		WorkspaceObjectName: req.WorkspaceObjectName,
 	}
 }
 
@@ -137,7 +135,6 @@ func buildRunRequestKey(req api.RunRequest, pipelineName string) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		pipelineName,
 		req.YAMLContent,
-		strings.TrimSpace(req.Branch),
 		strings.TrimSpace(req.Commit),
 		strings.TrimSpace(req.RepoURL),
 	}, "\n")))
@@ -380,7 +377,7 @@ func (s *Service) Run(ctx context.Context, req api.RunRequest) (*api.RunResponse
 		return nil, err
 	}
 
-	// {branch, commit, repo}
+	// {commit, repo}
 	info := newRunInfo(req)
 	jobConfigs := buildJobConfigs(pipelinePlan.Pipeline)
 	requestKey := buildRunRequestKey(req, pipelinePlan.Pipeline.Name)

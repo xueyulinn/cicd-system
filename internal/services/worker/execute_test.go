@@ -1,10 +1,30 @@
 package worker
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xueyulinn/cicd-system/internal/common/snapshot"
+	"github.com/xueyulinn/cicd-system/internal/objectstorage"
 )
+
+type fakeWorkspaceStorage struct {
+	downloadFn func(context.Context, string, string) error
+}
+
+func (f *fakeWorkspaceStorage) UploadWorkspace(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStorage) DownloadWorkspace(ctx context.Context, objectName, filePath string) error {
+	if f.downloadFn != nil {
+		return f.downloadFn(ctx, objectName, filePath)
+	}
+	return nil
+}
 
 func TestCloneAuthUsesGitHubTokenForGitHubRepos(t *testing.T) {
 	t.Setenv("GIT_USERNAME", "")
@@ -52,34 +72,64 @@ func TestCloneAuthReturnsNilWithoutCredentials(t *testing.T) {
 	}
 }
 
-func TestResolveWorkspacePathKeepsExistingPath(t *testing.T) {
-	dir := t.TempDir()
-
-	got, err := resolveWorkspacePath(dir)
-	if err != nil {
-		t.Fatalf("resolveWorkspacePath returned error: %v", err)
+func TestMaterializeWorkspaceObject(t *testing.T) {
+	sourceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceDir, "root.txt"), []byte("root file"), 0o644); err != nil {
+		t.Fatalf("WriteFile(root.txt) error = %v", err)
 	}
-	if got != dir {
-		t.Fatalf("resolved path = %q, want %q", got, dir)
+	archivePath := filepath.Join(t.TempDir(), "workspace.tar.gz")
+	if err := snapshot.Pack(sourceDir, archivePath); err != nil {
+		t.Fatalf("Pack() error = %v", err)
+	}
+
+	originalFactory := newWorkspaceStorage
+	defer func() { newWorkspaceStorage = originalFactory }()
+
+	newWorkspaceStorage = func() (objectstorage.Storage, error) {
+		return &fakeWorkspaceStorage{
+			downloadFn: func(_ context.Context, objectName, filePath string) error {
+				if objectName != "workspaces/pack-v1/commits/abc123/workspace.tar.gz" {
+					t.Fatalf("objectName = %q", objectName)
+				}
+				data, err := os.ReadFile(archivePath)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(filePath, data, 0o644)
+			},
+		}, nil
+	}
+
+	workspaceDir, cleanup, err := materializeWorkspace(context.Background(), "", "", "workspaces/pack-v1/commits/abc123/workspace.tar.gz")
+	if err != nil {
+		t.Fatalf("materializeWorkspace returned error: %v", err)
+	}
+	defer cleanup()
+
+	data, err := os.ReadFile(filepath.Join(workspaceDir, "root.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(root.txt) error = %v", err)
+	}
+	if string(data) != "root file" {
+		t.Fatalf("root.txt = %q, want %q", string(data), "root file")
 	}
 }
 
-func TestResolveWorkspacePathMapsWindowsPathToHostTemp(t *testing.T) {
-	hostTemp := t.TempDir()
-	t.Setenv("WORKSPACE_HOST_TEMP_DIR", hostTemp)
+func TestMaterializeWorkspaceObjectDownloadError(t *testing.T) {
+	originalFactory := newWorkspaceStorage
+	defer func() { newWorkspaceStorage = originalFactory }()
 
-	const wtName = "cicd-run-wt-2605657174"
-	mappedPath := filepath.Join(hostTemp, wtName)
-	if err := os.MkdirAll(mappedPath, 0o755); err != nil {
-		t.Fatalf("mkdir mapped path failed: %v", err)
+	newWorkspaceStorage = func() (objectstorage.Storage, error) {
+		return &fakeWorkspaceStorage{
+			downloadFn: func(context.Context, string, string) error {
+				return errors.New("download failed")
+			},
+		}, nil
 	}
 
-	got, err := resolveWorkspacePath(`Z:\no-such-host-temp\` + wtName)
-	if err != nil {
-		t.Fatalf("resolveWorkspacePath returned error: %v", err)
-	}
-	if got != mappedPath {
-		t.Fatalf("resolved path = %q, want %q", got, mappedPath)
+	_, _, err := materializeWorkspace(context.Background(), "", "", "workspaces/pack-v1/commits/abc123/workspace.tar.gz")
+	if err == nil || err.Error() != "download failed" {
+		t.Fatalf("materializeWorkspace error = %v, want download failed", err)
 	}
 }
 

@@ -18,7 +18,6 @@ type Run struct {
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	Status     string     `json:"status"`
 	GitHash    string     `json:"git_hash,omitempty"`
-	GitBranch  string     `json:"git_branch,omitempty"`
 	GitRepo    string     `json:"git_repo,omitempty"`
 	TraceID    string     `json:"trace_id,omitempty"`
 	RequestKey string     `json:"request_key,omitempty"`
@@ -26,35 +25,34 @@ type Run struct {
 
 // Stage represents a stage run (one row in stage_runs).
 type Stage struct {
-	Pipeline   string     `json:"pipeline"`
-	RunNo      int        `json:"run_no"`
-	Stage      string     `json:"stage"`
-	StartTime  time.Time  `json:"start_time"`
-	EndTime    *time.Time `json:"end_time,omitempty"`
-	Status     string     `json:"status"`
+	Pipeline  string     `json:"pipeline"`
+	RunNo     int        `json:"run_no"`
+	Stage     string     `json:"stage"`
+	StartTime time.Time  `json:"start_time"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	Status    string     `json:"status"`
 }
 
 // Job represents a job run (one row in job_runs).
 type Job struct {
-	Pipeline   string     `json:"pipeline"`
-	RunNo      int        `json:"run_no"`
-	Stage      string     `json:"stage"`
-	Job        string     `json:"job"`
-	StartTime  time.Time  `json:"start_time"`
-	EndTime    *time.Time `json:"end_time,omitempty"`
-	Status     string     `json:"status"`
-	Failures   bool       `json:"failures"` // when true, job is allowed to fail and does not affect stage status
+	Pipeline  string     `json:"pipeline"`
+	RunNo     int        `json:"run_no"`
+	Stage     string     `json:"stage"`
+	Job       string     `json:"job"`
+	StartTime time.Time  `json:"start_time"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	Status    string     `json:"status"`
+	Failures  bool       `json:"failures"` // when true, job is allowed to fail and does not affect stage status
 }
 
 // CreateRunInput is the input for CreateRun (run_no is allocated by the store).
 type CreateRunInput struct {
-	Pipeline  string
-	StartTime time.Time
-	Status    string // typically StatusRunning
-	GitHash   string
-	GitBranch string
-	GitRepo   string
-	TraceID   string
+	Pipeline   string
+	StartTime  time.Time
+	Status     string // typically StatusRunning
+	GitHash    string
+	GitRepo    string
+	TraceID    string
 	RequestKey string
 }
 
@@ -66,11 +64,11 @@ type UpdateRunInput struct {
 
 // CreateStageInput is the input for CreateStage.
 type CreateStageInput struct {
-	Pipeline   string
-	RunNo      int
-	Stage      string
-	StartTime  time.Time
-	Status     string // typically StatusRunning
+	Pipeline  string
+	RunNo     int
+	Stage     string
+	StartTime time.Time
+	Status    string // typically StatusRunning
 }
 
 // UpdateStageInput is the input for UpdateStage.
@@ -81,13 +79,13 @@ type UpdateStageInput struct {
 
 // CreateJobInput is the input for CreateJob.
 type CreateJobInput struct {
-	Pipeline   string
-	RunNo      int
-	Stage      string
-	Job        string
-	StartTime  time.Time
-	Status     string // typically StatusRunning
-	Failures   bool   // when true, job is allowed to fail; default false
+	Pipeline  string
+	RunNo     int
+	Stage     string
+	Job       string
+	StartTime time.Time
+	Status    string // typically StatusRunning
+	Failures  bool   // when true, job is allowed to fail; default false
 }
 
 // UpdateJobInput is the input for UpdateJob.

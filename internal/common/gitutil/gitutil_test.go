@@ -69,6 +69,28 @@ func TestReadFileAtCommit_RejectsPathOutsideRepository(t *testing.T) {
 	}
 }
 
+func TestGetHeadCommitByBranch_ReturnsBranchTip(t *testing.T) {
+	repoDir, _, secondCommit := setupRepoWithFileHistory(t)
+
+	repo, err := Open(repoDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	branchName, err := repo.GetHeadBranch()
+	if err != nil {
+		t.Fatalf("GetHeadBranch: %v", err)
+	}
+
+	got, err := repo.GetHeadCommitByBranch(branchName)
+	if err != nil {
+		t.Fatalf("GetHeadCommitByBranch: %v", err)
+	}
+	if got != secondCommit {
+		t.Fatalf("branch %q tip = %q, want %q", branchName, got, secondCommit)
+	}
+}
+
 func TestRemoteBranchContainsCommit_RemoteNotFound(t *testing.T) {
 	cloneDir, _, _ := setupLocalRemoteClone(t)
 
@@ -106,6 +128,23 @@ func TestRemoteBranchContainsCommit_ContainsAndMissing(t *testing.T) {
 	}
 	if contains {
 		t.Fatal("expected commit to be missing on remote branch")
+	}
+}
+
+func TestGetRemoteHeadCommitByBranch_ReturnsRemoteTip(t *testing.T) {
+	cloneDir, headCommit, remoteName := setupLocalRemoteClone(t)
+
+	repo, err := Open(cloneDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	got, err := repo.GetRemoteHeadCommitByBranch(remoteName, "master", nil)
+	if err != nil {
+		t.Fatalf("GetRemoteHeadCommitByBranch: %v", err)
+	}
+	if got != headCommit {
+		t.Fatalf("remote branch tip = %q, want %q", got, headCommit)
 	}
 }
 

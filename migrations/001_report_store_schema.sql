@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     end_time    DATETIME(6) NULL,
     status      VARCHAR(32) NOT NULL,
     git_hash    VARCHAR(64) NULL,
-    git_branch  VARCHAR(256) NULL,
     git_repo    VARCHAR(1024) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_pipeline_runs_pipeline_run (pipeline, run_no),

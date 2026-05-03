@@ -22,7 +22,7 @@ The e-team project is a CI/CD pipeline management system that provides:
 - Error messages with file/line context for fast troubleshooting
 - `dryrun`: generate an execution plan without running jobs (`yaml` or `json` output)
 - `run`: execute pipelines through the API Gateway and Orchestrator Service
-- Git-aware runs: lock execution to a specific branch/commit (local detached worktree or remote repository mode)
+- Git-aware runs: lock execution to a specific commit, optionally resolved from a branch selector in the CLI
 - In-flight run deduplication: identical requests reuse the oldest queued/running run instead of starting duplicates
 - Asynchronous orchestration: ready jobs are published to RabbitMQ and consumed by Worker Service
 - Parallel execution controls: configurable orchestrator publisher concurrency and worker consumer concurrency
@@ -84,14 +84,15 @@ The binary will be built as `bin/cicd` and can be installed to `$HOME/bin` by de
 3. **Run a pipeline**:
 
    ```bash
-   # Run default pipeline (.pipelines/pipeline.yaml), current branch & latest commit
+   # Run default pipeline (.pipelines/pipeline.yaml) at the current checked-out commit
    ./bin/cicd run --file .pipelines/pipeline.yaml
 
    # Or by pipeline name (resolved under .pipelines/)
    ./bin/cicd run --name pipeline.yaml
 
-   # With specific branch and commit
-   ./bin/cicd run --file .pipelines/pipeline.yaml --branch main --commit HEAD
+   # With a specific branch selector or explicit commit
+   ./bin/cicd run --file .pipelines/pipeline.yaml --branch main
+   ./bin/cicd run --file .pipelines/pipeline.yaml --commit HEAD
    ```
 
    The CLI sends requests to the API Gateway (`http://localhost:8000` by default; override with `GATEWAY_URL`), which forwards them to the appropriate downstream service.
@@ -136,7 +137,8 @@ cicd dryrun path/to/pipeline.yaml
 # Run pipeline (services must be running)
 # The run target must be under <repo-root>/.pipelines/
 cicd run --file .pipelines/pipeline.yaml
-cicd run --name pipeline.yaml --branch main --commit HEAD
+cicd run --name pipeline.yaml --branch main
+cicd run --name pipeline.yaml --commit HEAD
 ```
 
 ```bash
@@ -241,7 +243,7 @@ For Helm packaging, install/upgrade/uninstall commands, log access, Minikube val
 
 The Orchestrator Service deduplicates identical in-flight run requests. If a second request arrives while an equivalent run for the same pipeline is still `queued` or `running`, the oldest request continues and the duplicate request is dropped. The duplicate response returns the original `run_no` together with a message indicating that the existing in-flight run was reused.
 
-The deduplication key is derived from the pipeline name, YAML content, branch, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
+The deduplication key is derived from the pipeline name, YAML content, commit, and repository URL. It intentionally ignores the caller's temporary workspace path so repeated CLI invocations against the same Git revision can deduplicate correctly.
 
 ### Repository-Backed Runs in Kubernetes
 
@@ -321,7 +323,7 @@ The following dashboards are provisioned from files committed to the repository:
 - `Trace Explorer`
 - `Parallel execution & RabbitMQ`
 
-`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, branch, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
+`Pipeline Overview` includes a recent-runs table backed by structured execution logs, including pipeline name, run number, commit hash, status, duration, and `trace_id`. The `trace_id` column links into `Trace Explorer`.
 
 ### Configuration
 

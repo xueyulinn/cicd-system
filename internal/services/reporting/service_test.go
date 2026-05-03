@@ -56,7 +56,7 @@ func TestReportErrorHelpers(t *testing.T) {
 	}
 }
 
-func TestGetReport_ValidationBranches(t *testing.T) {
+func TestGetReport_ValidationCases(t *testing.T) {
 	svc := &Service{}
 	cases := []models.ReportQuery{
 		{},
@@ -83,7 +83,6 @@ func TestMapRunsStagesJobs(t *testing.T) {
 		Status:    store.StatusSuccess,
 		TraceID:   "trace",
 		GitRepo:   "repo",
-		GitBranch: "main",
 		GitHash:   "abc",
 		StartTime: now,
 		EndTime:   &end,

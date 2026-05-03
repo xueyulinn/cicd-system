@@ -57,12 +57,11 @@ func TestNewJobPublisherValidation(t *testing.T) {
 func TestJobPublisherPublishJob(t *testing.T) {
 	cfg := Config{URL: "amqp://guest:guest@localhost:5672/", JobQueue: "jobs.queue"}
 	msg := messages.JobExecutionMessage{
-		RunNo:         22,
-		PipelineName:  "release",
-		Stage:         "test",
-		Branch:        "main",
-		Commit:        "abc123",
-		WorkspacePath: "/tmp/work",
+		RunNo:               22,
+		PipelineName:        "release",
+		Stage:               "test",
+		Commit:              "abc123",
+		WorkspaceObjectName: "workspaces/pack-v1/commits/abc123/workspace.tar.gz",
 		Job: models.JobExecutionPlan{
 			Name:   "unit-tests",
 			Image:  "golang:1.25",

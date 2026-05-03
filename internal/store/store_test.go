@@ -36,7 +36,6 @@ func TestStore_CreateRun_GetRun_GetRunsByPipeline(t *testing.T) {
 		StartTime: start,
 		Status:    StatusRunning,
 		GitHash:   "abc123",
-		GitBranch: "main",
 		GitRepo:   "https://example.com/repo",
 	})
 	if err != nil {
@@ -53,8 +52,8 @@ func TestStore_CreateRun_GetRun_GetRunsByPipeline(t *testing.T) {
 	if got.Pipeline != pipeline || got.RunNo != runNo || got.Status != StatusRunning {
 		t.Fatalf("GetRun: got pipeline=%q run_no=%d status=%q", got.Pipeline, got.RunNo, got.Status)
 	}
-	if got.GitHash != "abc123" || got.GitBranch != "main" || got.GitRepo != "https://example.com/repo" {
-		t.Fatalf("GetRun: git fields: hash=%q branch=%q repo=%q", got.GitHash, got.GitBranch, got.GitRepo)
+	if got.GitHash != "abc123" || got.GitRepo != "https://example.com/repo" {
+		t.Fatalf("GetRun: git fields: hash=%q repo=%q", got.GitHash, got.GitRepo)
 	}
 
 	runs, err := s.GetRunsByPipeline(ctx, pipeline)
@@ -199,7 +198,6 @@ func TestStore_CreateRunOrGetActive_DeduplicatesIdenticalInFlightRun(t *testing.
 		StartTime:  time.Now().UTC(),
 		Status:     StatusQueued,
 		GitHash:    "abc123",
-		GitBranch:  "main",
 		GitRepo:    "https://example.com/repo",
 		RequestKey: "same-request",
 	}

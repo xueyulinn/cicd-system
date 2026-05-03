@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,7 +19,9 @@ import (
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	"github.com/xueyulinn/cicd-system/internal/common/snapshot"
 	"github.com/xueyulinn/cicd-system/internal/models"
+	"github.com/xueyulinn/cicd-system/internal/objectstorage"
 )
 
 // DefaultImage is used when the job does not specify an image (no pull, run script only).
@@ -34,9 +35,13 @@ const (
 	memoryMegabyteBytes     int64 = 1024 * 1024
 )
 
+var newWorkspaceStorage = func() (objectstorage.Storage, error) {
+	return objectstorage.NewMinioClient(objectstorage.LoadConfig())
+}
+
 // ExecuteJob runs a single job: optionally pull image (if provided), materialize a workspace, run container, wait for exit,
 // collect logs, and remove the container.
-func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspacePath string) (logs string, err error) {
+func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *models.JobExecutionPlan, repoURL, commit, workspaceObjectName string) (logs string, err error) {
 	ctx, span := s.tracer.Start(ctx, "execute.job")
 	defer span.End()
 
@@ -56,7 +61,7 @@ func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *model
 		}
 	}
 
-	workspacePath, cleanup, err := materializeWorkspace(ctx, repoURL, commit, workspacePath)
+	workspacePath, cleanup, err := materializeWorkspace(ctx, repoURL, commit, workspaceObjectName)
 	if err != nil {
 		slog.Error("prepare workspace", "error", err.Error())
 		return "", fmt.Errorf("prepare workspace: %w", err)
@@ -107,7 +112,11 @@ func (s *Service) ExecuteJob(ctx context.Context, cli *client.Client, job *model
 	return logs, nil
 }
 
-func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath string) (string, func(), error) {
+func materializeWorkspace(ctx context.Context, repoURL, commit, workspaceObjectName string) (string, func(), error) {
+	if strings.TrimSpace(workspaceObjectName) != "" {
+		return materializeWorkspaceObject(ctx, workspaceObjectName)
+	}
+
 	if strings.TrimSpace(repoURL) != "" && strings.TrimSpace(commit) != "" {
 		tmpDir, err := os.MkdirTemp("", "cicd-worker-repo-*")
 		if err != nil {
@@ -140,61 +149,34 @@ func materializeWorkspace(ctx context.Context, repoURL, commit, workspacePath st
 		return tmpDir, func() { _ = os.RemoveAll(tmpDir) }, nil
 	}
 
-	resolvedPath, err := resolveWorkspacePath(workspacePath)
+	return "", nil, nil
+}
+
+func materializeWorkspaceObject(ctx context.Context, workspaceObjectName string) (string, func(), error) {
+	storageClient, err := newWorkspaceStorage()
 	if err != nil {
 		return "", nil, err
 	}
-	return resolvedPath, nil, nil
-}
 
-func resolveWorkspacePath(workspacePath string) (string, error) {
-	workspacePath = strings.TrimSpace(workspacePath)
-	if workspacePath == "" {
-		return "", nil
+	stagingDir, err := os.MkdirTemp("", "cicd-worker-workspace-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(stagingDir) }
+
+	archivePath := filepath.Join(stagingDir, "workspace.tar.gz")
+	if err := storageClient.DownloadWorkspace(ctx, workspaceObjectName, archivePath); err != nil {
+		cleanup()
+		return "", nil, err
 	}
 
-	if _, err := os.Stat(workspacePath); err == nil {
-		return workspacePath, nil
+	workspaceDir := filepath.Join(stagingDir, "workspace")
+	if err := snapshot.Unpack(archivePath, workspaceDir); err != nil {
+		cleanup()
+		return "", nil, err
 	}
 
-	if !looksLikeWindowsPath(workspacePath) {
-		return workspacePath, nil
-	}
-
-	mappedPath := mapWindowsWorkspacePath(workspacePath)
-	if mappedPath == "" {
-		return workspacePath, nil
-	}
-	if _, err := os.Stat(mappedPath); err == nil {
-		return mappedPath, nil
-	}
-
-	return workspacePath, nil
-}
-
-func mapWindowsWorkspacePath(workspacePath string) string {
-	hostTempDir := strings.TrimSpace(os.Getenv("WORKSPACE_HOST_TEMP_DIR"))
-	if hostTempDir == "" {
-		hostTempDir = "/host-temp"
-	}
-
-	normalized := strings.ReplaceAll(strings.TrimSpace(workspacePath), "\\", "/")
-	base := path.Base(normalized)
-	if base == "." || base == "/" || base == "" {
-		return ""
-	}
-
-	return filepath.Join(hostTempDir, base)
-}
-
-func looksLikeWindowsPath(p string) bool {
-	if strings.Contains(p, "\\") {
-		return true
-	}
-	if len(p) < 2 || p[1] != ':' {
-		return false
-	}
-	return (p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z')
+	return workspaceDir, cleanup, nil
 }
 
 func cloneAuth(repoURL string) *githttp.BasicAuth {

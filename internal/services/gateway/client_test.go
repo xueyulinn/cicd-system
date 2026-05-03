@@ -256,7 +256,7 @@ func TestClientForwardValidateDryRunRun(t *testing.T) {
 		t.Fatalf("forwardDryRun resp=%+v", d)
 	}
 
-	runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+	runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","commit":"abc"}`))
 	runRec := httptest.NewRecorder()
 	if err := c.forwardRun(context.Background(), runRec, runReq); err != nil {
 		t.Fatalf("forwardRun err=%v", err)
@@ -357,7 +357,7 @@ func TestClientForwardDryRunCallError(t *testing.T) {
 
 func TestClientForwardRunCallError(t *testing.T) {
 	t.Run("non-timeout call error", func(t *testing.T) {
-		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","commit":"abc"}`))
 		runRec := httptest.NewRecorder()
 		c := &Client{
 			orchestratorURL: "http://example.com",
@@ -378,7 +378,7 @@ func TestClientForwardRunCallError(t *testing.T) {
 	})
 
 	t.Run("timeout call error", func(t *testing.T) {
-		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","branch":"main","commit":"abc"}`))
+		runReq := httptest.NewRequest(http.MethodPost, "/run", strings.NewReader(`{"yaml_content":"pipeline: {}","commit":"abc"}`))
 		runRec := httptest.NewRecorder()
 		c := &Client{
 			orchestratorURL: "http://example.com",

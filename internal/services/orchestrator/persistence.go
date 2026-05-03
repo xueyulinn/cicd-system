@@ -17,14 +17,13 @@ func (s *Service) startPipelineRun(ctx context.Context, pipeline string, runInfo
 		Pipeline:   pipeline,
 		StartTime:  now,
 		Status:     store.StatusQueued,
-		GitBranch:  runInfo.Branch,
 		GitHash:    runInfo.Commit,
 		GitRepo:    runInfo.RepoURL,
 		TraceID:    getSpanTraceId(ctx),
 		RequestKey: requestKey,
 	}
 	if strings.TrimSpace(in.GitRepo) == "" {
-		in.GitRepo = runInfo.WorkspacePath
+		in.GitRepo = runInfo.WorkspaceObjectName
 	}
 	result, err := s.store.CreateRunOrGetActive(ctx, in)
 	if err != nil {

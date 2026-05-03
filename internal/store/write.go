@@ -119,9 +119,9 @@ func (s *Store) createRunTx(ctx context.Context, tx *sql.Tx, in CreateRunInput) 
 	runNo = int(nextRunNo - 1)
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO pipeline_runs (pipeline, run_no, start_time, status, git_hash, git_branch, git_repo, trace_id, request_key)
-		 VALUES (?, ?, ?, ?, NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), NULLIF(?,''))`,
-		in.Pipeline, runNo, in.StartTime, in.Status, in.GitHash, in.GitBranch, in.GitRepo, in.TraceID, in.RequestKey,
+		`INSERT INTO pipeline_runs (pipeline, run_no, start_time, status, git_hash, git_repo, trace_id, request_key)
+		 VALUES (?, ?, ?, ?, NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), NULLIF(?,''))`,
+		in.Pipeline, runNo, in.StartTime, in.Status, in.GitHash, in.GitRepo, in.TraceID, in.RequestKey,
 	)
 	if err != nil {
 		return 0, err

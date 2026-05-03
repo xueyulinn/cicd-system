@@ -125,7 +125,7 @@ func TestGatewayClientDryRun_Run_Report(t *testing.T) {
 		t.Fatalf("dry=%#v err=%v", dry, err)
 	}
 
-	runResp, err := c.Run(api.RunRequest{YAMLContent: "pipeline: {}", Branch: "main", Commit: "abc"})
+	runResp, err := c.Run(api.RunRequest{YAMLContent: "pipeline: {}", Commit: "abc"})
 	if err != nil || runResp == nil || runResp.RunNo != 7 {
 		t.Fatalf("run=%#v err=%v", runResp, err)
 	}

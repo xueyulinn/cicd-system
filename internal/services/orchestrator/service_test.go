@@ -60,11 +60,10 @@ func TestBuildJobConfigsCopiesNeeds(t *testing.T) {
 
 func TestBuildRunRequestKeyStableForIdenticalRequest(t *testing.T) {
 	req := api.RunRequest{
-		YAMLContent:   "name: demo\njobs: []\n",
-		Branch:        "main",
-		Commit:        "abc123",
-		RepoURL:       "https://example.com/repo.git",
-		WorkspacePath: "/tmp/worktree",
+		YAMLContent:         "name: demo\njobs: []\n",
+		Commit:              "abc123",
+		RepoURL:             "https://example.com/repo.git",
+		WorkspaceObjectName: "workspaces/pack-v1/commits/abc123/workspace.tar.gz",
 	}
 
 	first := buildRunRequestKey(req, "demo")
@@ -80,11 +79,10 @@ func TestBuildRunRequestKeyStableForIdenticalRequest(t *testing.T) {
 
 func TestBuildRunRequestKeyChangesWhenRequestChanges(t *testing.T) {
 	base := api.RunRequest{
-		YAMLContent:   "name: demo\njobs: []\n",
-		Branch:        "main",
-		Commit:        "abc123",
-		RepoURL:       "https://example.com/repo.git",
-		WorkspacePath: "/tmp/worktree",
+		YAMLContent:         "name: demo\njobs: []\n",
+		Commit:              "abc123",
+		RepoURL:             "https://example.com/repo.git",
+		WorkspaceObjectName: "workspaces/pack-v1/commits/abc123/workspace.tar.gz",
 	}
 	modified := base
 	modified.Commit = "def456"
@@ -94,18 +92,17 @@ func TestBuildRunRequestKeyChangesWhenRequestChanges(t *testing.T) {
 	}
 }
 
-func TestBuildRunRequestKeyIgnoresWorkspacePath(t *testing.T) {
+func TestBuildRunRequestKeyIgnoresWorkspaceObjectName(t *testing.T) {
 	base := api.RunRequest{
-		YAMLContent:   "name: demo\njobs: []\n",
-		Branch:        "main",
-		Commit:        "abc123",
-		RepoURL:       "https://example.com/repo.git",
-		WorkspacePath: "/tmp/worktree-a",
+		YAMLContent:         "name: demo\njobs: []\n",
+		Commit:              "abc123",
+		RepoURL:             "https://example.com/repo.git",
+		WorkspaceObjectName: "workspaces/pack-v1/commits/abc123/workspace-a.tar.gz",
 	}
 	modified := base
-	modified.WorkspacePath = "/tmp/worktree-b"
+	modified.WorkspaceObjectName = "workspaces/pack-v1/commits/abc123/workspace-b.tar.gz"
 
 	if buildRunRequestKey(base, "demo") != buildRunRequestKey(modified, "demo") {
-		t.Fatal("expected request key to ignore workspace path differences")
+		t.Fatal("expected request key to ignore workspace object name differences")
 	}
 }

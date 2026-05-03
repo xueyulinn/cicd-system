@@ -22,7 +22,7 @@ e-team 项目是一个 CI/CD 流水线管理系统，提供以下能力：
 - 错误信息包含文件与行列定位，便于快速排查
 - `dryrun`：仅生成执行计划，不实际运行任务（支持 `yaml` / `json` 输出）
 - `run`：通过 API Gateway 与 Orchestrator Service 执行流水线
-- Git 感知运行：可锁定分支/提交（本地 detached worktree 或远程仓库模式）
+- Git 感知运行：可锁定到具体提交，或在 CLI 中通过分支选择器解析提交
 - 在途运行去重：相同请求不会重复创建运行
 - 异步编排：就绪任务发布到 RabbitMQ，由 Worker 消费执行
 - 并发控制：支持编排发布并发与 Worker 消费并发配置
@@ -90,8 +90,9 @@ source ~/.zshrc
    # 或按流水线名称运行（从 .pipelines/ 下解析）
    ./bin/cicd run --name pipeline.yaml
 
-   # 指定分支与提交
-   ./bin/cicd run --file .pipelines/pipeline.yaml --branch main --commit HEAD
+   # 指定分支选择器或明确提交
+   ./bin/cicd run --file .pipelines/pipeline.yaml --branch main
+   ./bin/cicd run --file .pipelines/pipeline.yaml --commit HEAD
    ```
 
 CLI 默认向 API Gateway（`http://localhost:8000`）发请求；可通过 `GATEWAY_URL` 覆盖。
@@ -134,7 +135,8 @@ cicd dryrun path/to/pipeline.yaml
 # 运行流水线（服务需先启动）
 # 运行目标必须在 <repo-root>/.pipelines/ 下
 cicd run --file .pipelines/pipeline.yaml
-cicd run --name pipeline.yaml --branch main --commit HEAD
+cicd run --name pipeline.yaml --branch main
+cicd run --name pipeline.yaml --commit HEAD
 ```
 
 ```bash
@@ -240,7 +242,7 @@ Orchestrator Service 对在途（`queued` / `running`）的相同运行请求去
 - 第二个相同请求到来时，不新建运行
 - 复用最早的在途运行，并返回该 `run_no`
 
-去重键由 `pipeline name + YAML 内容 + branch + commit + repo URL` 组成；不会包含调用方临时工作目录路径。
+去重键由 `pipeline name + YAML 内容 + commit + repo URL` 组成；不会包含调用方临时工作目录路径。
 
 ### Kubernetes 中的仓库运行
 

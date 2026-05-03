@@ -43,12 +43,6 @@ compactor:
   retention_enabled: true
   delete_request_store: s3
 
-ingester:
-  chunk_idle_period: 30m
-  max_chunk_age: 2h
-  chunk_target_size: 1.5MB
-  chunk_retain_period: 0s
-
 analytics:
   # not report data used to Grafana
   reporting_enabled: false
