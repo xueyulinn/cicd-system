@@ -52,13 +52,13 @@ func (p *scriptedPublisher) Close() error { return nil }
 func TestBuildJobExecutionMessage(t *testing.T) {
 	svc := &Service{}
 	job := models.JobExecutionPlan{Name: "compile", Image: "golang:1.25", Script: []string{"go test ./..."}}
-	info := runInfo{RepoURL: "https://github.com/o/r.git", Branch: "main", Commit: "abc", WorkspacePath: "/tmp/wt"}
+	info := runInfo{RepoURL: "https://github.com/o/r.git", Commit: "abc", WorkspaceObjectName: "workspaces/pack-v1/commits/abc/workspace.tar.gz"}
 
 	msg := svc.buildJobExecutionMessage(7, "pipe", "build", job, info)
 	if msg.RunNo != 7 || msg.PipelineName != "pipe" || msg.Stage != "build" {
 		t.Fatalf("unexpected envelope: %#v", msg)
 	}
-	if msg.Job.Name != "compile" || msg.RepoURL != info.RepoURL || msg.Commit != info.Commit || msg.WorkspacePath != info.WorkspacePath {
+	if msg.Job.Name != "compile" || msg.RepoURL != info.RepoURL || msg.Commit != info.Commit || msg.WorkspaceObjectName != info.WorkspaceObjectName {
 		t.Fatalf("unexpected message fields: %#v", msg)
 	}
 }
@@ -157,7 +157,7 @@ func TestEnqueueReadyJobsPublishesAllJobs(t *testing.T) {
 	svc := &Service{publisherManager: &publisherManager{current: &publisherSet{pubs: []mq.Publisher{pub}}}}
 	jobs := []models.JobExecutionPlan{{Name: "a"}, {Name: "b"}}
 
-	err := svc.enqueueReadyJobs(context.Background(), "pipe", "build", 2, jobs, runInfo{Branch: "main"})
+	err := svc.enqueueReadyJobs(context.Background(), "pipe", "build", 2, jobs, runInfo{})
 	if err != nil {
 		t.Fatalf("enqueueReadyJobs error: %v", err)
 	}

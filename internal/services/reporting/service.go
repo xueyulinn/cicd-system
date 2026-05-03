@@ -159,14 +159,13 @@ func mapRuns(runs []store.Run) []models.ReportRun {
 	out := make([]models.ReportRun, 0, len(runs))
 	for _, r := range runs {
 		out = append(out, models.ReportRun{
-			RunNo:     r.RunNo,
-			Status:    r.Status,
-			TraceID:   r.TraceID,
-			GitRepo:   r.GitRepo,
-			GitBranch: r.GitBranch,
-			GitHash:   r.GitHash,
-			Start:     r.StartTime,
-			End:       r.EndTime,
+			RunNo:   r.RunNo,
+			Status:  r.Status,
+			TraceID: r.TraceID,
+			GitRepo: r.GitRepo,
+			GitHash: r.GitHash,
+			Start:   r.StartTime,
+			End:     r.EndTime,
 		})
 	}
 	return out

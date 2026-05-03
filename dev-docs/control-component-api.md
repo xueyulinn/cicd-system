@@ -112,7 +112,6 @@ Request body:
 ```json
 {
   "yaml_content": "pipeline:\n  name: Demo\nstages:\n  - smoke\nsmoke:\n  - stage: smoke\n  - image: alpine:latest\n  - script:\n    - echo ok\n",
-  "branch": "main",
   "commit": "abc123",
   "repo_url": "https://github.com/example/repo.git",
   "workspace_path": "/tmp/cicd-run-wt-12345"
@@ -344,10 +343,13 @@ The shared HTTP types live in `internal/api/types.go`.
 Fields:
 
 - `yaml_content`
-- `branch`
 - `commit`
 - `repo_url` optional
 - `workspace_path` optional
+
+Note:
+
+- CLI-level branch selectors are resolved to a commit before `POST /run` is called
 
 ### `RunResponse`
 

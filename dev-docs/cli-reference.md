@@ -79,23 +79,24 @@ Options:
 - `--name`
   - logical pipeline name to search for under `.pipelines/`
 - `--branch`
-  - Git branch to associate with the run
+  - resolve the run commit from the selected branch tip
 - `--commit`
-  - Git commit to associate with the run
+  - run the exact commit directly
 
 Rules:
 
 - exactly one of `--file` or `--name` is required
-- if `--branch` is omitted, the CLI defaults to `main`
-- if `--commit` is omitted, the CLI resolves the latest commit on the selected branch
-- the resolved branch / commit must match the currently checked-out repository state
+- `--branch` and `--commit` are mutually exclusive
+- if neither `--branch` nor `--commit` is provided, the CLI uses the current `HEAD` commit
+- if `--branch` is provided, the CLI resolves the branch tip to a commit before calling `/run`
 
 Examples:
 
 ```bash
 cicd run --file .pipelines/pipeline.yaml
 cicd run --name "Default Pipeline"
-cicd run --file .pipelines/pipeline.yaml --branch main --commit HEAD
+cicd run --file .pipelines/pipeline.yaml --branch main
+cicd run --file .pipelines/pipeline.yaml --commit HEAD
 ```
 
 ## `report`

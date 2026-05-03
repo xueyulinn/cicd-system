@@ -35,7 +35,6 @@ Core columns:
 - `end_time` `DATETIME(6)` (nullable)
 - `status` `VARCHAR(32)` (not null)
 - `git_hash` `VARCHAR(64)` (nullable)
-- `git_branch` `VARCHAR(256)` (nullable)
 - `git_repo` `VARCHAR(1024)` (nullable)
 - `trace_id` `VARCHAR(32)` (not null, default empty string)
 - `request_key` `VARCHAR(64)` (nullable)
@@ -113,6 +112,8 @@ The implementation uses:
   - adds `pipeline_runs.request_key`
   - adds generated `active_request_key`
   - adds dedupe/request-key indexes
+- `005_drop_pipeline_run_git_branch.sql`
+  - removes `pipeline_runs.git_branch`
 
 ## 5. Run Number Allocation and Deduplication
 

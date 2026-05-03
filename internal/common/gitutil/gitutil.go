@@ -88,6 +88,75 @@ func (r *Repository) GetHeadCommitByBranch(branch string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
+// GetRemoteHeadCommitByBranch fetches the named remote branch and returns its
+// current tip commit hash.
+func (r *Repository) GetRemoteHeadCommitByBranch(remoteName, branch string, auth transport.AuthMethod) (string, error) {
+	remoteName = strings.TrimSpace(remoteName)
+	branch = strings.TrimSpace(branch)
+	if remoteName == "" {
+		return "", fmt.Errorf("remote name is required")
+	}
+	if branch == "" {
+		return "", fmt.Errorf("branch is required")
+	}
+
+	remoteURL, err := r.GetRepoURL(remoteName)
+	if err != nil {
+		return "", err
+	}
+
+	refspec := config.RefSpec(fmt.Sprintf(
+		"+refs/heads/%s:refs/remotes/%s/%s",
+		branch, remoteName, branch,
+	))
+
+	fetch := func(fetchAuth transport.AuthMethod) error {
+		fetchErr := r.repo.Fetch(&git.FetchOptions{
+			RemoteName: remoteName,
+			RefSpecs:   []config.RefSpec{refspec},
+			Auth:       fetchAuth,
+			Tags:       git.NoTags,
+			Force:      true,
+		})
+		if fetchErr != nil && !errors.Is(fetchErr, git.NoErrAlreadyUpToDate) {
+			return fetchErr
+		}
+		return nil
+	}
+
+	err = fetch(nil)
+	if err != nil {
+		if errors.Is(err, transport.ErrAuthenticationRequired) || errors.Is(err, transport.ErrAuthorizationFailed) {
+			if auth == nil {
+				resolvedAuth, resolveErr := r.buildRemoteAuth(remoteURL)
+				if resolveErr != nil {
+					return "", resolveErr
+				}
+				auth = resolvedAuth
+			}
+			if auth == nil {
+				return "", fmt.Errorf(
+					"remote %q requires authentication; set CICD_GIT_TOKEN (HTTPS) or CICD_SSH_KEY_PATH (SSH)",
+					remoteName,
+				)
+			}
+			if err = fetch(auth); err != nil {
+				return "", fmt.Errorf("fetch remote branch with auth: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("fetch remote branch: %w", err)
+		}
+	}
+
+	remoteRefName := plumbing.NewRemoteReferenceName(remoteName, branch)
+	ref, err := r.repo.Reference(remoteRefName, true)
+	if err != nil {
+		return "", err
+	}
+
+	return ref.Hash().String(), nil
+}
+
 // createDetachedWorktree creates a temporary detached git worktree at commit
 // and returns the directory path with a cleanup callback.
 func (r *Repository) CreateDetachedWorktree(commit string) (string, func(), error) {
@@ -170,37 +239,6 @@ func (r *Repository) resolveRepoRelativePath(filePath string) (string, error) {
 
 func pathEscapesParent(path string) bool {
 	return path == ".." || strings.HasPrefix(path, ".."+string(os.PathSeparator))
-}
-
-func (r *Repository) BranchContainsCommit(branch string, commitSHA string) (bool, error) {
-	ref, err := r.repo.Reference(plumbing.NewBranchReferenceName(branch), true)
-	if err != nil {
-		return false, err
-	}
-
-	target := plumbing.NewHash(commitSHA)
-	if ref.Hash() == target {
-		return true, nil
-	}
-
-	iter, err := r.repo.Log(&git.LogOptions{From: ref.Hash()})
-	if err != nil {
-		return false, err
-	}
-	defer iter.Close()
-
-	found := false
-	err = iter.ForEach(func(c *object.Commit) error {
-		if c.Hash == target {
-			found = true
-			return storer.ErrStop
-		}
-		return nil
-	})
-	if err != nil && err != storer.ErrStop {
-		return false, err
-	}
-	return found, nil
 }
 
 func (r *Repository) buildRemoteAuth(remoteURL string) (transport.AuthMethod, error) {

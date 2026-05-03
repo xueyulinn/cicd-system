@@ -11,13 +11,13 @@ var ErrNotFound = errors.New("not found")
 
 // Shared column list for pipeline_runs queries (keeps SELECT and Scan in sync).
 const runColumns = `pipeline, run_no, start_time, end_time, status,
-	COALESCE(git_hash,''), COALESCE(git_branch,''), COALESCE(git_repo,''),
+	COALESCE(git_hash,''), COALESCE(git_repo,''),
 	COALESCE(trace_id,''), COALESCE(request_key,'')`
 
 func scanRun(sc interface{ Scan(dest ...any) error }) (Run, error) {
 	var r Run
 	err := sc.Scan(&r.Pipeline, &r.RunNo, &r.StartTime, &r.EndTime, &r.Status,
-		&r.GitHash, &r.GitBranch, &r.GitRepo, &r.TraceID, &r.RequestKey)
+		&r.GitHash, &r.GitRepo, &r.TraceID, &r.RequestKey)
 	return r, err
 }
 

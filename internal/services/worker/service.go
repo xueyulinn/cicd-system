@@ -141,7 +141,7 @@ func (s *Service) handleJobMessage(ctx context.Context, msg messages.JobExecutio
 	jobCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	logs, execErr := s.ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspacePath)
+	logs, execErr := s.ExecuteJob(jobCtx, s.docker, &job, msg.RepoURL, msg.Commit, msg.WorkspaceObjectName)
 
 	if execErr != nil {
 		slog.Error("execute job failed",

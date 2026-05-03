@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,9 @@ import (
 	"github.com/xueyulinn/cicd-system/internal/common/gitutil"
 	"github.com/xueyulinn/cicd-system/internal/common/parser"
 	"github.com/xueyulinn/cicd-system/internal/common/pipelinepath"
+	"github.com/xueyulinn/cicd-system/internal/common/snapshot"
 	"github.com/xueyulinn/cicd-system/internal/config"
+	"github.com/xueyulinn/cicd-system/internal/objectstorage"
 )
 
 var (
@@ -23,12 +26,12 @@ var (
 )
 
 var runCmd = &cobra.Command{
-	Use:     "run {--file pipeline-path | --name pipeline-name} [--branch branch] [--commit commit] [--remote]",
-	Short:   "Run a pipeline",
-	Long:    "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
+	Use:   "run {--file pipeline-path | --name pipeline-name} [--branch branch | --commit commit] [--remote]",
+	Short: "Run a pipeline",
+	Long:  "Run a pipeline with the given name or file. For the initial iteration, all pipeline executions happen locally.",
 	// Args:    cobra.ExactArgs(1),
-	PreRunE: runPreRunE,
-	RunE:    runRun,
+	PreRunE:               runPreRunE,
+	RunE:                  runRun,
 	DisableFlagsInUseLine: true,
 }
 
@@ -36,12 +39,12 @@ var runCmd = &cobra.Command{
 func init() {
 	runCmd.Flags().StringVarP(&runFile, "file", "f", "", "Pipeline file path")
 	runCmd.Flags().StringVarP(&runName, "name", "n", "", "Pipeline name")
-	runCmd.Flags().StringVarP(&runBranch, "branch", "b", "", "The Git branch to be used to obtain files for the pipeline run")
-	runCmd.Flags().StringVarP(&runCommit, "commit", "c", "", "The Git commit on the branch specified by --branch to be used to obtain files for the pipeline run")
+	runCmd.Flags().StringVarP(&runBranch, "branch", "b", "", "Resolve the run commit from the tip of the specified Git branch")
+	runCmd.Flags().StringVarP(&runCommit, "commit", "c", "", "Run the specified Git commit directly")
 	runCmd.Flags().StringVarP(&runRemote, "remote", "r", "", "The Git remote used to run a remote pipeline")
 }
 
-// runPreRunE validates CLI inputs and resolves effective branch/commit values.
+// runPreRunE validates CLI inputs and resolves the effective commit value.
 func runPreRunE(cmd *cobra.Command, args []string) error {
 	repo, err := gitutil.Open(".")
 
@@ -71,6 +74,9 @@ func runPreRunE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("invalid --file: %s", runFile)
 		}
 	}
+	if runBranch != "" && runCommit != "" {
+		return fmt.Errorf("must provide exactly one --branch or --commit")
+	}
 
 	// --name must be a valid pipeline name
 	if runName != "" {
@@ -81,46 +87,23 @@ func runPreRunE(cmd *cobra.Command, args []string) error {
 		runFile = resolvedPath
 	}
 
-	// local run
-	if runRemote == "" {
-		headBranch, err := repo.GetHeadBranch()
-		if err != nil {
-			return err
+	if runCommit == "" {
+		switch {
+		case runBranch != "":
+			if runRemote == "" {
+				runCommit, err = repo.GetHeadCommitByBranch(runBranch)
+			} else {
+				runCommit, err = repo.GetRemoteHeadCommitByBranch(runRemote, runBranch, nil)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to resolve commit for branch %q: %w", runBranch, err)
+			}
+		default:
+			runCommit, err = repo.GetHeadCommit()
+			if err != nil {
+				return fmt.Errorf("failed to get head commit: %w", err)
+			}
 		}
-
-		if runBranch == "" {
-			runBranch = headBranch
-		}
-
-		headCommit, err := repo.GetHeadCommit()
-		if err != nil {
-			return err
-		}
-
-		if runCommit == "" {
-			runCommit = headCommit
-		}
-
-		contains, err := repo.BranchContainsCommit(runBranch, runCommit)
-		if err != nil {
-			return err
-		}
-
-		if !contains {
-			return fmt.Errorf("commit %q can not be found at branch %q", runCommit, runBranch)
-		}
-		return nil
-	}
-
-	// remote run
-	contains, err := repo.RemoteBranchContainsCommit(runRemote, runBranch, runCommit, nil)
-
-	if err != nil {
-		return err
-	}
-
-	if !contains {
-		return fmt.Errorf("commit %q can not be found at branch %q at remote %q", runCommit, runBranch, runRemote)
 	}
 
 	return nil
@@ -137,16 +120,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	client := NewGatewayClient()
 	req := api.RunRequest{
-		Branch: runBranch,
 		Commit: runCommit,
 	}
 
 	if runRemote == "" {
-		worktree, _, err := repo.CreateDetachedWorktree(runCommit)
+		worktree, cleanup, err := repo.CreateDetachedWorktree(runCommit)
 		if err != nil {
 			return fmt.Errorf("failed to prepare workspace for commit %q: %w", runCommit, err)
 		}
-		// defer cleanup()
+		defer cleanup()
 
 		completePath, _, err := pipelinepath.ResolveInputPath(rootDir, runFile)
 		if err != nil {
@@ -158,9 +140,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("read pipeline file failed: %w", err)
 		}
 
+		objectName, err := uploadWorkspace(cmd.Context(), worktree, runCommit) 
+		if err != nil {
+			return fmt.Errorf("upload workspace snapshot: %w", err)
+		}
+
 		req.YAMLContent = string(pipelineData)
 		req.RepoURL = ""
-		req.WorkspacePath = worktree
+		req.WorkspaceObjectName = objectName
 	} else {
 		fileContent, err := os.ReadFile(runFile)
 		if err != nil {
@@ -173,7 +160,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 		req.YAMLContent = string(fileContent)
 		req.RepoURL = remoteURL
-		req.WorkspacePath = ""
+		req.WorkspaceObjectName = ""
 	}
 
 	response, err := client.Run(req)
@@ -238,4 +225,31 @@ func findPipelineByName(name string, root string) (string, error) {
 	}
 
 	return "", fmt.Errorf("pipeline with name %s not found", name)
+}
+
+func uploadWorkspace(ctx context.Context, worktree, commit string) (string, error) {
+	minioClient, err := objectstorage.NewMinioClient(objectstorage.LoadConfig())
+	objectName := minioClient.BuildObjectName(commit)
+	if err != nil {
+		return objectName, err
+	}
+
+	stagingDir, err := os.MkdirTemp("", "cicd-run-upload-*")
+	if err != nil {
+		return objectName, err
+	}
+	defer func() {
+		_ = os.RemoveAll(stagingDir)
+	}()
+
+	archivePath := filepath.Join(stagingDir, "workspace.tar.gz")
+	if err := snapshot.Pack(worktree, archivePath); err != nil {
+		return objectName, err
+	}
+
+	if err := minioClient.UploadWorkspace(ctx, objectName, archivePath); err != nil {
+		return objectName, err
+	}
+
+	return objectName, nil
 }

@@ -19,27 +19,26 @@ type ReportResponse struct {
 // Stages is used for full run-stage listings, while Stage preserves the existing
 // single-stage response shape used by current clients.
 type ReportPipeline struct {
-	Name    string      `json:"name" yaml:"name"`
-	Runs    []ReportRun `json:"runs,omitempty" yaml:"runs,omitempty"`
-	RunNo   int         `json:"run-no,omitempty" yaml:"run-no,omitempty"`
-	Status  string      `json:"status,omitempty" yaml:"status,omitempty"`
-	TraceID string      `json:"trace-id,omitempty" yaml:"trace-id,omitempty"`
-	Start   time.Time   `json:"start,omitempty" yaml:"start,omitempty"`
-	End     *time.Time  `json:"end,omitempty" yaml:"end,omitempty"`
+	Name    string        `json:"name" yaml:"name"`
+	Runs    []ReportRun   `json:"runs,omitempty" yaml:"runs,omitempty"`
+	RunNo   int           `json:"run-no,omitempty" yaml:"run-no,omitempty"`
+	Status  string        `json:"status,omitempty" yaml:"status,omitempty"`
+	TraceID string        `json:"trace-id,omitempty" yaml:"trace-id,omitempty"`
+	Start   time.Time     `json:"start,omitempty" yaml:"start,omitempty"`
+	End     *time.Time    `json:"end,omitempty" yaml:"end,omitempty"`
 	Stages  []ReportStage `json:"stages,omitempty" yaml:"stages,omitempty"`
 	Stage   []ReportStage `json:"stage,omitempty" yaml:"stage,omitempty"`
 }
 
 // ReportRun is a run summary for the "all runs for a pipeline" report.
 type ReportRun struct {
-	RunNo     int        `json:"run-no" yaml:"run-no"`
-	Status    string     `json:"status" yaml:"status"`
-	TraceID   string     `json:"trace-id,omitempty" yaml:"trace-id,omitempty"`
-	GitRepo   string     `json:"git-repo,omitempty" yaml:"git-repo,omitempty"`
-	GitBranch string     `json:"git-branch,omitempty" yaml:"git-branch,omitempty"`
-	GitHash   string     `json:"git-hash,omitempty" yaml:"git-hash,omitempty"`
-	Start     time.Time  `json:"start" yaml:"start"`
-	End       *time.Time `json:"end,omitempty" yaml:"end,omitempty"`
+	RunNo   int        `json:"run-no" yaml:"run-no"`
+	Status  string     `json:"status" yaml:"status"`
+	TraceID string     `json:"trace-id,omitempty" yaml:"trace-id,omitempty"`
+	GitRepo string     `json:"git-repo,omitempty" yaml:"git-repo,omitempty"`
+	GitHash string     `json:"git-hash,omitempty" yaml:"git-hash,omitempty"`
+	Start   time.Time  `json:"start" yaml:"start"`
+	End     *time.Time `json:"end,omitempty" yaml:"end,omitempty"`
 }
 
 // ReportStage is a stage report block.

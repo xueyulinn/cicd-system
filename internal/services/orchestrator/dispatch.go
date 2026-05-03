@@ -18,14 +18,13 @@ const maxPublishAttempts = 3
 // buildJobExecutionMessage constructs the MQ payload for a single job in a pipeline run.
 func (s *Service) buildJobExecutionMessage(runNo int, pipelineName, stage string, job models.JobExecutionPlan, runInfo runInfo) messages.JobExecutionMessage {
 	return messages.JobExecutionMessage{
-		RunNo:         runNo,
-		PipelineName:  pipelineName,
-		Stage:         stage,
-		RepoURL:       runInfo.RepoURL,
-		Branch:        runInfo.Branch,
-		Commit:        runInfo.Commit,
-		WorkspacePath: runInfo.WorkspacePath,
-		Job:           job,
+		RunNo:               runNo,
+		PipelineName:        pipelineName,
+		Stage:               stage,
+		RepoURL:             runInfo.RepoURL,
+		Commit:              runInfo.Commit,
+		WorkspaceObjectName: runInfo.WorkspaceObjectName,
+		Job:                 job,
 	}
 }
 
