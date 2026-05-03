@@ -238,7 +238,9 @@ func uploadWorkspace(ctx context.Context, worktree, commit string) (string, erro
 	if err != nil {
 		return objectName, err
 	}
-	defer os.RemoveAll(stagingDir)
+	defer func() {
+		_ = os.RemoveAll(stagingDir)
+	}()
 
 	archivePath := filepath.Join(stagingDir, "workspace.tar.gz")
 	if err := snapshot.Pack(worktree, archivePath); err != nil {

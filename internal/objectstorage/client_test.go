@@ -9,6 +9,8 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+type testContextKey string
+
 func TestNewMinioClientInvalidConfig(t *testing.T) {
 	config := LoadConfig()
 	config.AccessKeyID = ""
@@ -143,7 +145,7 @@ func TestEnsureBucketMakeBucketError(t *testing.T) {
 }
 
 func TestUploadWorkspace(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "request_id", "req-1")
+	ctx := context.WithValue(context.Background(), testContextKey("request_id"), "req-1")
 	fake := &fakeObjectAPI{bucketExists: true}
 	c := &minioClient{
 		config: Config{WorkspaceBucket: "workspace"},
@@ -197,7 +199,7 @@ func TestUploadWorkspacePutObjectError(t *testing.T) {
 }
 
 func TestDownloadWorkspace(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "request_id", "req-1")
+	ctx := context.WithValue(context.Background(), testContextKey("request_id"), "req-1")
 	fake := &fakeObjectAPI{bucketExists: true}
 	c := &minioClient{
 		config: Config{WorkspaceBucket: "workspace"},

@@ -125,13 +125,21 @@ func archiveEntries(t *testing.T, archivePath string) map[string]byte {
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			t.Fatalf("file.Close() error = %v", closeErr)
+		}
+	}()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatalf("gzip.NewReader() error = %v", err)
 	}
-	defer gz.Close()
+	defer func() {
+		if closeErr := gz.Close(); closeErr != nil {
+			t.Fatalf("gzip.Close() error = %v", closeErr)
+		}
+	}()
 
 	tr := tar.NewReader(gz)
 

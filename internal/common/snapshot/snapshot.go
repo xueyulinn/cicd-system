@@ -116,8 +116,8 @@ func tarDir(source, skippedPath string, tw *tar.Writer) error {
 	})
 }
 
-func Unpack(src, dst string) error {
-	dst, err := filepath.Abs(dst)
+func Unpack(src, dst string) (err error) {
+	dst, err = filepath.Abs(dst)
 	if err != nil {
 		return err
 	}
@@ -129,13 +129,21 @@ func Unpack(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() {
+		if closeErr := gz.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	tr := tar.NewReader(gz)
 
